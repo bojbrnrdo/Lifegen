@@ -16,7 +16,7 @@ The LIFEGEN public website and the complete **LifegroupTracker** now live in one
 | Private VIP recovery codes | VIP review and check-in validation |
 | Recurring calendar download | Staff accounts, settings, prayer moderation and backups |
 
-A successful VIP signup saves a registration **and its linked First Timer** in a single database transaction. The new person and registration appear in Admin automatically. Staff validation, attendance corrections and the VIP portal use the same attendance records.
+A successful VIP signup saves a registration **and its linked First Timer** in a single database transaction. The new person and registration appear in Admin automatically. After **five distinct Sunday attendances** (more than four visits) are recorded as present, the linked person status automatically changes to **Member**. This applies to both staff-recorded attendance and validated VIP check-ins; it changes the profile status, not Lifegroup membership. Correcting attendance later does not automatically downgrade the status.
 
 ```text
 ONE LIFEGEN deployment

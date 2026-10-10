@@ -7,6 +7,9 @@ const save = () => { domainContext.getStore().dirty = true; };
 const nextId = (table) => ++load().seq[table];
 const ADMIN = new Proxy({}, {get:(_,k)=>domainContext.getStore()?.actor?.[k] ?? ({id:null,display_name:'Imported / system'})[k]});
 const STATUSES = ['first_timer','new_believer','regular','member','leader','volunteer','inactive'];
+// Promote linked VIP profiles after five distinct Sunday attendances (more than four visits).
+export const VIP_MEMBER_ATTENDANCE_THRESHOLD = 5;
+const VIP_PROMOTION_STATUSES = new Set(['first_timer','new_believer','regular']);
 export const DEFAULT_SETTINGS = {church_name:'Lifegiver Church of Faith',service_name:'Lifegen / 3rd Service',church_address:'',church_contact:'',privacy_contact:'',monthly_prize:'No prize set yet'};
 // Helpers (mirror src/lib/util.js)
 // ---------------------------------------------------------------------------
@@ -38,6 +41,20 @@ function decorate(p) {
   return { ...p, sundays_attended: pres.length, last_attended: pres.length ? pres.map((r) => r.service.service_date).sort().at(-1) : null };
 }
 function findPerson(id) { return load().people.find((p) => p.id === Number(id)); }
+
+/** Sticky promotion: only verified/present attendance counts, and later corrections do not downgrade a Member. */
+export function promoteVipMemberIfEligible(personId) {
+  const d = load();
+  const person = findPerson(personId);
+  if (!person || !VIP_PROMOTION_STATUSES.has(person.status)) return false;
+  if (!(d.vip_registrations || []).some((registration) => Number(registration.person_id) === person.id)) return false;
+  const attendedSundays = new Set(presentRecordsOf(person.id).map((record) => record.service.service_date)).size;
+  if (attendedSundays < VIP_MEMBER_ATTENDANCE_THRESHOLD) return false;
+  person.status = 'member';
+  person.updated_at = nowSql();
+  save();
+  return true;
+}
 
 function nextPersonCode(dateRegistered) {
   const year = String(dateRegistered).slice(0, 4);
@@ -700,12 +717,13 @@ export const domain = {
     const old = r ? { ...r } : null;
     if (status === 'present') classification = classification || old?.classification || autoClassify(p, s.service_date); else classification = null;
     if (r && r.status === status && (r.classification || null) === (classification || null)) {
+      if (status === 'present') promoteVipMemberIfEligible(p.id);
       return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: true };
     }
     if (r) Object.assign(r, { status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', updated_at: nowSql() });
     else { r = { id: nextId('records'), service_id: s.id, person_id: p.id, status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', recorded_at: nowSql(), updated_at: nowSql() }; d.records.push(r); }
     audit({ service_id: s.id, person_id: p.id, action: old ? 'update' : 'mark', old_status: old?.status || null, new_status: status, old_classification: old?.classification || null, new_classification: classification });
-    if (status === 'present') { if (!p.date_first_attended || p.date_first_attended > s.service_date) p.date_first_attended = s.service_date; }
+    if (status === 'present') { if (!p.date_first_attended || p.date_first_attended > s.service_date) p.date_first_attended = s.service_date; promoteVipMemberIfEligible(p.id); }
     else if (old?.status === 'present') rollbackFirstAttended(p, s.service_date);
     save();
     return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: false };
