@@ -1,0 +1,38 @@
+{
+  "name": "lifegen-neon",
+  "version": "2.2.10",
+  "private": true,
+  "type": "module",
+  "description": "LIFEGEN website with integrated LifegroupTracker Admin portal and one Neon database",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/check.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:import": "node scripts/import.mjs",
+    "supabase:bundle": "node scripts/bundle-supabase.mjs",
+    "db:backup": "node scripts/backup.mjs",
+    "demo:seed": "node scripts/seed-demo.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:site": "node tests/single-site-smoke.mjs",
+    "test:publisher": "node tests/deployment-browser.mjs",
+    "test:preview-auth": "node tests/preview-auth-smoke.mjs",
+    "package:vercel": "node scripts/package-vercel.mjs"
+  },
+  "dependencies": {
+    "cookie-parser": "1.4.7",
+    "csv-parse": "7.0.3",
+    "dotenv": "17.2.3",
+    "express": "5.2.1",
+    "fflate": "0.8.3",
+    "helmet": "8.1.0",
+    "pg": "8.20.0",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

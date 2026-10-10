@@ -1,0 +1,7 @@
+import fs from 'node:fs/promises';import path from 'node:path';import {parse} from 'csv-parse/sync';
+const args=process.argv.slice(2),get=(name,fallback)=>args.includes(name)?args[args.indexOf(name)+1]:fallback;
+const directory=get('--directory','private-data/supabase'),output=get('--output','private-data/lifegen-supabase.json');
+try{const bundle={source:'supabase',exported_at:new Date().toISOString()};for(const name of ['vip_registrations','checkins','community_posts','settings']){
+let content;try{content=await fs.readFile(path.join(directory,name+'.csv'),'utf8');}catch{console.warn(`${name}.csv is missing. Export it from the original Supabase project before cutover.`);bundle[name]=[];continue;}
+bundle[name]=parse(content,{columns:true,bom:true,skip_empty_lines:true}).map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,['is_anonymous','is_hidden'].includes(k)?v==='true'||v==='t':k==='age'?(v?Number(v):null):v===''?null:v])));}
+if(!bundle.vip_registrations.length&&!bundle.community_posts.length&&!bundle.checkins.length)throw new Error('No records found. Check the CSV export folder.');await fs.mkdir(path.dirname(output),{recursive:true});await fs.writeFile(output,JSON.stringify(bundle,null,2),{mode:0o600});console.log(`Created ${output}. Review all missing-file warnings; this file contains private records and legacy VIP tokens.`);}catch(e){console.error(e.message);process.exitCode=1;}
