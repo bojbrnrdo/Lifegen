@@ -135,7 +135,9 @@ function addMinutes(hhmm, minutes) {
   return `${padIcs(Math.floor(total / 60))}:${padIcs(total % 60)}`;
 }
 export function eventToIcs(e, stamp) {
-  const uid = e.recurring ? `${e.id}@lifegen` : `event-${e.id}@lifegen`;
+  // One UID for the weekly service so importing it from different Sundays (or the
+  // homepage "Remind me" button) updates the same entry instead of duplicating it.
+  const uid = e.recurring ? 'lifegen-sunday-service@lifegen' : `event-${e.id}@lifegen`;
   const start = e.all_day ? e.date.replaceAll('-', '') : manilaToUtcStamp(e.date, e.start_time || '00:00');
   const end = e.all_day ? manilaToUtcStamp(addDays(e.date, 1), '00:00').slice(0, 8) : manilaToUtcStamp(e.date, e.end_time || addMinutes(e.start_time || '00:00', 60));
   const lines = ['BEGIN:VEVENT', `UID:${uid}`, `DTSTAMP:${stamp}`, `DTSTART${e.all_day ? ';VALUE=DATE' : ''}:${start}`, `DTEND${e.all_day ? ';VALUE=DATE' : ''}:${end}`];
@@ -146,11 +148,6 @@ export function eventToIcs(e, stamp) {
   if (desc.trim()) lines.push(`DESCRIPTION:${icsEsc(desc.trim())}`);
   lines.push('BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(`${e.title} starts in one hour.`)}`, 'END:VALARM', 'END:VEVENT');
   return lines.map(icsFold).join('\r\n');
-}
-export function calendarToIcs(events) {
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z/, 'Z');
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LIFEGEN//Events calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-    'X-WR-CALNAME:LIFEGEN Events', 'X-WR-TIMEZONE:Asia/Manila', ...events.map((e) => eventToIcs(e, stamp)), 'END:VCALENDAR', ''].join('\r\n');
 }
 
 // ---------------------------------------------------------------------------

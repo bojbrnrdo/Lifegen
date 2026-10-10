@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { query, transaction, withState, stateId, allocateId, logAction } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
-import { publicCalendar, upcomingEvents, calendarToIcs, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
+import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
 export const publicRouter=Router();
 export function siteUrls(req) {
  const host=(req.app.get('trust proxy')?req.get('x-forwarded-host')||req.get('host'):req.get('host'))?.split(',')[0].trim()||'';
@@ -35,14 +35,10 @@ publicRouter.get('/config',async(req,res)=>{
 publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),month:today().slice(0,7)}));
 publicRouter.get('/calendar-events',async(req,res)=>res.json(await publicCalendar(String(req.query.from||''),String(req.query.to||''))));
 publicRouter.get('/calendar-upcoming',async(req,res)=>res.json({today:today(),events:await upcomingEvents(req.query.days,req.query.limit)}));
-publicRouter.get('/calendar.ics',async(req,res)=>{
- const days=Math.min(Math.max(Number(req.query.days)||210,14),400);
- res.type('text/calendar').attachment('lifegen-events.ics').send(calendarToIcs(await upcomingEvents(days,60)));
-});
 publicRouter.get('/event.ics',async(req,res)=>{
  const id=String(req.query.id||'');
  let event=null;
- if(/^sun-\d{4}-\d{2}-\d{2}$/.test(id))event=weeklySundayShape(id.slice(4));
+ if(/^sun-\d{4}-\d{2}-\d{2}$/.test(id)&&new Date(id.slice(4)+'T12:00:00Z').getUTCDay()===0)event=weeklySundayShape(id.slice(4));
  else if(/^\d+$/.test(id)){const row=await getEvent(id);if(row&&row.is_published)event=publicShape(row);}
  if(!event)throw httpError(404,'That event is no longer on the calendar.');
  res.type('text/calendar').attachment(`lifegen-${event.recurring?'sunday-service':'event'}.ics`).send(['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LIFEGEN//Events calendar//EN',eventToIcs(event,new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z')),'END:VCALENDAR',''].join('\r\n'));

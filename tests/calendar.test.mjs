@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sundaysInRange, mergeWithWeeklySundays, weeklySundayShape, publicShape,
-  validateEventInput, manilaToUtcStamp, eventToIcs, calendarToIcs, byStart,
+  validateEventInput, manilaToUtcStamp, eventToIcs, byStart,
 } from '../src/calendar.js';
 
 test('sundaysInRange lists every Sunday with from<=date<to', () => {
@@ -64,11 +64,12 @@ test('manilaToUtcStamp converts Asia/Manila wall time to UTC (UTC+8, no DST)', (
   assert.equal(manilaToUtcStamp('2026-10-11', '00:30'), '20261010T163000Z');
 });
 
-test('eventToIcs and calendarToIcs produce RFC 5545 output', () => {
+test('eventToIcs produces RFC 5545 output', () => {
   const sunday = weeklySundayShape('2026-10-11');
   const ics = eventToIcs(sunday, '20261010T000000Z');
   assert.match(ics, /^BEGIN:VEVENT/);
-  assert.match(ics, /UID:sun-2026-10-11@lifegen/);
+  assert.match(ics, /UID:lifegen-sunday-service@lifegen/);
+  assert.equal(eventToIcs(weeklySundayShape('2026-10-18'), '20261010T000000Z').match(/UID:.*/)[0], ics.match(/UID:.*/)[0], 'every weekly Sunday shares one UID');
   assert.match(ics, /DTSTART:20261011T050000Z/);
   assert.match(ics, /DTEND:20261011T070000Z/);
   assert.match(ics, /RRULE:FREQ=WEEKLY;BYDAY=SU/);
@@ -83,10 +84,6 @@ test('eventToIcs and calendarToIcs produce RFC 5545 output', () => {
   assert.match(long, /break/); // folded continuation contains the escaped newline tail
   assert.ok(long.split('\r\n').every((l) => Buffer.byteLength(l) <= 75), 'every ICS line is folded to <=75 octets');
 
-  const cal = calendarToIcs([sunday]);
-  assert.match(cal, /^BEGIN:VCALENDAR\r\nVERSION:2\.0/);
-  assert.match(cal, /X-WR-TIMEZONE:Asia\/Manila/);
-  assert.match(cal, /END:VCALENDAR\r\n$/);
 });
 
 test('byStart orders by date, then time, then title', () => {
