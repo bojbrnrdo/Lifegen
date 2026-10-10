@@ -21,7 +21,7 @@ A successful VIP signup saves a registration **and its linked First Timer** in a
 
 ## Events calendar
 
-The public website has an **Events** section (`#events`) with a professional month-view calendar: visitors browse months, see colour-coded event chips per day, tap a day for full details in a modal, follow the **Upcoming** list, and download calendar files (whole feed at `/api/public/calendar.ics`, single events at `/api/public/event.ics?id=…`). All times are Asia/Manila.
+The public landing page places its **Events** section (`#events`) directly below the hero, so the month-view calendar is part of the page without needing to open a separate view. Visitors browse months, see colour-coded event chips per day, tap a day for full details in a modal, follow the **Upcoming** list, and download calendar files (whole feed at `/api/public/calendar.ics`, single events at `/api/public/event.ics?id=…`). All times are Asia/Manila.
 
 - The weekly **Sunday service (1:00–3:00 PM)** appears on every Sunday automatically — no data required. A stored event in the **Sunday service** category takes over its date instead, so nothing is duplicated.
 - Staff manage events in **Admin → Calendar**: create, edit and delete events, set category, date, times or all-day, location, description, and publish or keep as a staff-only draft. Every change is audit-logged and appears on the public calendar immediately (live updates included).
