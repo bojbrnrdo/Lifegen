@@ -1,6 +1,13 @@
 import { api } from '../api.js';
 import { state, can } from '../app.js';
-import { html, raw, icon, fmtDateTime, toast, withLoading, openModal, closeModal, debounce } from '../ui.js';
+import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce } from '../ui.js';
+/** Attendee column: long-time attendees (server flag) get a badge; others show their Sunday count. */
+function attendeeCell(r){
+ const n=Number(r.sundays_attended)||0;
+ if(r.long_time_attendee)return html`<span class="badge badge--regular">Long-time attendee</span><div class="small muted">${n} Sundays since ${fmtDate(r.first_attended,{short:true})}</div>`;
+ if(n)return html`<span class="small">${n} ${n===1?'Sunday':'Sundays'}</span>`;
+ return html`<span class="muted">—</span>`;
+}
 export async function refreshPendingBadge(){
  if(!state.user||!can('registrations:manage'))return;
  try{const r=await api.registrationCounts(),badge=document.getElementById('navPendingBadge');if(badge){badge.textContent=r.pending;badge.hidden=r.pending===0;}}catch{}
@@ -16,7 +23,7 @@ export async function renderRegistrations({main,query}){
   const [data,pending]=await Promise.all([api.registrations({status:filter,q:search}),api.pendingCheckins()]);
   if(!main.contains(box)||!main.contains(list))return;box.innerHTML=pending.length?html`<div class="stack">${pending.map(c=>html`<div class="row row--between"><div><a href="#/people/${c.person_id}"><b>${c.full_name}</b></a><div class="small muted">${c.date_key} · ${c.person_code}</div></div><div class="row">${can('attendance:write')?html`<button class="btn btn--primary btn--sm" data-check="${c.id}" data-valid="true">Validate</button><button class="btn btn--sm" data-check="${c.id}" data-valid="false">Decline</button>`:''}</div></div>`)}</div>`:'<p class="small muted">No pending check-ins.</p>';
   box.querySelectorAll('[data-check]').forEach(b=>b.onclick=e=>withLoading(b,async()=>{try{await api.validateCheckin(Number(b.dataset.check),b.dataset.valid==='true');toast('Check-in updated. Attendance and VIP progress are linked.');load();}catch(err){toast(err.message,'error');}}));
-  list.innerHTML=data.items.length?html`<div class="table-wrap"><table class="table table--stack"><thead><tr><th>VIP / Person</th><th>Age</th><th>School</th><th>Inviter</th><th>Registered</th><th></th></tr></thead><tbody>${data.items.map(r=>html`<tr><td data-label="VIP"><a href="#/people/${r.person_id}"><b>${r.full_name}</b></a><div class="small muted">${r.person_code} · ${r.review_status==='new'?'New':'Reviewed'}</div></td><td data-label="Age">${r.age??'—'}</td><td data-label="School">${r.school||'—'}</td><td data-label="Inviter">${r.inviter||'—'}</td><td data-label="Registered" class="small">${fmtDateTime(r.created_at)}</td><td><button class="btn btn--sm" data-view="${r.id}">View</button></td></tr>`)}</tbody></table></div><div class="card__footer small muted">${data.items.length} registrations shown</div>`:'<div class="empty"><h3>No registrations here yet</h3><p>New VIP signups appear automatically. No CSV import or manual refresh is needed.</p></div>';
+  list.innerHTML=data.items.length?html`<div class="table-wrap"><table class="table table--stack"><thead><tr><th>VIP / Person</th><th>Age</th><th>School</th><th>Inviter</th><th>Attendee</th><th>Registered</th><th></th></tr></thead><tbody>${data.items.map(r=>html`<tr><td data-label="VIP"><a href="#/people/${r.person_id}"><b>${r.full_name}</b></a><div class="small muted">${r.person_code} · ${r.review_status==='new'?'New':'Reviewed'}</div></td><td data-label="Age">${r.age??'—'}</td><td data-label="School">${r.school||'—'}</td><td data-label="Inviter">${r.inviter||'—'}</td><td data-label="Attendee">${attendeeCell(r)}</td><td data-label="Registered" class="small">${fmtDateTime(r.created_at)}</td><td><button class="btn btn--sm" data-view="${r.id}">View</button></td></tr>`)}</tbody></table></div><div class="card__footer small muted">${data.items.length} registrations shown</div>`:'<div class="empty"><h3>No registrations here yet</h3><p>New VIP signups appear automatically. No CSV import or manual refresh is needed.</p></div>';
   list.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>openVip(Number(b.dataset.view),load));refreshPendingBadge();
  }
  main.querySelector('#refreshVips').onclick=load;main.querySelector('#vipSearch').oninput=debounce(e=>{search=e.target.value;load();});main.querySelector('#vipFilters').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;filter=b.dataset.f;main.querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('active',x===b));load();};main.__liveReload=load;await load();
