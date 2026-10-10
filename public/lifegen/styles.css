@@ -5,3 +5,118 @@
 :where(a,button,input,select,textarea,[tabindex]):focus-visible{outline:3px solid #b9862f;outline-offset:3px}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.heroDrift,.sway{animation:none!important}.reveal{opacity:1;transform:none;transition:none!important}}
 @media (max-width:480px){.section{padding-block:76px}.hero-strip{padding-top:126px}.hero-lower{padding-top:40px}.container{width:min(100% - 32px,1180px)}}
+
+/* ============================================================================
+   03 · Events calendar (#events) — month grid, upcoming rail, day modal
+   ========================================================================== */
+:root{--cal-service:#1B5E20;--cal-worship:#A9821F;--cal-prayer:#5F7F6C;--cal-youth:#C77D2E;--cal-lifegroup:#4E6E9E;--cal-outreach:#B0563E;--cal-special:#7D5BA6;--cal-tint-service:rgba(27,94,32,.09);--cal-tint-worship:rgba(169,130,31,.12);--cal-tint-prayer:rgba(95,127,108,.13);--cal-tint-youth:rgba(199,125,46,.13);--cal-tint-lifegroup:rgba(78,110,158,.12);--cal-tint-outreach:rgba(176,86,62,.12);--cal-tint-special:rgba(125,91,166,.12)}
+.cal-columns{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:34px;align-items:start;margin-top:44px}
+.cal-shell{background:var(--card);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);padding:24px 24px 18px}
+.cal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.cal-title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.cal-title h3{font-family:var(--serif);font-size:1.65rem;font-weight:560;letter-spacing:-.01em;line-height:1.1}
+.cal-tz{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.cal-tz svg{width:12px;height:12px}
+.cal-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cal-nav{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;background:#fff;overflow:hidden}
+.cal-nav button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:38px;padding:0 12px;border:none;background:none;color:var(--ink);font-weight:600;font-size:13px;cursor:pointer;transition:.2s}
+.cal-nav button:hover{background:var(--paper-2)}
+.cal-nav button+button{border-left:1px solid var(--line)}
+.cal-nav svg{width:16px;height:16px}
+.cal-ics{white-space:nowrap}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:0 0 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.cal-dow span{font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;min-height:560px}
+.cal-cell{position:relative;display:flex;flex-direction:column;gap:4px;min-height:88px;padding:7px 8px;border-radius:13px;border:1px solid transparent;background:#fff;text-align:left;font-family:var(--sans);transition:.2s}
+div.cal-cell{cursor:default}
+button.cal-cell{cursor:pointer}
+button.cal-cell:hover{border-color:var(--line);background:var(--paper-2);transform:translateY(-1px);box-shadow:0 10px 20px -14px rgba(27,94,32,.35)}
+.cal-cell:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.cal-cell.is-out{opacity:.45}
+.cal-daynum{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:999px;font-size:12.5px;font-weight:700;color:var(--ink-2);position:relative}
+.cal-cell.is-today .cal-daynum{background:var(--ink);color:#fff;box-shadow:0 0 0 3px rgba(212,175,55,.45)}
+.cal-today-dot{position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:999px;background:var(--gold)}
+.cal-dots{display:none;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:2px}
+.cal-dot{width:8px;height:8px;border-radius:999px;display:inline-block;flex:none}
+.cal-chips{display:flex;flex-direction:column;gap:3px;margin-top:1px;min-width:0}
+.cal-chip{display:flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;line-height:1.25;font-weight:600;padding:2.5px 7px 2.5px 6px;border-radius:7px;border-left:3px solid var(--cal-service);background:var(--cal-tint-service);color:var(--ink)}
+.cal-chip b{font-weight:700;opacity:.75;flex:none}
+.cal-chip.is-weekly{font-style:normal}
+.cal-more{font-size:10px;font-weight:700;color:var(--muted);padding-left:6px}
+.cat-service{border-left-color:var(--cal-service);background:var(--cal-tint-service);color:var(--cal-service)}
+.cat-worship{border-left-color:var(--cal-worship);background:var(--cal-tint-worship);color:var(--cal-worship)}
+.cat-prayer{border-left-color:var(--cal-prayer);background:var(--cal-tint-prayer);color:var(--cal-prayer)}
+.cat-youth{border-left-color:var(--cal-youth);background:var(--cal-tint-youth);color:var(--cal-youth)}
+.cat-lifegroup{border-left-color:var(--cal-lifegroup);background:var(--cal-tint-lifegroup);color:var(--cal-lifegroup)}
+.cat-outreach{border-left-color:var(--cal-outreach);background:var(--cal-tint-outreach);color:var(--cal-outreach)}
+.cat-special{border-left-color:var(--cal-special);background:var(--cal-tint-special);color:var(--cal-special)}
+i.cal-dot.cat-service{background:var(--cal-service)}i.cal-dot.cat-worship{background:var(--cal-worship)}i.cal-dot.cat-prayer{background:var(--cal-prayer)}i.cal-dot.cat-youth{background:var(--cal-youth)}i.cal-dot.cat-lifegroup{background:var(--cal-lifegroup)}i.cal-dot.cat-outreach{background:var(--cal-outreach)}i.cal-dot.cat-special{background:var(--cal-special)}
+.cal-footnote{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+.cal-week-tag{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.cal-week-tag svg{width:13px;height:13px;color:var(--gold)}
+.cal-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cal-legend-item{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--muted)}
+.cal-legend-item .cal-dot{width:7px;height:7px}
+/* Upcoming rail */
+.cal-upcoming{background:linear-gradient(165deg,#F3F9F0,#EAF4E6);border:1px solid var(--line);border-radius:26px;padding:22px}
+.cal-up-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.cal-up-head h4{font-family:var(--serif);font-size:1.3rem;font-weight:560}
+.cal-up-head span{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.cal-up-list{display:flex;flex-direction:column;gap:6px}
+.cal-up-item{display:flex;align-items:center;gap:13px;width:100%;padding:10px;border:none;border-radius:16px;background:transparent;text-align:left;font-family:var(--sans);cursor:pointer;transition:.2s}
+.cal-up-item:hover{background:#fff;box-shadow:0 12px 24px -16px rgba(27,94,32,.4)}
+.cal-up-item:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.cal-up-badge{display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;border-left:none;flex:none;background:var(--cal-tint-service);color:var(--cal-service)}
+.cal-up-badge b{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1}
+.cal-up-badge small{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-top:2px;opacity:.8}
+.cal-up-badge.cat-worship{background:var(--cal-tint-worship);color:var(--cal-worship)}.cal-up-badge.cat-prayer{background:var(--cal-tint-prayer);color:var(--cal-prayer)}.cal-up-badge.cat-youth{background:var(--cal-tint-youth);color:var(--cal-youth)}.cal-up-badge.cat-lifegroup{background:var(--cal-tint-lifegroup);color:var(--cal-lifegroup)}.cal-up-badge.cat-outreach{background:var(--cal-tint-outreach);color:var(--cal-outreach)}.cal-up-badge.cat-special{background:var(--cal-tint-special);color:var(--cal-special)}
+.cal-up-body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.cal-up-body strong{font-size:14px;font-weight:650;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-up-body small{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-up-body svg{width:11px;height:11px;flex:none}
+.cal-up-more{display:inline-flex;align-items:center;gap:7px;margin-top:14px;font-size:12.5px;font-weight:700;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--gold);padding-bottom:3px;transition:.2s}
+.cal-up-more:hover{color:var(--gold)}
+.cal-up-more svg{width:14px;height:14px}
+/* States */
+.cal-loading,.cal-error,.cal-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;grid-column:1/-1;min-height:300px;color:var(--muted);font-size:13.5px;text-align:center;padding:20px}
+.cal-empty{min-height:120px}
+.cal-empty svg,.cal-error svg{width:26px;height:26px;color:var(--gold)}
+.cal-spinner{width:26px;height:26px;border-radius:999px;border:3px solid var(--paper-2);border-top-color:var(--ink);animation:calspin .8s linear infinite}
+@keyframes calspin{to{transform:rotate(360deg)}}
+/* Day modal */
+.cal-modal-card{max-width:600px;max-height:min(84vh,760px);overflow:auto}
+.cal-modal-day{font-size:11px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:16px;padding-right:40px}
+.cal-ev{background:#fff;border:1px solid var(--line);border-left:4px solid var(--cal-service);border-radius:16px;padding:16px 18px;margin-bottom:12px}
+.cal-ev header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.cal-ev-pill{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border-left:none;background:var(--cal-tint-service);color:var(--cal-service)}
+.cal-ev-pill.cat-worship{background:var(--cal-tint-worship);color:var(--cal-worship)}.cal-ev-pill.cat-prayer{background:var(--cal-tint-prayer);color:var(--cal-prayer)}.cal-ev-pill.cat-youth{background:var(--cal-tint-youth);color:var(--cal-youth)}.cal-ev-pill.cat-lifegroup{background:var(--cal-tint-lifegroup);color:var(--cal-lifegroup)}.cal-ev-pill.cat-outreach{background:var(--cal-tint-outreach);color:var(--cal-outreach)}.cal-ev-pill.cat-special{background:var(--cal-tint-special);color:var(--cal-special)}
+.cal-ev-weekly{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--muted)}
+.cal-ev-weekly svg{width:11px;height:11px}
+.cal-ev h4{font-family:var(--serif);font-size:1.35rem;font-weight:580;line-height:1.15;margin-bottom:10px}
+.cal-ev-meta{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.cal-ev-meta span{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.cal-ev-meta svg{width:13px;height:13px;color:var(--gold);flex:none}
+.cal-ev p{font-size:13.5px;color:var(--ink-2);line-height:1.6;margin-bottom:12px}
+.cal-ev-ics{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--ink);text-decoration:none;background:var(--paper-2);padding:8px 14px;border-radius:999px;transition:.2s}
+.cal-ev-ics:hover{background:var(--ink);color:#fff}
+.cal-ev-ics svg{width:13px;height:13px}
+.cal-ev-none{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13.5px;padding:8px 0 4px}
+.cal-ev-none svg{width:18px;height:18px;color:var(--gold);flex:none}
+/* Gatherings calendar link */
+.g-cal-link{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;font-weight:700;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--gold);padding-bottom:3px;transition:.2s}
+.g-cal-link:hover{color:var(--gold)}
+.g-cal-link svg{width:14px;height:14px}
+/* Responsive */
+@media (max-width:1024px){.cal-columns{grid-template-columns:1fr}.cal-grid{min-height:480px}}
+@media (max-width:720px){
+ .cal-shell{padding:16px 12px 12px}
+ .cal-grid{gap:3px;min-height:0}
+ .cal-cell{min-height:56px;padding:4px}
+ .cal-chips,.cal-more{display:none}
+ .cal-dots{display:flex;position:absolute;bottom:7px;left:0;right:0}
+ .cal-daynum{width:22px;height:22px;font-size:11.5px;align-self:center}
+ .cal-dow{gap:3px;padding-bottom:6px}
+ .cal-dow span{font-size:9px}
+ .cal-footnote{flex-direction:column;align-items:flex-start;gap:8px}
+ .cal-ics span,.cal-ics{font-size:12.5px}
+}

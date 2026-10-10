@@ -6,8 +6,8 @@ const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
- admin:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage','users:manage','settings:manage'],
- staff:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage'],
+ admin:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage','calendar:manage','users:manage','settings:manage'],
+ staff:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage','calendar:manage'],
  viewer:['dashboard:view','reports:view','people:view','attendance:view','lifegroups:view']
 };
 export const publicUser=u=>({id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:PERMISSIONS[u.role_id]||[],is_active:u.is_active});

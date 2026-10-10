@@ -12,11 +12,21 @@ The LIFEGEN public website and the complete **LifegroupTracker** now live in one
 | Welcome, story and daily verse | People, profiles and First Timers |
 | Prayer wall and shared reactions | Attendance and attendance history |
 | VIP signup and private guest portal | Lifegroups, networks and membership history |
+| Month-view events calendar with day details | Calendar event manager (create, edit, drafts, delete) |
 | Monthly attendance progress | Reports, CSV export and print |
 | Private VIP recovery codes | VIP review and check-in validation |
-| Recurring calendar download | Staff accounts, settings, prayer moderation and backups |
+| Recurring calendar (.ics) download and per-event files | Staff accounts, settings, prayer moderation and backups |
 
 A successful VIP signup saves a registration **and its linked First Timer** in a single database transaction. The new person and registration appear in Admin automatically. After **five distinct Sunday attendances** (more than four visits) are recorded as present, the linked person status automatically changes to **Member**. This applies to both staff-recorded attendance and validated VIP check-ins; it changes the profile status, not Lifegroup membership. Correcting attendance later does not automatically downgrade the status.
+
+## Events calendar
+
+The public website has an **Events** section (`#events`) with a professional month-view calendar: visitors browse months, see colour-coded event chips per day, tap a day for full details in a modal, follow the **Upcoming** list, and download calendar files (whole feed at `/api/public/calendar.ics`, single events at `/api/public/event.ics?id=…`). All times are Asia/Manila.
+
+- The weekly **Sunday service (1:00–3:00 PM)** appears on every Sunday automatically — no data required. A stored event in the **Sunday service** category takes over its date instead, so nothing is duplicated.
+- Staff manage events in **Admin → Calendar**: create, edit and delete events, set category, date, times or all-day, location, description, and publish or keep as a staff-only draft. Every change is audit-logged and appears on the public calendar immediately (live updates included).
+- Categories with fixed colours: Sunday service, Worship night, Prayer gathering, Youth, Lifegroup, Outreach, Special event.
+- Storage is the `calendar_events` table created by `database/002_calendar_events.sql` (run `npm run db:migrate`). Admin and Staff roles may manage events; Viewers see the admin month read-only.
 
 ```text
 ONE LIFEGEN deployment
