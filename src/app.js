@@ -14,9 +14,10 @@ import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
 import { importData, exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
+import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.11';
+const ADMIN_ASSET_VERSION='2.2.12';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -56,6 +57,7 @@ app.get('/api/events',requireStaff,async(req,res)=>res.json({revision:await revi
 app.get('/api/events/stream',requireStaff,async(req,res)=>{requirePermission(req.actor,'dashboard:view');await streamEvents(req,res);});
 const methods={
  people:['people:view',false],person:['people:view',false],duplicates:['people:write',false],search:['people:view',false],
+ calendarEvents:['dashboard:view',false],saveCalendarEvent:['calendar:manage',true],deleteCalendarEvent:['calendar:manage',true],
  createPerson:['people:write',true],updatePerson:['people:write',true],updatePreferences:['people:write',true],archivePerson:['people:delete',true],restorePerson:['people:delete',true],setPersonStatus:['people:write',true],deletePerson:['people:delete',true],
  services:['attendance:view',false],serviceByDate:['attendance:view',false],service:['attendance:view',false],serviceAudit:['attendance:view',false],openService:['attendance:write',true],updateService:['attendance:write',true],mark:['attendance:write',true],undoMark:['attendance:write',true],
  dashboard:['dashboard:view',false],reportSummary:['reports:view',false],reportYears:['reports:view',false],reportLifegroups:['reports:view',false],
@@ -78,6 +80,34 @@ async function customMethod(req,name,args) {
  if(name==='serviceByDate'){const date=args[0];if(!isSunday(date))throw httpError(400,'Lifegen attendance is Sunday only — please choose a Sunday.');const service=await serviceForDate(date);return service?{exists:true,service}:{exists:false,service_date:date};}
  if(name==='service'){const service=await serviceById(validId(args[0]));if(!service)throw httpError(404,'Service not found.');return service;}
  if(name==='serviceAudit')return (await query(`SELECT a.*,p.first_name,p.last_name,p.person_code,coalesce(a.user_name,'Imported staff') AS user_name FROM audit a LEFT JOIN people p ON p.id=a.person_id WHERE a.service_id=$1 ORDER BY a.id DESC`,[validId(args[0])])).rows;
+ if(name==='calendarEvents'){
+  const months=Math.min(Math.max(Number(args[0]?.months)||13,1),25);
+  const now=new Date(today()+'T12:00:00');
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const from=iso(new Date(now.getFullYear(),now.getMonth()-1,1)),to=iso(new Date(now.getFullYear(),now.getMonth()+months+1,1));
+  return {from,to,today:today(),labels:CATEGORY_LABELS,events:await storedEvents(from,to,{includeDrafts:true})};
+ }
+ if(name==='saveCalendarEvent')return transaction(async client=>{
+  const fields=validateEventInput(args[0]||{});
+  let row;
+  if(args[0]?.id!==undefined&&args[0]?.id!==null&&args[0]?.id!==''){
+   const id=validId(args[0].id);
+   row=await updateEvent(client,id,fields);
+   if(!row)throw httpError(404,'That event is no longer on the calendar.');
+   await logAction(client,actor,'calendar_events',id,'update',{title:fields.title,date:fields.event_date});
+  }else{
+   row=await insertEvent(client,fields,actor.id);
+   await logAction(client,actor,'calendar_events',row.id,'create',{title:fields.title,date:fields.event_date});
+  }
+  return publicShape(row);
+ });
+ if(name==='deleteCalendarEvent')return transaction(async client=>{
+  const id=validId(args[0]);
+  const gone=(await client.query('DELETE FROM calendar_events WHERE id=$1 RETURNING id,title',[id])).rows[0];
+  if(!gone)throw httpError(404,'That event is no longer on the calendar.');
+  await logAction(client,actor,'calendar_events',id,'delete',{title:gone.title});
+  return {};
+ });
  if(['users','roles','createUser','updateUser'].includes(name))return userAccounts(actor,name,args);
  if(name==='system'){
   const counts={};for(const t of ['people','services','records','staff_users'])counts[t]=(await query(`SELECT count(*) FROM "${t}"`)).rows[0].count;

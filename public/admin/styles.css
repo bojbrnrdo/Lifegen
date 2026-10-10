@@ -921,3 +921,70 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .deploy-eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;color:#487352;margin:0 0 7px}.deploy-secure{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;background:#e6eee3;border-radius:20px;font-size:12px;color:#28553a}.deploy-intro{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:24px 28px;background:#163f2a;border-radius:12px;color:#fff;margin:0 0 24px}.deploy-intro strong{font-size:16px}.deploy-intro p{color:#c2d5c5;font-size:13px;margin-top:6px;max-width:52ch}.deploy-proof{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}.deploy-proof span{font-size:10px;border:1px solid #5d7a63;border-radius:4px;padding:6px 8px;color:#e6eddb}.deploy-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:22px;align-items:start}.deploy-main{display:grid;gap:20px;min-width:0}.deploy-main .card__body{padding:24px}.deploy-step{display:flex;align-items:flex-start;gap:12px;margin-bottom:23px}.deploy-step>span{display:grid;place-items:center;flex:none;width:28px;height:28px;background:#e8eedf;color:#386642;font-size:12px;font-weight:700;border-radius:50%}.deploy-step h2{font-size:16px;margin:1px 0 4px}.deploy-connect{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:start}.deploy-connect .btn{margin-top:27px;white-space:nowrap}.deploy-connect input{min-width:0}.deploy-connected{display:flex;gap:9px;align-items:center;padding:12px;background:#f1f6ed;border-radius:8px;font-size:13px}.deploy-connected button{margin-left:auto}.deploy-success-dot{width:7px;height:7px;border-radius:50%;background:#327d45;flex:none}.deploy-error{font-size:13px;color:#963b33;background:#fff1ee;padding:13px 14px;border:1px solid #f3d8d2;border-radius:8px;margin-top:14px;overflow-wrap:anywhere}.deployment-drop{width:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:37px 18px;gap:9px;background:#f5f8ef;border:2px dashed #a9bfa4;border-radius:11px;color:#2e6240;transition:background .15s,border-color .15s}.deployment-drop:hover,.deployment-drop:focus-visible,.deployment-drop.is-dragging{background:#e7efd9;border-color:#32613a;outline:2px solid transparent}.deployment-drop.is-reading{opacity:.6}.deployment-drop-icon{height:54px;width:54px;border-radius:13px;background:#e6edd7;display:grid;place-items:center;margin-bottom:4px}.deployment-drop strong{font-size:17px}.deployment-drop span:not(.deployment-drop-icon){font-size:13px;color:#56765a}.deployment-drop small{font-size:10px;color:#687e62;margin-top:8px}.deployment-file{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f4f8ef;border:1px solid #d5e2cd;border-radius:8px;margin:16px 0 0;padding:12px;color:#235a37}.deployment-file>div{display:flex;align-items:center;gap:10px;min-width:0}.deployment-file strong{font-size:13px;overflow-wrap:anywhere}.deployment-file>span{font-size:10px;font-weight:700;white-space:nowrap;border-radius:20px;background:#e4edda;padding:5px 8px}.deploy-consent{margin:23px 0 20px}.deploy-consent label{display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.65;color:#55675a}.deploy-consent input{margin-top:4px;flex:none;accent-color:#2b633a}.deploy-footnote{font-size:10px;line-height:1.7;color:#6e7c70;margin:14px 0 0}.deploy-aside{display:grid;gap:18px}.deploy-aside .card__body{padding:23px}.deploy-aside h2{font-size:18px;line-height:1.45;margin:9px 0 18px}.deploy-checklist{list-style:none;padding:0;display:grid;gap:16px;margin:0}.deploy-checklist li{padding-left:24px;position:relative;font-size:12px;line-height:1.5;color:#566e5d}.deploy-checklist li:before{content:'✓';position:absolute;left:0;color:#45854c;font-weight:700}.deploy-privacy-note{margin-top:25px;padding:17px;background:#f0f4e9;border-radius:7px;font-size:12px;color:#436247}.deploy-privacy-note p{font-size:11px;line-height:1.7;margin-top:5px;color:#6b7e68}.deploy-status-track{display:flex;gap:8px}.deploy-status-track span{flex:1;background:#edf1e8;border-radius:4px;padding:9px;font-size:11px;text-align:center;color:#678060}.deploy-status-track[data-state=queued] span:first-child,.deploy-status-track[data-state=initializing] span:first-child,.deploy-status-track[data-state=building] span:not(:last-child),.deploy-status-track[data-state=ready] span{background:#dcE8d1;color:#235635}.deploy-status-track[data-state=error] span{background:#fdeae6;color:#983f33}.deployment-log{margin-top:18px;font-size:12px}.deployment-log summary{cursor:pointer;color:#456446;padding:7px 0}.deployment-log pre{background:#112f22;color:#d6e7d1;font:11px/1.75 ui-monospace,monospace;padding:15px;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:290px;overflow:auto}.deploy-main .row{flex-wrap:wrap}
 @media(max-width:1280px){.deploy-layout{grid-template-columns:minmax(0,1fr) 250px}.deploy-intro{align-items:flex-start;flex-direction:column;gap:17px}.deploy-proof{justify-content:flex-start}}
 @media(max-width:800px){.deploy-layout{grid-template-columns:minmax(0,1fr)}.deploy-aside{grid-template-columns:minmax(0,1fr)}.deploy-connect{grid-template-columns:minmax(0,1fr)}.deploy-connect .btn{margin-top:0;justify-self:start}.deploy-main .card__body{padding:19px}.deploy-intro{padding:22px}.deploy-proof{gap:5px}.deploy-proof span{font-size:9px}.deployment-file{align-items:flex-start}.deployment-file>span{display:none}}
+
+/* ==========================================================================
+   Events calendar (admin) — month grid, day modal, event manager
+   ========================================================================== */
+.acal { padding: 18px 18px 12px; margin-bottom: 16px; }
+.acal__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.acal__toolbar h2 { font-size: 1.15rem; }
+.acal__navbtns { display: flex; align-items: center; gap: 6px; }
+.acal__dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.acal__dow span { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.acal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 6px; min-height: 480px; }
+.acal__cell { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 80px; padding: 6px 7px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); text-align: left; font-family: var(--font); cursor: pointer; transition: .15s; }
+.acal__cell:hover { border-color: var(--brand-500); background: var(--brand-50); }
+.acal__cell:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 1px; }
+.acal__cell.is-out { opacity: .45; }
+.acal__cell.is-today .acal__daynum { background: var(--brand-700); color: #fff; }
+.acal__daynum { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 5px; border-radius: 999px; font-size: .75rem; font-weight: 700; color: var(--ink-700); }
+.acal__chips { display: flex; flex-direction: column; gap: 3px; width: 100%; min-width: 0; }
+.acal__chip { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .68rem; line-height: 1.3; font-weight: 600; padding: 2px 6px; border-radius: 6px; border-left: 3px solid var(--brand-700); background: var(--brand-50); color: var(--brand-800); }
+.acal__chip b { font-weight: 800; opacity: .75; margin-right: 3px; }
+.acal__chip.is-draft { border-left-style: dashed; opacity: .75; }
+.acal__more { font-size: .65rem; font-weight: 700; color: var(--muted); padding-left: 2px; }
+.acal--service { border-left-color: var(--brand-700); background: var(--brand-50); color: var(--brand-800); }
+.acal--worship { border-left-color: var(--accent-500); background: var(--accent-100); color: #92510a; }
+.acal--prayer { border-left-color: var(--green-600); background: var(--green-100); color: #166534; }
+.acal--youth { border-left-color: var(--pink-600); background: var(--pink-100); color: #9d174d; }
+.acal--lifegroup { border-left-color: var(--blue-600); background: var(--blue-100); color: #1e40af; }
+.acal--outreach { border-left-color: #ea580c; background: #ffedd5; color: #9a3412; }
+.acal--special { border-left-color: var(--purple-600); background: var(--purple-100); color: #5b21b6; }
+.acal__legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 12px; padding: 10px 2px 4px; }
+.acal__legend span { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 600; color: var(--muted); }
+.acal__dot { width: 9px; height: 9px; border-radius: 999px; display: inline-block; border-left: none; }
+.acal__dot.acal--service { background: var(--brand-700); } .acal__dot.acal--worship { background: var(--accent-500); } .acal__dot.acal--prayer { background: var(--green-600); } .acal__dot.acal--youth { background: var(--pink-600); } .acal__dot.acal--lifegroup { background: var(--blue-600); } .acal__dot.acal--outreach { background: #ea580c; } .acal__dot.acal--special { background: var(--purple-600); }
+/* Two-column area under the grid */
+.cal-two-col { display: grid; grid-template-columns: 1.7fr 1fr; gap: 16px; align-items: start; }
+.cal-two-col .card__header h3 { font-size: .98rem; }
+.acal__mini { display: flex; flex-direction: column; padding: 8px 12px 12px; }
+.acal__mini-row { display: flex; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 10px; border-left: 3px solid var(--brand-700); }
+.acal__mini-row + .acal__mini-row { border-top: 1px solid var(--ink-100); }
+.acal__mini-date { flex: none; width: 52px; text-align: center; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--brand-800); }
+.acal__mini-body { min-width: 0; display: flex; flex-direction: column; }
+.acal__mini-body strong { font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acal__mini-body small { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acal__mini-row.acal--worship { border-left-color: var(--accent-500); } .acal__mini-row.acal--prayer { border-left-color: var(--green-600); } .acal__mini-row.acal--youth { border-left-color: var(--pink-600); } .acal__mini-row.acal--lifegroup { border-left-color: var(--blue-600); } .acal__mini-row.acal--outreach { border-left-color: #ea580c; } .acal__mini-row.acal--special { border-left-color: var(--purple-600); }
+/* Day modal */
+.acal__evrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-left: 3px solid var(--brand-700); border-radius: 10px; background: var(--surface); }
+.acal__evrow + .acal__evrow { margin-top: 8px; }
+.acal__evrow.is-draft { border-left-style: dashed; background: var(--ink-50); }
+.acal__evrow-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.acal__evrow-main strong { font-size: .9rem; }
+.acal__evrow-main small { color: var(--muted); font-size: .76rem; }
+.acal__draft-tag { color: var(--amber-600); font-weight: 700; text-transform: uppercase; font-size: .68rem; letter-spacing: .05em; }
+.acal__day-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.acal__check { display: flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--ink-700); grid-column: 1 / -1; }
+.acal__check input { width: 16px; height: 16px; accent-color: var(--brand-700); }
+.acal .table-wrap { border-top: 1px solid var(--border); }
+.row-actions { text-align: right; }
+.row-actions .icon-btn { width: 30px; height: 30px; }
+.row-actions .icon-btn svg { width: 15px; height: 15px; }
+@media (max-width: 1100px) { .cal-two-col { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .acal__grid { gap: 3px; min-height: 0; }
+  .acal__cell { min-height: 54px; padding: 4px 5px; }
+  .acal__chips { display: none; }
+  .acal__cell.has-events::after { content: ''; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 999px; background: var(--brand-600); }
+  .acal__daynum { font-size: .7rem; }
+}

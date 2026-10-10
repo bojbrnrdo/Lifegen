@@ -16,6 +16,7 @@ import { renderReports } from './views/reports.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
 import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
+import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
 
 export const state = {
@@ -41,6 +42,7 @@ const routes = [
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
   { path: /^\/attendance$/, view: renderAttendance, nav: 'attendance', perm: 'attendance:view' },
+  { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
   { path: /^\/attendance\/history$/, view: renderHistory, nav: 'attendance', perm: 'attendance:view' },
   { path: /^\/attendance\/history\/(\d+)$/, view: (c, m) => renderServiceDetail(c, m[1]), nav: 'attendance', perm: 'attendance:view' },
   { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
@@ -137,6 +139,7 @@ function renderShell() {
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${navLink('#/people', 'people', 'People', 'people')}
         ${navLink('#/attendance', 'attendance', 'Attendance', 'check')}
+        ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group')}
         ${navLink('#/reports', 'reports', 'Reports', 'calendar')}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}
