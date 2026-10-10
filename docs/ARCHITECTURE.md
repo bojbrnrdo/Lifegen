@@ -37,7 +37,7 @@ The ID returned to the guest is not authorization. Portal ownership requires a v
 
 ## Attendance
 
-Guest check-in creates a pending request, not attendance. Authorized staff validation records presence for the linked person and Sunday. Staff-entered presence also appears in that person's monthly portal. Repeated entries are limited by database uniqueness and merged by distinct dates. VIP rewards count all distinct verified Sundays in the current Manila calendar month, not lifetime totals. Reversing a VIP validation removes a VIP-origin mark only when that specific check-in created it; unrelated staff attendance is not blindly removed.
+Guest check-in creates a pending request, not attendance. Authorized staff validation records presence for the linked person and Sunday. Staff-entered presence also appears in that person's monthly portal. Repeated entries are limited by database uniqueness and merged by distinct dates. VIP rewards count all distinct verified Sundays in the current Manila calendar month, not lifetime totals. After five distinct Sundays are recorded present, a linked VIP profile's status is promoted to `member`; the promotion is sticky and does not create a Lifegroup membership. Migration 002 applies the same rule to existing records. Reversing a VIP validation removes a VIP-origin mark only when that specific check-in created it; unrelated staff attendance is not blindly removed.
 
 ## Persistence and backup
 

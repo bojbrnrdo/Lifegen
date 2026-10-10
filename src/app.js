@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { query, transaction, withState, runDomain, logAction } from './db.js';
-import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
+import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday, VIP_MEMBER_ATTENDANCE_THRESHOLD } from './domain.js';
 import { attendanceReport, reportYears, peopleList, peopleSearch, serviceSummaries, serviceForDate, serviceById, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
@@ -16,9 +16,8 @@ import { importData, exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.10';
-// A VIP registrant counts as a long-time attendee once they have been present on this many distinct Sundays (~3 months weekly).
-const LONG_TIME_ATTENDEE_SUNDAYS=12;
+const ADMIN_ASSET_VERSION='2.2.11';
+// VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
 app.disable('x-powered-by');if(process.env.VERCEL||process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true')app.set('trust proxy',1);
@@ -88,7 +87,7 @@ async function customMethod(req,name,args) {
  if(name==='registrationCounts')return (await query('SELECT count(*)::int AS total,count(*) FILTER(WHERE review_status=\'new\')::int AS pending,count(*) FILTER(WHERE review_status=\'reviewed\')::int AS reviewed FROM vip_registrations')).rows[0];
  if(name==='registrations'){
   const p=args[0]||{},filter=['new','reviewed'].includes(p.status)?p.status:null;
-  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,coalesce(a.sundays_attended,0)::int AS sundays_attended,a.first_attended,a.last_attended,coalesce(a.sundays_attended,0)>=$3::int AS long_time_attendee FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'',LONG_TIME_ATTENDEE_SUNDAYS]);return {items:rows};
+  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status,coalesce(a.sundays_attended,0)::int AS sundays_attended,a.first_attended,a.last_attended,coalesce(a.sundays_attended,0)>=$3::int AS long_time_attendee FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'',VIP_MEMBER_ATTENDANCE_THRESHOLD]);return {items:rows};
  }
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;

@@ -1,5 +1,5 @@
 import { withState, stateId, logAction, databaseBackup, transaction } from './db.js';
-import { domain, today, isValidDate, isSunday, fullNameSafe, httpError, migrateNetworkText, migrateGenders } from './domain.js';
+import { domain, today, isValidDate, isSunday, fullNameSafe, httpError, migrateNetworkText, migrateGenders, promoteVipMemberIfEligible } from './domain.js';
 import { hashToken } from './auth.js';
 const ENTITIES=['people','services','networks','lifegroups','memberships','records','audit'];
 const bool=v=>v===true||v===1||v==='true'||v==='1';
@@ -35,6 +35,7 @@ export async function importData(input,{sourceKey,actor=null,dryRun=true}={}) {
   const mapping=new Map(existing.map(r=>[`${r.entity}:${r.source_id}`,r.destination_id]));
   const key=(t,id)=>`${t}:${String(id)}`;
   const mark=async(t,id,destination)=>{mapping.set(key(t,id),destination);await client.query('INSERT INTO import_mappings(source_key,entity,source_id,destination_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[sourceKey,t,String(id),destination]);};
+  const vipPeopleToRecheck=new Set();
   if(sameDatabase){for(const t of [...ENTITIES,'vip_registrations','vip_checkins','community_posts','audit_log']){const ids=new Set((await client.query(`SELECT id FROM "${t}"`)).rows.map(r=>String(r.id)));for(const r of source[t]||[])if(ids.has(String(r.id)))await mark(t,r.id,r.id);}}
   const mapped=(t,id,label,optional=false)=>{if(id==null&&optional)return null;const v=mapping.get(key(t,id));if(!v)throw httpError(400,`Missing reference: ${label} refers to ${t} ID ${id}. Nothing was imported.`);return v;};
   const skip=(t)=>summary.skipped[t]=(summary.skipped[t]||0)+1;
@@ -60,7 +61,7 @@ export async function importData(input,{sourceKey,actor=null,dryRun=true}={}) {
     if(t==='networks'){n.leader_person_id=mapped('people',r.leader_person_id,'Network leader',true);n.parent_network_id=null;n._legacy_parent=r.parent_network_id;}
     if(t==='lifegroups'){n.leader_person_id=mapped('people',r.leader_person_id,'Lifegroup leader',true);n.network_id=mapped('networks',r.network_id,'Lifegroup network',true);}
     if(t==='memberships'){n.person_id=mapped('people',r.person_id,'Membership person');n.lifegroup_id=mapped('lifegroups',r.lifegroup_id,'Membership group');n.joined_at=date(r.joined_at,'membership joined date');n.left_at=date(r.left_at,'membership left date',true);if(!n.left_at&&data.memberships.some(m=>m.person_id===n.person_id&&!m.left_at))throw httpError(400,'The backup assigns a person to two active Lifegroups. Resolve this before importing.');}
-    if(t==='records'){n.person_id=mapped('people',r.person_id,'Attendance person');n.service_id=mapped('services',r.service_id,'Attendance service');n.recorded_by=null;n.recorded_by_name=r.recorded_by_name||'Imported staff';n.legacy_recorded_by=r.recorded_by;n.source='import';if(n.status==='absent')n.classification=null;else if(!n.classification)n.classification='returning';const same=data.records.find(v=>v.person_id===n.person_id&&v.service_id===n.service_id);if(same){await mark(t,r.id,same.id);skip(t);continue;}}
+    if(t==='records'){n.person_id=mapped('people',r.person_id,'Attendance person');n.service_id=mapped('services',r.service_id,'Attendance service');n.recorded_by=null;n.recorded_by_name=r.recorded_by_name||'Imported staff';n.legacy_recorded_by=r.recorded_by;n.source='import';if(n.status==='absent')n.classification=null;else if(!n.classification)n.classification='returning';if(n.status==='present')vipPeopleToRecheck.add(Number(n.person_id));const same=data.records.find(v=>v.person_id===n.person_id&&v.service_id===n.service_id);if(same){await mark(t,r.id,same.id);skip(t);continue;}}
     if(t==='audit'){n.user_id=null;n.user_name=r.user_name||'Imported staff';n.person_id=r.person_id==null?null:(mapping.get(key('people',r.person_id))||null);n.service_id=r.service_id==null?null:(mapping.get(key('services',r.service_id))||null);}
     data[t].push(n);await mark(t,r.id,n.id);add(t);
    }
@@ -81,7 +82,10 @@ export async function importData(input,{sourceKey,actor=null,dryRun=true}={}) {
     else {const parts=name.split(/\s+/);const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age:r.age?Number(r.age):null,school:clean(r.school),inviter:clean(r.inviter),contact_number:digits(r.contact).length>=7?clean(r.contact):null,date_registered:String(r.created_at||today()).slice(0,10),status:'first_timer',registration_source:'vip',privacy_consent:false});personId=p.id;if(clean(r.contact)&&digits(r.contact).length<7){data.people.find(row=>row.id===p.id).contact_number=clean(r.contact);summary.warnings.push(`VIP ${sourceId} has an unvalidated legacy contact. It was retained; confirm it with the person.`);}add('people');if(!phone)summary.warnings.push(`VIP ${sourceId} had no contact number; no name-only automatic merge was performed.`);}
    }
    const id=stateId(data,'vip_registrations'),legacyHash=r.vip_token?hashToken(r.vip_token):r.legacy_token_hash||null;
-   await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,review_status,legacy_token_hash,recovery_hash,idempotency_key,created_at,extras) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12::timestamptz,now()),$13::jsonb)',[id,personId,name,r.age?Number(r.age):null,clean(r.school),clean(r.inviter),clean(r.contact),r.review_status==='reviewed'?'reviewed':'new',legacyHash,r.recovery_hash||null,kind==='neon'?r.idempotency_key||null:null,r.created_at||null,JSON.stringify({legacy_record:safeLegacy(r)})]);
+   const reviewStatus=r.review_status==='reviewed'?'reviewed':'new';
+   await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,review_status,legacy_token_hash,recovery_hash,idempotency_key,created_at,extras) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12::timestamptz,now()),$13::jsonb)',[id,personId,name,r.age?Number(r.age):null,clean(r.school),clean(r.inviter),clean(r.contact),reviewStatus,legacyHash,r.recovery_hash||null,kind==='neon'?r.idempotency_key||null:null,r.created_at||null,JSON.stringify({legacy_record:safeLegacy(r)})]);
+   data.vip_registrations.push({id,person_id:personId,review_status:reviewStatus,created_at:r.created_at||new Date().toISOString()});
+   vipPeopleToRecheck.add(Number(personId));
    await mark('vip_registrations',sourceId,id);tokenToId.set(String(r.vip_token||r.id),id);add('vip_registrations');
   }
   for(const r of [...(source.checkins||[]),...(source.vip_checkins||[])]) {
@@ -95,6 +99,7 @@ export async function importData(input,{sourceKey,actor=null,dryRun=true}={}) {
    const id=stateId(data,'vip_checkins');await client.query('INSERT INTO vip_checkins(id,registration_id,date_key,status,created_at,validated_at,extras) VALUES($1,$2,$3,$4,COALESCE($5::timestamptz,now()),$6,$7::jsonb)',[id,registrationId,day,r.status,r.created_at||null,r.validated_at||null,JSON.stringify({legacy_record:safeLegacy(r)})]);
    if(r.status==='valid') {
     const personId=(await client.query('SELECT person_id FROM vip_registrations WHERE id=$1',[registrationId])).rows[0].person_id;
+    vipPeopleToRecheck.add(Number(personId));
     let s=data.services.find(s=>s.service_date===day);if(!s){s=await domain.openService(day);add('services');}
     if(!data.records.some(v=>v.person_id===personId&&v.service_id===s.id&&v.status==='present')){await domain.mark(s.id,personId,'present');data.records.find(v=>v.person_id===personId&&v.service_id===s.id).source='import';add('records');}
    }
@@ -125,6 +130,7 @@ export async function importData(input,{sourceKey,actor=null,dryRun=true}={}) {
    else if(JSON.stringify(existingValue)!==JSON.stringify(v))summary.warnings.push(`Setting ${k} already has a newer value; it was not overwritten.`);
   }
   for(const p of source.monthly_prizes||[])await client.query('INSERT INTO monthly_prizes(month,description) VALUES($1,$2) ON CONFLICT DO NOTHING',[p.month,p.description]);
+  for(const personId of vipPeopleToRecheck)promoteVipMemberIfEligible(personId);
   await logAction(client,actor,'migration',sourceKey,dryRun?'dry_run':'import',summary);
   if(!dryRun)await client.query('INSERT INTO migration_runs(source_key,actor_id,summary) VALUES($1,$2,$3::jsonb)',[sourceKey,actor?.id||null,JSON.stringify(summary)]);
   summary.warnings=summary.warnings.slice(0,100);return summary;
