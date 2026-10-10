@@ -929,10 +929,10 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .acal__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .acal__toolbar h2 { font-size: 1.15rem; }
 .acal__navbtns { display: flex; align-items: center; gap: 6px; }
-.acal__dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.acal__dow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .acal__dow span { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: center; }
-.acal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 6px; min-height: 480px; }
-.acal__cell { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 80px; padding: 6px 7px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); text-align: left; font-family: var(--font); cursor: pointer; transition: .15s; }
+.acal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 6px; min-height: 480px; }
+.acal__cell { position: relative; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 80px; padding: 6px 7px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); text-align: left; font-family: var(--font); cursor: pointer; transition: .15s; }
 .acal__cell:hover { border-color: var(--brand-500); background: var(--brand-50); }
 .acal__cell:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 1px; }
 .acal__cell.is-out { opacity: .45; }

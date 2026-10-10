@@ -287,32 +287,61 @@ const io = new IntersectionObserver(es => {
     rootMargin: "0px 0px -40px 0px"
 });
 
+// ---- Next-service countdown (Sundays 1:00–3:00 PM, Asia/Manila) ------------
+const SERVICE_START_H = 13, SERVICE_END_H = 15, HOUR = 36e5, DAY = 864e5;
+const manilaAt = (date, h) => new Date(localDateKey(date) + "T" + String(h).padStart(2, "0") + ":00:00+08:00");
+
 function nextService() {
+    // Next Sunday 1 PM that hasn't started yet. While a service is running this is next week's.
     const now = getChurchNow();
     for (let add = 0; add < 8; add++) {
-        const calendar=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add,13,0,0); const d=new Date(localDateKey(calendar)+'T13:00:00+08:00');
-        if (0 === calendar.getDay() && d > churchUTCNow()) return d
+        const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + add, 12);
+        if (0 === day.getDay() && manilaAt(day, SERVICE_START_H) > churchUTCNow()) return nextService.daysAway = add, manilaAt(day, SERVICE_START_H)
     }
 }
 
-function tickCountdown() {
-    const target = nextService();
-    let diff = Math.max(0, target - churchUTCNow());
-    const d = Math.floor(diff / 864e5);
-    diff -= 864e5 * d;
-    const h = Math.floor(diff / 36e5);
-    diff -= 36e5 * h;
-    const m = Math.floor(diff / 6e4);
-    diff -= 6e4 * m;
-    const s = Math.floor(diff / 1e3);
-    $("countdown").innerHTML = [
-        ["days", d],
-        ["hrs", h],
-        ["min", m],
-        ["sec", s]
-    ].map(([l, v]) => `<div class="cd-unit"><span>${v}</span><small>${l}</small></div>`).join('<span class="cd-sep">:</span>');
+function serviceLive() {
     const now = getChurchNow();
-    $("cdSub").textContent = 0 === now.getDay() && now.getHours() >= 13 && now.getHours() < 15 ? "Service in progress — welcome in! · Lifegiver Church of Faith — Central" : "Sunday · 1:00 PM · Lifegiver Church of Faith — Central"
+    return 0 === now.getDay() && now.getHours() >= SERVICE_START_H && now.getHours() < SERVICE_END_H
+}
+const cdNums = Object.fromEntries(qsa("#countdown .cd-num").map(el => [el.dataset.u, el]));
+let cdLastLabel = "", cdLastLive = null;
+
+function setNum(key, value) {
+    const el = cdNums[key], text = String(value).padStart(2, "0");
+    if (!el || el.textContent === text) return;
+    el.textContent = text;
+    el.classList.remove("tick"), void el.offsetWidth, el.classList.add("tick")
+}
+
+function tickCountdown() {
+    const now = churchUTCNow(), live = serviceLive(), target = nextService();
+    let diff = Math.max(0, target - now);
+    const d = Math.floor(diff / DAY), h = Math.floor(diff % DAY / HOUR), m = Math.floor(diff % HOUR / 6e4), s = Math.floor(diff % 6e4 / 1e3);
+    if (live !== cdLastLive) {
+        cdLastLive = live;
+        $("countdown").hidden = live, $("cdLive").hidden = !live;
+        $("cdPill").classList.toggle("live", live);
+        $("cdLabel").textContent = live ? "LIFEGEN service · live" : "Next LIFEGEN service";
+    }
+    let progress;
+    if (live) {
+        const start = target - 7 * DAY; // today's service started 7 days before next week's
+        progress = (now - start) / (2 * HOUR);
+        $("cdDate").textContent = "Today, " + new Date(start).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric" });
+        $("cdPill").textContent = "Happening now";
+    } else {
+        setNum("d", d), setNum("h", h), setNum("m", m), setNum("s", s);
+        // Progress through the week: from the end of last Sunday's service to the next one.
+        const lastEnd = target - 7 * DAY + 2 * HOUR;
+        progress = (now - lastEnd) / (target - lastEnd);
+        const daysAway = nextService.daysAway;
+        $("cdDate").textContent = new Date(target).toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" });
+        $("cdPill").textContent = daysAway <= 0 ? "Today" : 1 === daysAway ? "Tomorrow" : "In " + daysAway + " days";
+        const label = (d ? d + (1 === d ? " day " : " days ") : "") + h + (1 === h ? " hour " : " hours ") + m + (1 === m ? " minute" : " minutes") + " until the next service";
+        if (label !== cdLastLabel) cdLastLabel = label, $("countdown").setAttribute("aria-label", label);
+    }
+    $("cdBar").style.width = (100 * Math.min(1, Math.max(0, progress))).toFixed(2) + "%"
 }
 qsa(".reveal").forEach(el => io.observe(el)), tickCountdown(), setInterval(tickCountdown, 1e3);
 const prayers = {

@@ -1,18 +1,25 @@
-// LIFEGEN events calendar (public website): month grid, upcoming list, day details.
+// LIFEGEN events calendar (public website): month grid, type filter, upcoming
+// list, day details (modal on larger screens, inline agenda on phones).
 // Talks only to same-origin /api/public endpoints; no credentials in the browser.
 (() => {
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3));
+    const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const DAYS_SHORT = DAYS.map((d) => d.slice(0, 3));
     const CATS = {
-        service: "Sunday service", worship: "Worship night", prayer: "Prayer gathering",
+        service: "Sunday service", worship: "Worship night", prayer: "Prayer",
         youth: "Youth", lifegroup: "Lifegroup", outreach: "Outreach", special: "Special event",
     };
+    const catOf = (e) => (CATS[e.category] ? e.category : "special");
 
     const icons = () => { try { window.lucide && lucide.createIcons(); } catch (e) {} };
     const pad = (n) => String(n).padStart(2, "0");
     const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const parts = (key) => key.split("-").map(Number);
+    const dateOf = (key) => { const [y, m, d] = parts(key); return new Date(y, m - 1, d); };
+    const dayDiff = (a, b) => Math.round((dateOf(b) - dateOf(a)) / 86400000);
     const fmtTime = (t) => {
         if (!t) return "All day";
         const [h, m] = t.split(":").map(Number);
@@ -20,18 +27,51 @@
         const hour = h % 12 || 12;
         return m ? `${hour}:${pad(m)} ${suffix}` : `${hour} ${suffix}`;
     };
-    const fmtRange = (e) => (e.all_day || !e.start_time ? "All day" : e.end_time && e.end_time !== e.start_time ? `${fmtTime(e.start_time)} – ${fmtTime(e.end_time)}` : fmtTime(e.start_time));
-    const fmtDay = (date) => {
-        const [y, m, d] = date.split("-").map(Number);
-        return `${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date(y, m - 1, d).getDay()]}, ${MONTHS[m - 1]} ${d}, ${y}`;
-    };
+    const isAllDay = (e) => e.all_day || !e.start_time;
+    const fmtRange = (e) => (isAllDay(e) ? "All day" : e.end_time && e.end_time !== e.start_time ? `${fmtTime(e.start_time)} – ${fmtTime(e.end_time)}` : fmtTime(e.start_time));
+    const fmtDay = (key) => { const d = dateOf(key); return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 
     const grid = $("calGrid");
     if (!grid) return; // calendar section not present
+    const board = $("calBoard"), agenda = $("calAgenda");
+    const phone = window.matchMedia("(max-width:720px)");
     let todayKey = iso(new Date());
     const cache = new Map();
-    let view = null; // {y, m}
+    let view = null;          // first day of the visible month
+    let current = null;       // {data, y, m} last rendered
+    let activeCat = null;     // type filter (null = all)
+    let selectedKey = null;   // phone agenda day
     let loading = false;
+
+    const relLabel = (key) => {
+        const n = dayDiff(todayKey, key);
+        if (n === 0) return "Today";
+        if (n === 1) return "Tomorrow";
+        if (n > 1 && n < 7) return `In ${n} days`;
+        if (n >= 7 && n < 14) return "Next week";
+        if (n >= 14) return `In ${Math.round(n / 7)} weeks`;
+        return "";
+    };
+    // Manila is UTC+8 all year (no daylight saving).
+    const manilaStamp = (date, time) => Date.parse(`${date}T${time || "00:00"}:00+08:00`);
+    const utcCompact = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    function googleUrl(e) {
+        let dates;
+        if (isAllDay(e)) {
+            const next = dateOf(e.date); next.setDate(next.getDate() + 1);
+            dates = `${e.date.replace(/-/g, "")}/${iso(next).replace(/-/g, "")}`;
+        } else {
+            const start = manilaStamp(e.date, e.start_time);
+            const end = e.end_time && e.end_time > e.start_time ? manilaStamp(e.date, e.end_time) : start + 3600000;
+            dates = `${utcCompact(start)}/${utcCompact(end)}`;
+        }
+        const q = new URLSearchParams({ action: "TEMPLATE", text: e.title || "LIFEGEN event", dates, ctz: "Asia/Manila" });
+        if (e.description) q.set("details", e.description);
+        if (e.location) q.set("location", e.location);
+        if (e.recurring) q.set("recur", "RRULE:FREQ=WEEKLY;BYDAY=SU"); // same as the Apple / Outlook file
+        return `https://calendar.google.com/calendar/render?${q}`;
+    }
+    const icsUrl = (e) => `/api/public/event.ics?id=${encodeURIComponent(e.id)}`;
 
     async function getJson(url) {
         const r = await fetch(url, { credentials: "same-origin", cache: "no-store" });
@@ -39,101 +79,165 @@
         return r.json();
     }
 
-    // ---- Month grid -------------------------------------------------------
-    async function loadMonth(y, m) {
+    // ---- Data ---------------------------------------------------------------
+    function loadMonth(y, m) {
         const first = new Date(y, m, 1), last = new Date(y, m + 1, 0);
         const from = iso(new Date(first.getFullYear(), first.getMonth(), first.getDate() - 7));
         const to = iso(new Date(last.getFullYear(), last.getMonth(), last.getDate() + 8));
         const key = `${y}-${pad(m + 1)}`;
-        if (!cache.has(key)) cache.set(key, getJson(`/api/public/calendar-events?from=${from}&to=${to}`));
+        if (!cache.has(key)) {
+            const p = getJson(`/api/public/calendar-events?from=${from}&to=${to}`);
+            p.catch(() => cache.delete(key));
+            cache.set(key, p);
+        }
         return cache.get(key);
     }
-
-    function renderMonth(data, y, m) {
-        $("calMonth").textContent = `${MONTHS[m]} ${y}`;
+    const prefetch = (y, m) => { loadMonth(y, m).catch(() => {}); };
+    const visible = (e) => !activeCat || catOf(e) === activeCat;
+    function groupByDate(events) {
         const byDate = new Map();
-        for (const e of data.events) {
+        for (const e of events) {
+            if (!visible(e)) continue;
             if (!byDate.has(e.date)) byDate.set(e.date, []);
             byDate.get(e.date).push(e);
         }
+        return byDate;
+    }
+
+    // ---- Month grid -----------------------------------------------------------
+    const setTitle = (y, m) => { $("calMonth").innerHTML = `${MONTHS[m]} <em class="cal-year">${y}</em>`; };
+    function renderMonth(data, y, m) {
+        current = { data, y, m };
         todayKey = data.today || todayKey;
+        const monthKey = `${y}-${pad(m + 1)}`;
+        const monthEvents = data.events.filter((e) => e.date.startsWith(monthKey));
+        setTitle(y, m);
+        const ahead = monthEvents.filter((e) => e.date >= todayKey).length;
+        $("calSummary").textContent = monthEvents.length
+            ? `${monthEvents.length} gathering${monthEvents.length === 1 ? "" : "s"} this month${ahead && ahead < monthEvents.length ? ` · ${ahead} still ahead` : ""}`
+            : "A quiet month — the doors are still open every Sunday.";
+        renderFilters(monthEvents);
+        const byDate = groupByDate(data.events);
         const firstDow = new Date(y, m, 1).getDay();
         const start = new Date(y, m, 1 - firstDow);
+        const weeks = Math.ceil((firstDow + new Date(y, m + 1, 0).getDate()) / 7);
         let html = "";
-        for (let i = 0; i < 42; i++) {
+        for (let i = 0; i < weeks * 7; i++) {
             const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
             const key = iso(d);
             const out = d.getMonth() !== m;
             const events = byDate.get(key) || [];
             const isToday = key === todayKey;
-            const cell = events.length
-                ? `<button type="button" class="cal-cell has-events${out ? " is-out" : ""}${isToday ? " is-today" : ""}" data-date="${key}" aria-label="${esc(fmtDay(key))} — ${events.length} event${events.length > 1 ? "s" : ""}">`
-                : `<div class="cal-cell${out ? " is-out" : ""}${isToday ? " is-today" : ""}" data-date="${key}">`;
-            const chips = events.slice(0, 2).map((e) =>
-                `<span class="cal-chip cat-${esc(e.category)}${e.recurring ? " is-weekly" : ""}">${e.all_day || !e.start_time ? "" : `<b>${esc(fmtTime(e.start_time))}</b>`}${esc(e.title)}</span>`).join("");
-            const dots = events.slice(0, 4).map((e) => `<i class="cal-dot cat-${esc(e.category)}" aria-hidden="true"></i>`).join("");
-            const more = events.length > 2 ? `<span class="cal-more">+${events.length - 2} more</span>` : "";
-            html += `${cell}<span class="cal-daynum"${isToday ? ' aria-current="date"' : ""}>${d.getDate()}${isToday ? '<i class="cal-today-dot" aria-hidden="true"></i>' : ""}</span><span class="cal-dots" aria-hidden="true">${dots}</span><span class="cal-chips">${chips}${more}</span>${events.length ? "</button>" : "</div>"}`;
+            const cls = ["cal-cell", out && "is-out", isToday && "is-today", key < todayKey && "is-past",
+                events.length && "has-events", key === selectedKey && "is-selected"].filter(Boolean).join(" ");
+            const tag = events.length ? "button" : "div";
+            const attrs = events.length
+                ? ` type="button" aria-label="${esc(`${fmtDay(key)}${isToday ? " (today)" : ""}: ${events.map((e) => e.title).join(", ")}`)}"`
+                : "";
+            const max = events.length > 3 ? 2 : 3;
+            const chips = events.slice(0, max).map((e) =>
+                `<span class="cal-chip cat-${catOf(e)}"><span class="cal-chip-text">${isAllDay(e) ? "" : `<b>${esc(fmtTime(e.start_time))}</b>`}${esc(e.title)}</span></span>`).join("");
+            const more = events.length > max ? `<span class="cal-more">${events.length - max} more</span>` : "";
+            const dots = events.slice(0, 3).map((e) => `<i class="cal-dot cat-${catOf(e)}"></i>`).join("");
+            html += `<${tag} class="${cls}" data-date="${key}"${attrs}><span class="cal-daynum"${isToday ? ' aria-current="date"' : ""}>${d.getDate()}</span><span class="cal-chips">${chips}${more}</span><span class="cal-dots" aria-hidden="true">${dots}</span></${tag}>`;
         }
         grid.innerHTML = html;
+        grid.classList.remove("ready");
+        void grid.offsetWidth; // restart the fade-in
         grid.classList.add("ready");
-        renderLegend();
+        renderAgenda();
         icons();
+        prefetch(m === 11 ? y + 1 : y, (m + 1) % 12);
+        prefetch(m === 0 ? y - 1 : y, (m + 11) % 12);
     }
 
-    function renderLegend() {
+    // ---- Type filter (also serves as the colour legend) ---------------------
+    function renderFilters(monthEvents) {
+        const present = new Set(monthEvents.map(catOf));
+        if (activeCat) present.add(activeCat);
+        const keys = Object.keys(CATS).filter((k) => present.has(k));
         const legend = $("calLegend");
-        if (legend.childElementCount) return;
-        legend.innerHTML = Object.entries(CATS).map(([k, label]) => `<span class="cal-legend-item"><i class="cal-dot cat-${k}"></i>${esc(label)}</span>`).join("");
+        legend.hidden = keys.length < 2;
+        const btn = (key, label) => {
+            const active = (activeCat || "") === key;
+            return `<button type="button" class="cal-filter${key ? ` cat-${key}` : ""}${active ? " is-active" : ""}" data-cat="${key}" aria-pressed="${active}">${key ? '<i class="cal-dot"></i>' : ""}${esc(label)}</button>`;
+        };
+        legend.innerHTML = btn("", "All") + keys.map((k) => btn(k, CATS[k])).join("");
     }
+    $("calLegend").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-cat]");
+        if (!b || !current) return;
+        const cat = b.dataset.cat || null;
+        activeCat = activeCat === cat ? null : cat;
+        renderMonth(current.data, current.y, current.m);
+    });
 
-    // ---- Upcoming side panel ---------------------------------------------
-    function renderUpcoming(data) {
-        const wrap = $("calUpcoming");
-        const events = (data.events || []).slice(0, 6);
-        if (!events.length) {
-            wrap.innerHTML = `<div class="cal-empty"><i data-lucide="calendar-check"></i><p>Nothing scheduled just yet — the Sunday service is still on!</p></div>`;
-        } else {
-            wrap.innerHTML = events.map((e) => {
-                const [y, m, d] = e.date.split("-").map(Number);
-                return `<button type="button" class="cal-up-item" data-date="${e.date}">
-          <span class="cal-up-badge cat-${esc(e.category)}"><b>${d}</b><small>${MONTHS_SHORT[m - 1]}</small></span>
-          <span class="cal-up-body"><strong>${esc(e.title)}</strong>
-          <small><i data-lucide="clock"></i>${esc(fmtRange(e))}${e.location ? ` · <i data-lucide="map-pin"></i>${esc(e.location)}` : ""}</small></span></button>`;
-            }).join("");
+    // ---- Event details (shared by modal + phone agenda) ----------------------
+    const eventDetails = (e) => `<article class="cal-ev cat-${catOf(e)}">
+        <span class="cal-ev-type"><i class="cal-dot"></i>${esc(CATS[catOf(e)])}${e.recurring ? " · every week" : ""}</span>
+        <h4>${esc(e.title)}</h4>
+        <p class="cal-ev-meta"><span><i data-lucide="clock"></i>${esc(fmtRange(e))}</span>${e.location ? `<span><i data-lucide="map-pin"></i>${esc(e.location)}</span>` : ""}</p>
+        ${e.description ? `<p class="cal-ev-desc">${esc(e.description)}</p>` : ""}
+        <div class="cal-ev-actions"><a class="cal-btn is-dark" href="${esc(googleUrl(e))}" target="_blank" rel="noopener"><i data-lucide="calendar-plus"></i>Google Calendar</a><a class="cal-btn" href="${icsUrl(e)}" download="lifegen-event.ics">Apple / Outlook</a></div>
+      </article>`;
+    const dayHeading = (key, count) => {
+        const rel = relLabel(key);
+        return `<header class="cal-day-head"><h4>${esc(fmtDay(key))}</h4>${rel ? `<span class="cal-rel">${esc(rel)}</span>` : ""}</header>${count ? "" : `<p class="cal-none">No events this day.</p>`}`;
+    };
+
+    // ---- Phone: inline day agenda -------------------------------------------
+    function renderAgenda() {
+        if (!current) return;
+        const { data, y, m } = current;
+        const monthKey = `${y}-${pad(m + 1)}`;
+        if (!selectedKey || !selectedKey.startsWith(monthKey)) {
+            const inMonth = data.events.filter((e) => e.date.startsWith(monthKey) && visible(e));
+            selectedKey = todayKey.startsWith(monthKey) ? todayKey
+                : (inMonth.find((e) => e.date >= todayKey) || inMonth[0] || { date: `${monthKey}-01` }).date;
+            markSelected();
         }
+        const events = groupByDate(data.events).get(selectedKey) || [];
+        agenda.innerHTML = dayHeading(selectedKey, events.length) + events.map(eventDetails).join("");
         icons();
     }
-
-    // ---- Day detail modal --------------------------------------------------
-    const modal = $("eventModal"), modalBody = $("eventModalBody");
-    function eventCard(e) {
-        return `<article class="cal-ev cat-${esc(e.category)}">
-      <header><span class="cal-ev-pill cat-${esc(e.category)}">${esc(e.label || CATS[e.category] || "Event")}</span>${e.recurring ? '<span class="cal-ev-weekly"><i data-lucide="refresh-cw"></i>Repeats weekly</span>' : ""}</header>
-      <h4>${esc(e.title)}</h4>
-      <div class="cal-ev-meta">
-        <span><i data-lucide="calendar-days"></i>${esc(fmtDay(e.date))}</span>
-        <span><i data-lucide="clock"></i>${esc(fmtRange(e))}</span>
-        ${e.location ? `<span><i data-lucide="map-pin"></i>${esc(e.location)}</span>` : ""}
-      </div>
-      ${e.description ? `<p>${esc(e.description)}</p>` : ""}
-      <a class="cal-ev-ics" href="/api/public/event.ics?id=${encodeURIComponent(e.id)}" download="lifegen-event.ics"><i data-lucide="calendar-plus"></i>Add this event to my calendar</a>
-    </article>`;
+    function markSelected() {
+        grid.querySelectorAll(".is-selected").forEach((c) => c.classList.remove("is-selected"));
+        grid.querySelector(`[data-date="${selectedKey}"]`)?.classList.add("is-selected");
     }
-    async function openDay(dateKey, preselect) {
+
+    // ---- Coming up list -------------------------------------------------------
+    function renderUpcoming(data) {
+        todayKey = data.today || todayKey;
+        const list = $("calUpcoming");
+        const events = data.events || [];
+        if (!events.length) {
+            list.innerHTML = `<li class="cal-none">No announcements right now. Join us on Sunday!</li>`;
+            return;
+        }
+        list.innerHTML = events.map((e, i) => {
+            const [, m, d] = parts(e.date);
+            const rel = relLabel(e.date);
+            return `<li><button type="button" class="cal-up-item cat-${catOf(e)}" data-date="${e.date}">
+              <span class="cal-up-date"><small>${MONTHS_SHORT[m - 1]}</small><b>${d}</b></span>
+              <span class="cal-up-body"><strong>${esc(e.title)}</strong><small>${DAYS_SHORT[dateOf(e.date).getDay()]} · ${esc(fmtRange(e))}${e.location ? ` · ${esc(e.location)}` : ""}</small></span>
+              ${rel ? `<span class="cal-rel${i === 0 ? " is-next" : ""}">${esc(rel)}</span>` : ""}</button></li>`;
+        }).join("");
+    }
+
+    // ---- Day modal (tablet / desktop) ------------------------------------------
+    const modal = $("eventModal"), modalBody = $("eventModalBody");
+    async function openDay(dateKey) {
         let data;
         try {
-            const [y, m] = dateKey.split("-").map(Number);
+            const [y, m] = parts(dateKey);
             data = await loadMonth(y, m - 1);
         } catch (e) {
-            modalBody.innerHTML = `<p class="cal-ev-none">${esc(e.message)}</p>`;
+            modalBody.innerHTML = `<p class="cal-none">${esc(e.message)}</p>`;
             openModal();
             return;
         }
-        const events = (data.events || []).filter((e) => e.date === dateKey);
-        modalBody.innerHTML = events.length
-            ? `<p class="cal-modal-day">${esc(fmtDay(dateKey))}</p>${events.map(eventCard).join("")}`
-            : `<p class="cal-modal-day">${esc(fmtDay(dateKey))}</p><p class="cal-ev-none"><i data-lucide="calendar-check"></i>No events on this day — see you Sunday!</p>`;
+        const events = (data.events || []).filter((e) => e.date === dateKey && (visible(e) || !current));
+        modalBody.innerHTML = dayHeading(dateKey, events.length) + events.map(eventDetails).join("");
         openModal();
     }
     let lastFocus = null;
@@ -152,14 +256,19 @@
     modal.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
 
-    // ---- Events wiring -----------------------------------------------------
+    // ---- Wiring -----------------------------------------------------------------
     grid.addEventListener("click", (e) => {
         const cell = e.target.closest("[data-date]");
-        if (cell && cell.classList.contains("has-events")) openDay(cell.dataset.date);
+        if (!cell) return;
+        if (phone.matches) { selectedKey = cell.dataset.date; markSelected(); renderAgenda(); }
+        else if (cell.classList.contains("has-events")) openDay(cell.dataset.date);
     });
     $("calUpcoming").addEventListener("click", (e) => {
-        const item = e.target.closest("[data-date]");
-        if (item) openDay(item.dataset.date, true);
+        const item = e.target.closest("button[data-date]");
+        if (!item) return;
+        const prevCat = activeCat;
+        activeCat = null; // always show the full day from the upcoming list
+        openDay(item.dataset.date).finally(() => { activeCat = prevCat; });
     });
     const shiftMonth = (delta) => {
         if (loading) return;
@@ -169,29 +278,42 @@
     $("calPrev").addEventListener("click", () => shiftMonth(-1));
     $("calNext").addEventListener("click", () => shiftMonth(1));
     $("calTodayBtn").addEventListener("click", () => {
-        const now = new Date();
-        view = new Date(now.getFullYear(), now.getMonth(), 1);
+        const [y, m] = parts(todayKey);
+        view = new Date(y, m - 1, 1);
+        selectedKey = todayKey;
         show();
     });
+    // Swipe left/right on the grid to change months (phones).
+    let touch = null;
+    board.addEventListener("touchstart", (e) => { const t = e.touches[0]; touch = { x: t.clientX, y: t.clientY }; }, { passive: true });
+    board.addEventListener("touchend", (e) => {
+        if (!touch) return;
+        const t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+        touch = null;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) shiftMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
 
-    function gridMessage(text, retry) {
-        grid.innerHTML = `<div class="cal-error"><i data-lucide="wifi-off"></i><p>${esc(text)}</p>${retry ? '<button type="button" class="btn btn-ghost btn-sm2" id="calRetry">Try again</button>' : ""}</div>`;
-        icons();
-        const btn = $("calRetry");
-        if (btn) btn.addEventListener("click", () => { cache.clear(); show(); });
+    function gridMessage(text) {
+        grid.innerHTML = `<div class="cal-error"><p>${esc(text)}</p><button type="button" class="cal-btn" id="calRetry">Try again</button></div>`;
+        $("calRetry").addEventListener("click", () => { cache.clear(); show(); });
     }
 
     async function show() {
         if (loading) return;
         loading = true;
-        grid.classList.remove("ready");
-        grid.innerHTML = '<div class="cal-loading"><span class="cal-spinner" aria-hidden="true"></span>Loading the calendar…</div>';
+        const y = view.getFullYear(), m = view.getMonth();
+        const spinner = setTimeout(() => {
+            grid.innerHTML = '<div class="cal-loading"><span class="cal-spinner" aria-hidden="true"></span>Loading…</div>';
+        }, 160);
         try {
-            const data = await loadMonth(view.getFullYear(), view.getMonth());
-            renderMonth(data, view.getFullYear(), view.getMonth());
+            const data = await loadMonth(y, m);
+            clearTimeout(spinner);
+            renderMonth(data, y, m);
         } catch (e) {
-            $("calMonth").textContent = `${MONTHS[view.getMonth()]} ${view.getFullYear()}`;
-            gridMessage(e.message || "The calendar could not be loaded right now.", true);
+            clearTimeout(spinner);
+            setTitle(y, m);
+            $("calSummary").textContent = "";
+            gridMessage(e.message || "The calendar could not be loaded right now.");
         } finally {
             loading = false;
         }
@@ -201,10 +323,11 @@
         try {
             renderUpcoming(await getJson("/api/public/calendar-upcoming?days=120&limit=6"));
         } catch {
-            $("calUpcoming").innerHTML = '<div class="cal-empty"><p>Upcoming events will appear here.</p></div>';
+            $("calUpcoming").innerHTML = '<li class="cal-none">Upcoming events will appear here.</li>';
         }
     }
 
+    phone.addEventListener?.("change", () => current && renderAgenda());
     const now = new Date();
     view = new Date(now.getFullYear(), now.getMonth(), 1);
     show();

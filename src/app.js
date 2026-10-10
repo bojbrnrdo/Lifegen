@@ -14,10 +14,10 @@ import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
 import { importData, exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
-import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, CATEGORY_LABELS } from './calendar.js';
+import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.12';
+const ADMIN_ASSET_VERSION='2.2.13';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -85,7 +85,8 @@ async function customMethod(req,name,args) {
   const now=new Date(today()+'T12:00:00');
   const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const from=iso(new Date(now.getFullYear(),now.getMonth()-1,1)),to=iso(new Date(now.getFullYear(),now.getMonth()+months+1,1));
-  return {from,to,today:today(),labels:CATEGORY_LABELS,events:await storedEvents(from,to,{includeDrafts:true})};
+  const stored=(await storedEvents(from,to,{includeDrafts:true})).map(e=>({...e,date:e.event_date}));
+  return {from,to,today:today(),labels:CATEGORY_LABELS,events:mergeWithWeeklySundays(stored,from,to)};
  }
  if(name==='saveCalendarEvent')return transaction(async client=>{
   const fields=validateEventInput(args[0]||{});

@@ -15,13 +15,13 @@ The LIFEGEN public website and the complete **LifegroupTracker** now live in one
 | Month-view events calendar with day details | Calendar event manager (create, edit, drafts, delete) |
 | Monthly attendance progress | Reports, CSV export and print |
 | Private VIP recovery codes | VIP review and check-in validation |
-| Recurring calendar (.ics) download and per-event files | Staff accounts, settings, prayer moderation and backups |
+| Add single events to Google / Apple / Outlook calendars | Staff accounts, settings, prayer moderation and backups |
 
 A successful VIP signup saves a registration **and its linked First Timer** in a single database transaction. The new person and registration appear in Admin automatically. After **five distinct Sunday attendances** (more than four visits) are recorded as present, the linked person status automatically changes to **Member**. This applies to both staff-recorded attendance and validated VIP check-ins; it changes the profile status, not Lifegroup membership. Correcting attendance later does not automatically downgrade the status.
 
 ## Events calendar
 
-The public landing page places its **Events** section (`#events`) directly below the hero, so the month-view calendar is part of the page without needing to open a separate view. Visitors browse months, see colour-coded event chips per day, tap a day for full details in a modal, follow the **Upcoming** list, and download calendar files (whole feed at `/api/public/calendar.ics`, single events at `/api/public/event.ics?id=…`). All times are Asia/Manila.
+The public landing page places its **Events** section (`#events`) directly below the hero and Welcome section, so the month-view calendar is part of the page without needing to open a separate view. Visitors browse months, filter by event type, tap a day for full details, follow the **Announcements** list, and can add any single event to Google Calendar or download it for Apple Calendar / Outlook (`/api/public/event.ics?id=…`). All times are Asia/Manila.
 
 - The weekly **Sunday service (1:00–3:00 PM)** appears on every Sunday automatically — no data required. A stored event in the **Sunday service** category takes over its date instead, so nothing is duplicated.
 - Staff manage events in **Admin → Calendar**: create, edit and delete events, set category, date, times or all-day, location, description, and publish or keep as a staff-only draft. Every change is audit-logged and appears on the public calendar immediately (live updates included).
@@ -137,7 +137,7 @@ For full database disaster recovery, use the database provider's recovery/backup
 
 ## Verification
 
-- Backend, publishing security and fresh-start adapter suites: **51 passing tests**.
+- Calendar and VIP-to-Member promotion suites: **10 passing tests** (`npm test`).
 - Real-browser test of the actual first-admin setup form, including the private-code payload.
 - Public signup automatically appears in Admin and links to a First Timer.
 - Same-site QR, public/Admin navigation, shared staff session, logout protection and mobile checks.
