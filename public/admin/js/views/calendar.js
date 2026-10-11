@@ -72,7 +72,7 @@ export async function renderCalendar({ main }) {
       </button>`;
     }
     const monthEvents = [...map.entries()].filter(([k]) => k.startsWith(`${y}-${pad(m + 1)}`)).flatMap(([, v]) => v);
-    const upcoming = data.events.map(norm).filter((e) => e.date >= (data.today || iso(now)) && e.is_published !== false).slice(0, 8);
+    const upcoming = data.events.map(norm).filter((e) => e.date >= (data.today || iso(now)) && e.is_published !== false).slice(0, 6); // same count as the public Announcements box
 
     main.innerHTML = html`
       <div class="page-header">
@@ -100,8 +100,8 @@ export async function renderCalendar({ main }) {
           ${monthEvents.length ? html`<div class="table-wrap"><table class="table table--compact">
             <thead><tr><th>Date</th><th>Event</th><th>Time</th><th>Status</th>${manage ? raw('<th></th>') : ''}</tr></thead>
             <tbody>${monthEvents.map((e) => html`<tr>
-              <td class="nowrap">${fmtLong(e.date).replace(/, \d{4}/, '')}</td>
-              <td><strong>${e.title}</strong><div class="small muted">${CATS[e.category] || 'Event'}${e.location ? ` · ${e.location}` : ''}</div></td>
+              <td class="nowrap">${new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</td>
+              <td class="acal__ev"><strong>${e.title}</strong><div class="small muted">${CATS[e.category] || 'Event'}${e.location ? ` · ${e.location}` : ''}</div></td>
               <td class="nowrap">${fmtRange(e)}</td>
               <td>${raw(e.recurring ? '<span class="badge badge--demo">Weekly</span>' : e.is_published === false ? '<span class="badge badge--muted">Draft</span>' : '<span class="badge badge--present">Published</span>')}</td>
               ${manage && e.recurring ? raw('<td></td>') : ''}${manage && !e.recurring ? html`<td class="nowrap row-actions"><button class="icon-btn" data-edit="${e.id}" aria-label="Edit ${e.title}">${icon('edit', 15)}</button><button class="icon-btn" data-del="${e.id}" aria-label="Delete ${e.title}">${icon('trash', 15)}</button></td>` : ''}
@@ -109,7 +109,7 @@ export async function renderCalendar({ main }) {
           </table></div>` : html`<p class="muted" style="padding:14px 4px">No stored events this month — the weekly Sunday service still appears.</p>`}
         </div>
         <div class="card">
-          <div class="card__header"><h3>Upcoming</h3><span class="small muted">what visitors see first</span></div>
+          <div class="card__header"><h3>Announcements</h3><span class="small muted">as shown on the website</span></div>
           ${raw(upcoming.length ? `<div class="acal__mini">${upcoming.map((e) => `
             <div class="acal__mini-row ${CAT_CLASS[e.category]}"><span class="acal__mini-date">${Number(e.date.slice(8))} ${MONTHS[Number(e.date.slice(5, 7)) - 1].slice(0, 3)}</span>
             <span class="acal__mini-body"><strong>${esc(e.title)}</strong><small>${fmtRange(e)}${e.location ? ` · ${esc(e.location)}` : ''}</small></span></div>`).join('')}</div>`
