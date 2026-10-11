@@ -14,7 +14,7 @@
 .cat-service{--c:var(--cal-service);--t:#E9F2E7}.cat-worship{--c:var(--cal-worship);--t:#F7F0DC}.cat-prayer{--c:var(--cal-prayer);--t:#E6F1EB}.cat-youth{--c:var(--cal-youth);--t:#FAEDE0}.cat-lifegroup{--c:var(--cal-lifegroup);--t:#E7EDF7}.cat-outreach{--c:var(--cal-outreach);--t:#F7E8E4}.cat-special{--c:var(--cal-special);--t:#EEE9F6}
 .cal-columns{display:flex;flex-direction:column;gap:24px;margin-top:40px}
 .cal-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:var(--c,var(--ink))}
-.cal-shell,.cal-upcoming{min-width:0;background:#fff;border:1px solid var(--cal-line);border-radius:24px;box-shadow:0 1px 2px rgba(15,61,28,.04),0 24px 48px -32px rgba(15,61,28,.22)}
+.cal-shell{min-width:0;background:#fff;border:1px solid var(--cal-line);border-radius:24px;box-shadow:0 1px 2px rgba(15,61,28,.04),0 24px 48px -32px rgba(15,61,28,.22)}
 .cal-shell{padding:26px 28px 20px}
 
 /* Green banner header */
@@ -43,7 +43,7 @@
 .cal-btn:hover{background:var(--cal-soft);border-color:rgba(27,94,32,.28)}
 .cal-btn.is-dark{background:var(--ink);border-color:var(--ink);color:#fff}
 .cal-btn.is-dark:hover{background:#174F1B}
-.cal-btn:focus-visible,.cal-filter:focus-visible,.cal-cell:focus-visible,.cal-up-item:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.cal-btn:focus-visible,.cal-filter:focus-visible,.cal-cell:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 /* Type filter (doubles as the colour legend) */
 .cal-filters{display:flex;gap:4px;margin-top:18px;overflow-x:auto;scrollbar-width:none}
@@ -100,30 +100,15 @@ button.cal-cell{cursor:pointer}
 .cal-agenda{display:none}
 
 /* Coming up */
-.cal-upcoming{padding:24px 28px}
-.cal-upcoming h4{font-family:var(--serif);font-size:1.4rem;font-weight:500;color:var(--ink);margin-bottom:6px}
-.cal-up-list{list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px}
-.cal-up-list li{border-bottom:1px solid var(--cal-line)}
-.cal-up-list li:nth-last-child(-n+2):nth-child(odd),.cal-up-list li:last-child{border-bottom:none}
-.cal-up-item{display:flex;align-items:center;gap:14px;width:100%;padding:12px 6px;margin:2px 0;border:none;border-radius:12px;background:none;font-family:var(--sans);text-align:left;cursor:pointer;transition:background .15s}
-@media (hover:hover){.cal-up-item:hover{background:#FAFCF9}}
-.cal-up-date{display:flex;flex-direction:column;align-items:center;justify-content:center;width:46px;height:50px;flex:none;border-radius:12px;background:var(--t);color:var(--c)}
-.cal-up-date small{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1}
-.cal-up-date b{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.1}
-.cal-up-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.cal-up-body strong{font-size:15px;font-weight:600;color:var(--cal-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cal-up-body small{font-size:12.5px;color:var(--cal-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Loading / error */
 .cal-loading,.cal-error{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:280px;color:var(--cal-muted);font-size:14px;text-align:center}
-.cal-up-list .cal-loading{min-height:120px}
 .cal-spinner{width:22px;height:22px;border-radius:50%;border:2.5px solid #E5EDE3;border-top-color:var(--ink);animation:calspin .8s linear infinite}
 @keyframes calspin{to{transform:rotate(360deg)}}
 
 /* Gatherings calendar link */
 
 /* Responsive */
-@media (max-width:900px){.cal-up-list{grid-template-columns:minmax(0,1fr)}.cal-up-list li:nth-last-child(-n+2):nth-child(odd){border-bottom:1px solid var(--cal-line)}.cal-up-list li:last-child{border-bottom:none}}
 @media (max-width:720px){
  .cal-columns{margin-top:28px;gap:16px}
  .cal-shell{padding:18px 14px 16px;border-radius:20px}
@@ -144,14 +129,9 @@ button.cal-cell{cursor:pointer}
  .cal-agenda{display:block;margin-top:12px;padding:16px 4px 0;border-top:1px solid var(--cal-line)}
  .cal-agenda .cal-day-head h4{font-size:1.25rem}
  .cal-note{padding:0 4px}
- .cal-upcoming{padding:18px 14px;border-radius:20px}
- .cal-upcoming h4{padding:0 6px}
- .cal-up-item{gap:12px}
  .cal-modal-card{padding:22px 20px}
  .cal-ev-actions .cal-btn{flex:1;padding:0 10px}
  .cal-ev-actions svg{display:none}
- .cal-up-item .cal-rel:not(.is-next){display:none}
- .cal-up-body strong{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 }
 @media (prefers-reduced-motion:reduce){.cal-grid.ready{animation:none}}
 
