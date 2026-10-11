@@ -1,7 +1,7 @@
 // Read-optimized PostgreSQL queries for hot Admin screens.
 // These avoid hydrating whole tracker tables into the Vercel function on every read.
 import { query } from './db.js';
-import { resolveRange, today } from './domain.js';
+import { today } from './domain.js';
 
 const num = (v) => Number(v || 0);
 const round1 = (v) => Math.round(v * 10) / 10;
@@ -84,28 +84,6 @@ function monthlyBreakdown(rows) {
   return [...map.values()].sort((a,b)=>a.month.localeCompare(b.month)).map(m=>({...m,average:m.services?round1(m.present/m.services):0}));
 }
 
-export async function attendanceReport(params = {}) {
-  const range=resolveRange(params),[from,to]=dateRangeParams(range);
-  const [weekly,uniqueRows,registrationRows]=await Promise.all([
-    serviceSummaries(range),
-    query(`SELECT count(DISTINCT r.person_id)::int AS total
-      FROM records r JOIN services s ON s.id=r.service_id
-      WHERE r.status='present' AND ($1::date IS NULL OR s.service_date >= $1::date)
-        AND ($2::date IS NULL OR s.service_date <= $2::date)`,[from,to]),
-    query(`SELECT count(*)::int AS total FROM people p
-      WHERE ($1::date IS NULL OR p.date_registered >= $1::date)
-        AND ($2::date IS NULL OR p.date_registered <= $2::date)`,[from,to]),
-  ]);
-  return {range,totals:{...aggregate(weekly),unique_attendees:num(uniqueRows.rows[0]?.total),new_registrations:num(registrationRows.rows[0]?.total)},weekly,monthly:monthlyBreakdown(weekly)};
-}
-
-export async function reportYears() {
-  const { rows }=await query('SELECT DISTINCT EXTRACT(YEAR FROM service_date)::int AS year FROM services ORDER BY year DESC');
-  const years=rows.map(r=>num(r.year)),current=num(today().slice(0,4));
-  if(!years.includes(current))years.unshift(current);
-  return years;
-}
-
 const cleanText=(v)=>v==null?'':String(v).trim();
 const digits=(v)=>String(v||'').replace(/\\D/g,'');
 function mapPerson(row){const p={...(row.extras||{}),...row};delete p.extras;delete p._total;return p;}
@@ -165,56 +143,17 @@ export async function peopleList(params = {}) {
   return people;
 }
 
-function activeCutoff(days=60){const d=new Date(`${today()}T12:00:00`);d.setDate(d.getDate()-days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-export async function lifegroupOverview() {
-  const cutoff=activeCutoff(60);
-  const [stats,needs]=await Promise.all([
-    query(`WITH active_people AS (
-        SELECT p.id,p.date_registered FROM people p WHERE p.archived_at IS NULL AND p.status<>'inactive'
-      ), current_members AS (
-        SELECT DISTINCT m.person_id FROM memberships m WHERE m.left_at IS NULL
-      ), group_sizes AS (
-        SELECT g.id,g.capacity,count(m.id) FILTER (WHERE p.archived_at IS NULL)::int AS member_count
-        FROM lifegroups g LEFT JOIN memberships m ON m.lifegroup_id=g.id AND m.left_at IS NULL
-        LEFT JOIN people p ON p.id=m.person_id GROUP BY g.id,g.capacity
-      )
-      SELECT
-        (SELECT count(*)::int FROM networks WHERE is_active) AS networks,
-        (SELECT count(*)::int FROM lifegroups) AS total_groups,
-        (SELECT count(*)::int FROM lifegroups WHERE is_active) AS active_groups,
-        (SELECT count(*)::int FROM lifegroups WHERE is_active AND gender='boys') AS boys_groups,
-        (SELECT count(*)::int FROM lifegroups WHERE is_active AND gender='girls') AS girls_groups,
-        (SELECT count(*)::int FROM group_sizes z JOIN lifegroups g ON g.id=z.id WHERE g.is_active AND (z.capacity IS NULL OR z.member_count<z.capacity)) AS groups_with_slots,
-        (SELECT count(DISTINCT CASE WHEN g.leader_person_id IS NOT NULL THEN 'p'||g.leader_person_id::text WHEN nullif(g.leader_name,'') IS NOT NULL THEN 'n'||g.leader_name END)::int FROM lifegroups g WHERE g.is_active) AS total_leaders,
-        (SELECT count(*)::int FROM active_people p JOIN current_members m ON m.person_id=p.id) AS with_group,
-        (SELECT count(*)::int FROM active_people p WHERE NOT EXISTS(SELECT 1 FROM current_members m WHERE m.person_id=p.id)) AS without_group,
-        (SELECT count(*)::int FROM active_people p WHERE p.date_registered >= $1::date AND NOT EXISTS(SELECT 1 FROM current_members m WHERE m.person_id=p.id)) AS new_needing_connection`,[cutoff]),
-    query(`SELECT p.id,p.person_code,p.first_name,p.last_name,p.status,p.date_registered,
-        stats.sundays_attended,stats.last_attended
-      FROM people p
-      LEFT JOIN LATERAL (
-        SELECT count(*)::int AS sundays_attended,max(s.service_date) AS last_attended
-        FROM records r JOIN services s ON s.id=r.service_id
-        WHERE r.person_id=p.id AND r.status='present'
-      ) stats ON true
-      WHERE p.archived_at IS NULL AND p.status<>'inactive'
-        AND NOT EXISTS(SELECT 1 FROM memberships m WHERE m.person_id=p.id AND m.left_at IS NULL)
-      ORDER BY stats.last_attended DESC NULLS LAST,p.date_registered DESC LIMIT 6`),
-  ]);
-  const row=stats.rows[0]||{};
-  return {lifegroups:Object.fromEntries(['networks','total_groups','active_groups','boys_groups','girls_groups','groups_with_slots','total_leaders','with_group','without_group','new_needing_connection'].map(k=>[k,num(row[k])])),needs:needs.rows.map(mapPerson)};
-}
-
 export async function dashboardRead() {
-  const now=today(),year=num(now.slice(0,4)),month=num(now.slice(5,7)),quarter=Math.floor((month-1)/3)+1;
-  const monthFrom=`${year}-${String(month).padStart(2,'0')}-01`,monthTo=`${year}-${String(month).padStart(2,'0')}-${String(new Date(year,month,0).getDate()).padStart(2,'0')}`;
+  const now=today(),year=num(now.slice(0,4)),month=now.slice(5,7),quarter=Math.floor((num(month)-1)/3)+1;
+  const monthFrom=`${year}-${month}-01`,monthTo=`${year}-${month}-${String(new Date(year, num(month), 0).getDate()).padStart(2,'0')}`;
   const quarterStartMonth=(quarter-1)*3+1,quarterEndMonth=quarter*3;
   const qFrom=`${year}-${String(quarterStartMonth).padStart(2,'0')}-01`,qTo=`${year}-${String(quarterEndMonth).padStart(2,'0')}-${String(new Date(year,quarterEndMonth,0).getDate()).padStart(2,'0')}`;
-  const [peopleStats,services,vips,groupData]=await Promise.all([
+  const [peopleStats,services,vips,checks]=await Promise.all([
     query(`SELECT count(*)::int AS total,
         count(*) FILTER(WHERE status<>'inactive')::int AS active,
         count(*) FILTER(WHERE status='inactive')::int AS inactive,
         count(*) FILTER(WHERE status='first_timer')::int AS first_timers,
+        count(*) FILTER(WHERE status='member')::int AS members,
         count(*) FILTER(WHERE date_registered >= $1::date AND date_registered < ($1::date + interval '1 month'))::int AS registered_this_month
       FROM people`,[monthFrom]),
     serviceSummaries(),
@@ -225,45 +164,19 @@ export async function dashboardRead() {
         FROM vip_registrations v JOIN people p ON p.id=v.person_id ORDER BY v.id DESC LIMIT 6
       ) x),'[]'::jsonb) AS latest_vips
       FROM vip_registrations`),
-    lifegroupOverview(),
+    query(`SELECT count(*)::int AS pending_checkins FROM vip_checkins WHERE status='pending'`),
   ]);
   const all=services,latest=all.at(-1)||null,previous=all.length>1?all.at(-2):null;
-  const aggregate=(rows)=>{const n=rows.length,p=rows.reduce((a,r)=>a+r.present_count,0),rated=rows.filter(r=>r.attendance_rate!==null);return {services:n,total_attendance:p,first_timers:rows.reduce((a,r)=>a+r.first_timer_count,0),returning:rows.reduce((a,r)=>a+r.returning_count,0),absent:rows.reduce((a,r)=>a+r.absent_count,0),average_attendance:n?round1(p/n):0};};
+  const aggregate=(rows)=>{const n=rows.length,p=rows.reduce((a,r)=>a+r.present_count,0);return {services:n,total_attendance:p,first_timers:rows.reduce((a,r)=>a+r.first_timer_count,0),returning:rows.reduce((a,r)=>a+r.returning_count,0),absent:rows.reduce((a,r)=>a+r.absent_count,0),average_attendance:n?round1(p/n):0};};
   const monthRows=all.filter(r=>r.service_date>=monthFrom&&r.service_date<=monthTo),quarterRows=all.filter(r=>r.service_date>=qFrom&&r.service_date<=qTo),yearRows=all.filter(r=>String(r.service_date).startsWith(String(year)));
   const avgRows=yearRows.length?yearRows:all.slice(-8),avg=avgRows.length?aggregate(avgRows).average_attendance:null;
-  const monthly=monthlyBreakdown(yearRows),vipRow=vips.rows[0]||{};
+  const row=peopleStats.rows[0]||{},vipRow=vips.rows[0]||{};
   return {
     today:now,
-    people:{total:num(peopleStats.rows[0]?.total),active:num(peopleStats.rows[0]?.active),inactive:num(peopleStats.rows[0]?.inactive),first_timers:num(peopleStats.rows[0]?.first_timers),registered_this_month:num(peopleStats.rows[0]?.registered_this_month)},
+    people:{total:num(row.total),active:num(row.active),inactive:num(row.inactive),first_timers:num(row.first_timers),members:num(row.members),registered_this_month:num(row.registered_this_month)},
     services_recorded:all.length,latest,previous,change_vs_previous:latest&&previous?latest.present_count-previous.present_count:null,
-    month:{label:monthFrom.slice(0,7),...aggregate(monthRows)},quarter:{label:`Q${quarter} ${year}`,quarter,year,...aggregate(quarterRows)},year:{label:String(year),...aggregate(yearRows)},
-    weekly:all.slice(-12),trend:all.slice(-26),monthly,recent:all.slice(-8).reverse(),average_attendance:avg,
-    demo_loaded:Boolean(vipRow.demo_loaded),pending_registrations:num(vipRow.pending),latest_vips:vipRow.latest_vips||[],
-    lifegroups:groupData.lifegroups,needs_lifegroup:groupData.needs,
+    month:{label:month,...aggregate(monthRows)},quarter:{label:`Q${quarter} ${year}`,quarter,year,...aggregate(quarterRows)},year:{label:String(year),...aggregate(yearRows)},
+    weekly:all.slice(-12),monthly:monthlyBreakdown(yearRows),recent:all.slice(-8).reverse(),average_attendance:avg,
+    demo_loaded:Boolean(vipRow.demo_loaded),pending_registrations:num(vipRow.pending),pending_checkins:num(checks.rows[0]?.pending_checkins),latest_vips:vipRow.latest_vips||[],
   };
-}
-
-export async function serviceById(id) {
-  const rows=await serviceSummaries({},Number(id));const service=rows[0];
-  if(!service)return null;
-  const {rows:roster}=await query(`
-    SELECT p.*,rec.id AS record_id,rec.status AS att_status,rec.classification,rec.recorded_at,
-      CASE WHEN rec.id IS NOT NULL THEN coalesce(rec.recorded_by_name,'Imported staff') ELSE NULL END AS recorded_by,
-      EXISTS(SELECT 1 FROM records prior JOIN services ps ON ps.id=prior.service_id
-        WHERE prior.person_id=p.id AND prior.status='present' AND ps.service_date<s.service_date) AS attended_before,
-      CASE WHEN rec.classification IS NOT NULL THEN rec.classification
-        WHEN p.date_first_attended<s.service_date OR EXISTS(SELECT 1 FROM records prior JOIN services ps ON ps.id=prior.service_id
-          WHERE prior.person_id=p.id AND prior.status='present' AND ps.service_date<s.service_date)
-        THEN 'returning' ELSE 'first_timer' END AS expected_classification
-    FROM services s JOIN people p ON ((p.status<>'inactive' AND p.archived_at IS NULL) OR EXISTS(SELECT 1 FROM records r0 WHERE r0.service_id=s.id AND r0.person_id=p.id))
-    LEFT JOIN records rec ON rec.service_id=s.id AND rec.person_id=p.id
-    WHERE s.id=$1
-    ORDER BY lower(p.last_name),lower(p.first_name),p.id`,[service.id]);
-  service.roster=roster.map(r=>({...r,...(r.extras||{}),attended_before:r.attended_before?1:0}));
-  return service;
-}
-
-export async function serviceForDate(date) {
-  const rows=await serviceSummaries({from:date,to:date});
-  return rows[0]||null;
 }

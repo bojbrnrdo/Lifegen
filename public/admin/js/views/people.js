@@ -1,6 +1,6 @@
-import { api } from '../api.js';
+import { api, downloadBlob } from '../api.js';
 import { can } from '../app.js';
-import { html, raw, icon, avatar, fullName, statusBadge, fmtDate, emptyState, debounce, downloadUrl, withLoading } from '../ui.js';
+import { html, raw, icon, avatar, fullName, statusBadge, fmtDate, emptyState, debounce, withLoading, toast } from '../ui.js';
 
 /**
  * People list: a searchable table with only the essentials.
@@ -13,7 +13,7 @@ export async function renderPeople({ main, query }) {
     <div class="page-header">
       <div><h1>People</h1><p class="sub">Everyone registered for Lifegen</p></div>
       <div class="page-actions">
-        ${can('reports:export') ? html`<button class="btn" id="exportPeople" title="Download as CSV">${icon('download')} Export</button>` : ''}
+        ${can('people:write') ? html`<button class="btn" id="exportPeople" title="Download as CSV">${icon('download')} Export CSV</button>` : ''}
         ${can('people:write') ? html`<a class="btn btn--primary" href="#/people/new">${icon('plus')} Add person</a>` : ''}
       </div>
     </div>
@@ -33,7 +33,18 @@ export async function renderPeople({ main, query }) {
     <div class="card"><div id="list" class="card__body--flush"><div class="loading">Loading…</div></div></div>`;
 
   main.querySelector('#status').value = filters.status;
-  main.querySelector('#exportPeople')?.addEventListener('click', () => downloadUrl('/api/reports/export/people.csv'));
+  main.querySelector('#exportPeople')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try {
+      const rows = await api.people({ ...filters, limit: 2000 });
+      if (!rows.length) { toast('Nothing to export.', 'info'); return; }
+      const cell = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+      const head = ['person_code','first_name','last_name','status','contact_number','email','date_registered','date_first_attended','sundays_attended','last_attended'];
+      const lines = rows.map((p) => [p.person_code, p.first_name, p.last_name, p.status, p.contact_number, p.email, p.date_registered, p.date_first_attended, p.sundays_attended, p.last_attended].map(cell).join(','));
+      downloadBlob(new Blob(['\ufeff' + [head.join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'people.csv');
+      toast(`Exported ${rows.length} ${rows.length === 1 ? 'person' : 'people'}.`);
+    } catch (err) { toast(err.message, 'error'); } finally { btn.disabled = false; }
+  });
 
   const list = main.querySelector('#list');
   let reqId = 0;

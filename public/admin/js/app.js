@@ -10,12 +10,8 @@ import { renderDashboard } from './views/dashboard.js';
 import { renderPeople } from './views/people.js';
 import { renderPersonForm } from './views/personForm.js';
 import { renderPerson } from './views/person.js';
-import { renderAttendance } from './views/attendance.js';
-import { renderHistory, renderServiceDetail } from './views/history.js';
-import { renderReports } from './views/reports.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
-import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
 
@@ -41,14 +37,7 @@ const routes = [
   { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'people', perm: 'people:write' },
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
-  { path: /^\/attendance$/, view: renderAttendance, nav: 'attendance', perm: 'attendance:view' },
   { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
-  { path: /^\/attendance\/history$/, view: renderHistory, nav: 'attendance', perm: 'attendance:view' },
-  { path: /^\/attendance\/history\/(\d+)$/, view: (c, m) => renderServiceDetail(c, m[1]), nav: 'attendance', perm: 'attendance:view' },
-  { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
-  { path: /^\/lifegroups\/(\d+)$/, view: (c, m) => renderLifegroup(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
-  { path: /^\/networks\/(\d+)$/, view: (c, m) => renderNetwork(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
-  { path: /^\/reports$/, view: renderReports, nav: 'reports', perm: 'reports:view' },
   { path: /^\/registrations$/, view: renderRegistrations, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/qr-poster$/, view: renderQrPoster, nav: 'settings', perm: 'registrations:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
@@ -120,7 +109,6 @@ function renderShell() {
       <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
       <span class="topbar__spacer"></span>
       <a class="btn btn--sm portal-home-link" href="/">Website</a>
-      ${can('attendance:write') ? `<a class="btn btn--primary btn--sm" href="#/attendance">${icon('check', 15).value} Attendance</a>` : ''}
     </header>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
@@ -138,10 +126,7 @@ function renderShell() {
         </div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${navLink('#/people', 'people', 'People', 'people')}
-        ${navLink('#/attendance', 'attendance', 'Attendance', 'check')}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
-        ${navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group')}
-        ${navLink('#/reports', 'reports', 'Reports', 'calendar')}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}

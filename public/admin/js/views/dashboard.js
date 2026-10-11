@@ -6,8 +6,8 @@ import { lineChart } from '../charts.js';
 const shortSunday = (d) => { const [, m, day] = d.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m - 1]} ${+day}`; };
 
 /**
- * Compact dashboard: four numbers that matter, one trend chart, recent Sundays.
- * Every figure comes from /api/dashboard (computed from attendance records).
+ * Compact dashboard: VIP registrations, Sunday attendance at a glance, calendar.
+ * Every figure comes from /api/dashboard (people, services, records, vip_registrations).
  */
 export async function renderDashboard({ main }) {
   const d = await api.dashboard();
@@ -22,21 +22,37 @@ export async function renderDashboard({ main }) {
         <p class="sub">${latest ? html`Latest Sunday · ${fmtDate(latest.service_date, { weekday: true })}` : fmtDate(d.today, { weekday: true })}</p>
       </div>
       <div class="page-actions">
-        ${can('attendance:write') ? html`<a class="btn btn--primary" href="#/attendance">${icon('check')} Record attendance</a>` : ''}
+        ${can('registrations:manage') && !state.standalone ? html`<a class="btn btn--primary" href="#/registrations">${icon('qr')} VIP registrations</a>` : ''}
+        <a class="btn" href="#/calendar">${icon('calendar')} Calendar</a>
       </div>
     </div>
 
     ${state.authDisabled && !state.standalone ? html`<div class="alert alert--warn mb-2">${icon('lock', 18)}<span><b>Sign-in is off.</b> Anyone who can open this address is treated as Admin. Turn it on before storing real records (<span class="mono">LIFEGEN_AUTH=on</span>).</span><a class="btn btn--sm" href="#/settings">Settings</a></div>` : ''}
     ${d.pending_registrations && !state.standalone ? html`<div class="alert alert--info mb-2">${icon('inbox', 18)}<span><b>${fmtNum(d.pending_registrations)} VIP registration${d.pending_registrations === 1 ? '' : 's'}</b> waiting for review.</span><a class="btn btn--sm" href="#/registrations">Review</a></div>` : ''}
+    ${d.pending_checkins ? html`<div class="alert alert--info mb-2">${icon('check', 18)}<span><b>${fmtNum(d.pending_checkins)} VIP check-in${d.pending_checkins === 1 ? '' : 's'}</b> waiting to be verified at the service.</span><a class="btn btn--sm" href="#/registrations">Verify</a></div>` : ''}
     ${d.demo_loaded ? html`<div class="alert alert--warn demo-banner mb-2">${icon('warn', 18)}<span><b>Demo data is loaded.</b> People named “Demo Person” and their attendance are sample records, not real church data.</span>${can('settings:manage') ? html`<a class="btn btn--sm" href="#/settings">Review data in Settings</a>` : ''}</div>` : ''}
 
     ${d.latest_vips?.length ? html`<div class="card mb-2"><div class="card__header"><h2>Latest VIP registrations</h2>${can('registrations:manage')?html`<a class="small" href="#/registrations">Review VIPs</a>`:''}</div><div class="card__body"><div class="row" style="gap:14px 24px">${d.latest_vips.map(v=>html`<a href="#/people/${v.person_id}" class="stat-link"><b>${v.name}</b><span class="welcome-source">${v.review_status==='new'?'New VIP':'Reviewed'}</span></a>`)}</div><p class="small muted mt-2">Sent directly from the LIFEGEN website. No manual import.</p></div></div>`:''}
+
+    <div class="card mb-2">
+      <div class="card__header"><h2>People</h2>${can('people:view') ? html`<a class="small" href="#/people">Open People ${icon('chevR', 13)}</a>` : ''}</div>
+      <div class="card__body">
+        <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+          <div class="kpi"><b>${fmtNum(d.people.total)}</b><span>Registered people</span></div>
+          <div class="kpi"><b>${fmtNum(d.people.active)}</b><span>Active</span></div>
+          <div class="kpi"><b>${fmtNum(d.people.members)}</b><span>Members</span></div>
+          <div class="kpi"><b>${fmtNum(d.people.first_timers)}</b><span>First timers</span></div>
+          <div class="kpi"><b>${fmtNum(d.people.registered_this_month)}</b><span>New this month</span></div>
+        </div>
+      </div>
+    </div>
+
     ${noData ? html`<div class="card mb-2">${raw(emptyState({
       icon: 'calendar',
       title: 'No Sunday attendance recorded yet',
       text: can('attendance:write')
-        ? 'Register people, then open Attendance on Sunday and mark them present. Numbers appear here automatically.'
-        : 'Once attendance staff record the first Lifegen Sunday, numbers will appear here.',
+        ? 'When VIP guests check in at a service, verify them under Registrations — attendance numbers appear here automatically.'
+        : 'Once the first service check-ins are verified, numbers will appear here.',
       action: can('people:write') ? '<a class="btn btn--primary" href="#/people/new">Register a person</a>' : '',
     }))}</div>` : html`
     <div class="grid grid--stats mb-2">
@@ -63,32 +79,15 @@ export async function renderDashboard({ main }) {
     </div>
 
     <div class="card mb-2">
-      <div class="card__header"><h2>Attendance trend</h2><span class="hint">Last ${d.trend.length} Sunday${d.trend.length === 1 ? '' : 's'}</span></div>
-      <div class="card__body">${raw(lineChart(d.trend.map((w) => ({ label: shortSunday(w.service_date), value: w.present_count, title: fmtDate(w.service_date) })), { aria: 'Attendance trend', width: 900, height: 230, cls: 'chart--trend' }))}</div>
+      <div class="card__header"><h2>Attendance trend</h2><span class="hint">Last ${d.weekly.length} Sunday${d.weekly.length === 1 ? '' : 's'}</span></div>
+      <div class="card__body">${raw(lineChart(d.weekly.map((w) => ({ label: shortSunday(w.service_date), value: w.present_count, title: fmtDate(w.service_date) })), { aria: 'Attendance trend', width: 900, height: 230, cls: 'chart--trend' }))}</div>
     </div>
 
-    ${d.lifegroups ? html`<div class="card mb-2">
-      <div class="card__header"><h2>Lifegroup overview</h2><a class="small" href="#/lifegroups?tab=needs">Needs Lifegroup ${icon('chevR', 13)}</a></div>
-      <div class="card__body">
-        <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
-          ${d.lifegroups.networks != null ? html`<div class="kpi"><b>${fmtNum(d.lifegroups.networks)}</b><span>Networks</span></div>` : ''}
-          <div class="kpi"><b>${fmtNum(d.lifegroups.active_groups)}</b><span>Lifegroups</span>${d.lifegroups.boys_groups != null ? html`<div class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">${d.lifegroups.boys_groups} boys · ${d.lifegroups.girls_groups} girls</div>` : ''}</div>
-          <div class="kpi"><b>${fmtNum(d.lifegroups.total_leaders)}</b><span>Leaders</span></div>
-          <div class="kpi"><b>${fmtNum(d.lifegroups.with_group)}</b><span>With group</span></div>
-          <div class="kpi ${d.lifegroups.without_group ? 'kpi--amber' : ''}"><b>${fmtNum(d.lifegroups.without_group)}</b><span>Without group</span></div>
-          <div class="kpi"><b>${fmtNum(d.lifegroups.new_needing_connection)}</b><span>New, needs connection</span></div>
-          <div class="kpi"><b>${fmtNum(d.lifegroups.groups_with_slots)}</b><span>Groups with slots</span></div>
-        </div>
-        ${d.needs_lifegroup && d.needs_lifegroup.length ? html`<div class="mt-2 small muted">Needs Lifegroup — most recent attendees first:</div>
-          <div class="row mt-1" style="gap:6px 14px">${d.needs_lifegroup.map((p) => html`<a href="#/people/${p.id}" class="small">${p.first_name} ${p.last_name}</a>`)}${d.lifegroups.without_group > d.needs_lifegroup.length ? html`<a class="small muted" href="#/lifegroups?tab=needs">+${d.lifegroups.without_group - d.needs_lifegroup.length} more</a>` : ''}</div>` : ''}
-      </div>
-    </div>` : ''}
-
     <div class="card">
-      <div class="card__header"><h2>Recent Sundays</h2><a class="small" href="#/attendance/history">All history ${icon('chevR', 13)}</a></div>
+      <div class="card__header"><h2>Recent Sundays</h2></div>
       <div class="table-wrap"><table class="table table--compact">
         <thead><tr><th>Sunday</th><th class="num">Present</th><th class="num">First timers</th><th class="num">Returning</th></tr></thead>
-        <tbody>${d.recent.map((s) => html`<tr class="clickable" data-id="${s.id}">
+        <tbody>${d.recent.map((s) => html`<tr>
           <td>${fmtDate(s.service_date, { short: true })}</td>
           <td class="num"><b>${fmtNum(s.present_count)}</b></td>
           <td class="num">${fmtNum(s.first_timer_count)}</td>
@@ -97,6 +96,4 @@ export async function renderDashboard({ main }) {
       </table></div>
     </div>`}
   `;
-
-  main.querySelectorAll('tr.clickable').forEach((tr) => { tr.onclick = () => { location.hash = `#/attendance/history/${tr.dataset.id}`; }; });
 }

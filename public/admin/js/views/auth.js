@@ -11,14 +11,14 @@ function shell(title, subtitle, body, foot = '') {
           <div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>
         </div>
         <div class="card"><div class="card__body">${body}</div></div>
-        <p class="auth__foot">LIFEGEN Admin · LifegroupTracker${foot} · <a href="#/privacy">Privacy &amp; Terms</a></p>
+        <p class="auth__foot">LIFEGEN Admin${foot} · <a href="#/privacy">Privacy &amp; Terms</a></p>
       </div>
     </div>`;
 }
 
 export function renderLogin(root, onSuccess) {
   const recoveryAvailable=root.dataset.recovery==='true';
-  root.innerHTML = shell('LIFEGEN Admin', 'People, attendance, Lifegroups and reports', `
+  root.innerHTML = shell('LIFEGEN Admin', 'People, VIP registrations, calendar and attendance', `
     <form id="loginForm" class="stack" novalidate>
       ${root.dataset.demo === "true" ? '<div class="alert alert--info small">Local demo only: <b>demo@lifegen.local</b> / <b>LifegenDemo2026!</b></div>' : ""}
       <div id="loginError" class="alert alert--error" hidden></div>

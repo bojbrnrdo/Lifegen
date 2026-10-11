@@ -6,9 +6,9 @@ const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
- admin:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage','calendar:manage','users:manage','settings:manage'],
- staff:['dashboard:view','reports:view','reports:export','people:view','people:view_private','people:write','attendance:view','attendance:write','lifegroups:view','lifegroups:manage','registrations:manage','calendar:manage'],
- viewer:['dashboard:view','reports:view','people:view','attendance:view','lifegroups:view']
+ admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','registrations:manage','calendar:manage','users:manage','settings:manage'],
+ staff:['dashboard:view','people:view','people:view_private','people:write','attendance:view','attendance:write','registrations:manage','calendar:manage'],
+ viewer:['dashboard:view','people:view','attendance:view']
 };
 export const publicUser=u=>({id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:PERMISSIONS[u.role_id]||[],is_active:u.is_active});
 export function safeEqual(a,b) {const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}
@@ -128,7 +128,7 @@ export async function userAccounts(actor,method,args) {
 export function redactForViewer(value) {
  if(Array.isArray(value))return value.map(redactForViewer);
  if(!value||typeof value!=='object')return value;
- const personKeys=new Set(['id','person_id','person_code','first_name','last_name','full_name','status','date_registered','date_first_attended','sundays_attended','last_attended','archived_at','is_demo','att_status','classification','expected_classification','record_id','recorded_at','recorded_by','recorded_by_name','attended_before','role','joined_at','left_at','membership_id','services_since','attendance_rate','history','lifegroup','lifegroup_history','leadership']);
+ const personKeys=new Set(['id','person_id','person_code','first_name','last_name','full_name','status','date_registered','date_first_attended','sundays_attended','last_attended','archived_at','is_demo','att_status','classification','expected_classification','record_id','recorded_at','recorded_by','recorded_by_name','attended_before','services_since','attendance_rate','history']);
  const isPerson='first_name' in value && 'last_name' in value;
  const sensitive=new Set(['contact_number','contact','email','address','notes','birthdate','age','ministry','school','course_year','occupation','inviter','privacy_consent_at','preferred_area','preferred_day','preferred_time','preferred_category','leader_contact','photo','sex','extras','password_hash','legacy_token_hash','recovery_hash','csrf_token']);
  return Object.fromEntries(Object.entries(value).filter(([k])=>!sensitive.has(k)&&(!isPerson||personKeys.has(k))).map(([k,v])=>[k,redactForViewer(v)]));

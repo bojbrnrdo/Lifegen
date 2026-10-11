@@ -6,8 +6,8 @@ types.setTypeParser(20, v => { const n=Number(v); if(!Number.isSafeInteger(n)) t
 types.setTypeParser(1082, v => v);
 types.setTypeParser(1184, v => new Date(v).toISOString());
 export const WRITE_LOCK = 72114026;
-const TABLES=['people','services','networks','lifegroups','memberships','records','audit'];
-const DELETE_ORDER=['records','memberships','audit','lifegroups','networks','services','people'];
+const TABLES=['people','services','records','audit'];
+const DELETE_ORDER=['records','audit','services','people'];
 let pool;
 const columnCache=new Map();
 export function connectionOptions(connectionString) {
@@ -28,7 +28,9 @@ export async function transaction(fn,{write=true,dryRun=false}={}) {
  const client=await getPool().connect();
  try {
   await client.query(write?'BEGIN':'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-  if(write) await client.query('SELECT pg_advisory_xact_lock($1)',[WRITE_LOCK]);
+  // Simple-protocol literal: the advisory lock returns no rows, and some embedded
+  // PostgreSQL gateways desync their result stream on parameterised void queries.
+  if(write) await client.query(`SELECT pg_advisory_xact_lock(${WRITE_LOCK})`);
   const result=await fn(client);
   if(write) await client.query('SET CONSTRAINTS ALL IMMEDIATE');
   await client.query(dryRun?'ROLLBACK':'COMMIT');
@@ -61,7 +63,7 @@ export async function loadState(client,{includeAudit=false,includeVipRegistratio
  data.vip_registrations=includeVipRegistrations?(await client.query('SELECT id,person_id,review_status,created_at FROM vip_registrations ORDER BY id')).rows:[];
  return data;
 }
-const defaults={people:{last_name:'',status:'first_timer',registration_source:'staff'},services:{service_type:'lifegen'},records:{source:'staff'},memberships:{role:'member'}};
+const defaults={people:{last_name:'',status:'first_timer',registration_source:'staff'},services:{service_type:'lifegen'},records:{source:'staff'}};
 function packRow(row,cols,table) {
  const out={}; const known=new Set(cols); const extras={...(row.extras||{})};
  for(const [k,v] of Object.entries(row)) if(!known.has(k)) extras[k]=v;
@@ -123,12 +125,7 @@ export async function withState(fn,{actor=null,write=false,dryRun=false,tables=T
  },{write,dryRun});
 }
 const READ_TABLES={
- person:['people','services','records','networks','lifegroups','memberships'],
- lifegroups:['people','networks','lifegroups','memberships'],lifegroupOptions:['people','networks','lifegroups','memberships'],
- lifegroup:['people','services','records','networks','lifegroups','memberships'],lifegroupNeeds:['people','services','records','lifegroups','memberships'],
- lifegroupRecommend:['people','networks','lifegroups','memberships'],networks:['people','networks','lifegroups','memberships'],
- network:['people','networks','lifegroups','memberships'],reportLifegroups:['people','networks','lifegroups','memberships'],
- get:['people','networks','lifegroups','memberships'],
+ person:['people','services','records'],
 };
 export const runDomain=(method,args=[],actor=null,write=false)=>withState(async({data,client})=>{
  const result=await domain[method](...args);
@@ -146,7 +143,7 @@ export function stateId(data,table) {data.seq[table]=(data.seq[table]||0)+1;retu
 export async function allocateId(client,entity) {const {rows}=await client.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id',[entity]);if(!rows[0]) throw new Error('Unknown entity counter');return rows[0].last_id;}
 export async function databaseBackup(client) {
  const state=await loadState(client,{includeAudit:true,includeVipRegistrations:true});
- for(const t of ['vip_registrations','vip_checkins','community_posts','monthly_prizes','prayer_reactions','audit_log','import_mappings']) state[t]=(await client.query(`SELECT * FROM "${t}"`)).rows;
+ for(const t of ['vip_registrations','vip_checkins','community_posts','monthly_prizes','prayer_reactions','audit_log']) state[t]=(await client.query(`SELECT * FROM "${t}"`)).rows;
  return {app:'LifegenTracker',source:'neon',database_instance:state.settings.__database_instance,exported_at:new Date().toISOString(),...state};
 }
 export const closePool=async()=>{if(pool){await pool.end();pool=null;}};

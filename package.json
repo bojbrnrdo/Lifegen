@@ -12,7 +12,6 @@
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/check.mjs",
     "db:migrate": "node scripts/migrate.mjs",
-    "db:import": "node scripts/import.mjs",
     "supabase:bundle": "node scripts/bundle-supabase.mjs",
     "db:backup": "node scripts/backup.mjs",
     "demo:seed": "node scripts/seed-demo.mjs",

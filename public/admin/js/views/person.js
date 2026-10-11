@@ -1,7 +1,6 @@
 import { api } from '../api.js';
 import { can } from '../app.js';
 import { html, raw, icon, avatar, statusBadge, classBadge, fmtDate, fmtDateTime, fmtNum, fmtPct, age, toast, confirmDialog, openModal, closeModal, withLoading, STATUS_LABELS, DAY_LABELS, DAY_SHORT, TIME_LABELS, fmtSchedule } from '../ui.js';
-import { findLifegroup, genderBadge } from '../views/lifegroups.js';
 
 /** Person profile: who they are, how often they attend, and their Sunday history. */
 export async function renderPerson({ main }, id) {
@@ -39,7 +38,6 @@ export async function renderPerson({ main }, id) {
       <div class="card stat"><span class="stat__label">Last attended</span><span class="stat__value" style="font-size:1.15rem">${p.last_attended ? fmtDate(p.last_attended) : '—'}</span></div>
     </div>
 
-    ${lifegroupCard(p)}
 
     <div class="grid grid--2">
       <div class="card">
@@ -66,7 +64,7 @@ export async function renderPerson({ main }, id) {
         <div class="card__body card__body--flush">
           ${p.history.length ? html`<ul class="timeline" style="padding:4px 20px">
             ${p.history.map((h) => html`<li>
-              <a class="date" href="#/attendance/history/${h.service_id}">${fmtDate(h.service_date, { short: true })}</a>
+              <span class="date">${fmtDate(h.service_date, { short: true })}</span>
               ${h.status === 'present' ? raw(classBadge(h.classification)) : raw('<span class="badge badge--absent">Absent</span>')}
               <span class="when">${h.recorded_by || ''}<br>${fmtDateTime(h.recorded_at)}</span>
             </li>`)}
@@ -84,13 +82,6 @@ export async function renderPerson({ main }, id) {
         ${can('people:delete') ? html`<button class="btn btn--ghost small" id="deleteBtn" style="color:var(--muted)">Delete permanently</button>` : ''}
       </span>
     </div>` : ''}`;
-
-  main.querySelector('#findGroup')?.addEventListener('click', () => findLifegroup(p, () => renderPerson({ main }, id)));
-  main.querySelector('#leaveGroup')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({ title: `Remove ${p.first_name} from ${p.lifegroup.name}?`, message: 'They will be marked as left today. The membership stays in their history.', confirmText: 'Remove', danger: true });
-    if (!ok) return;
-    try { await api.leaveLifegroup(p.lifegroup.lifegroup_id, p.id); toast('Removed from Lifegroup.', 'info'); renderPerson({ main }, id); } catch (err) { toast(err.message, 'error'); }
-  });
 
   main.querySelector('#archiveBtn')?.addEventListener('click', async (e) => {
     const ok = await confirmDialog({
@@ -147,51 +138,4 @@ export async function renderPerson({ main }, id) {
     try { await api.deletePerson(p.id); toast('Person deleted.', 'info'); location.hash = '#/people'; }
     catch (err) { toast(err.message, 'error'); }
   });
-}
-
-/** Lifegroup card: current group + leader/area/schedule, or "No Lifegroup yet" + Find a Lifegroup; always shows history. */
-function lifegroupCard(p) {
-  const g = p.lifegroup;
-  const manage = can('lifegroups:manage') && !p.archived_at;
-  const prefs = [p.preferred_area, DAY_LABELS[p.preferred_day], TIME_LABELS[p.preferred_time], p.preferred_category].filter(Boolean).join(' · ');
-  const hist = p.lifegroup_history || [];
-  return html`<div class="card lg-card mb-2">
-    <div class="card__header"><h2>Lifegroup</h2>
-      <span class="row">
-        ${manage && g ? html`<button class="btn btn--ghost btn--sm" id="leaveGroup">Remove</button>` : ''}
-        ${manage ? html`<button class="btn btn--sm ${g ? '' : 'btn--primary'}" id="findGroup">${icon('group', 14)} ${g ? 'Change group' : 'Find a Lifegroup'}</button>` : ''}
-      </span>
-    </div>
-    <div class="card__body">
-      ${g ? html`<dl class="dl">
-          <div><dt>Lifegroup</dt><dd><a href="#/lifegroups/${g.lifegroup_id}">${g.name}</a> ${genderBadge(g.gender)}${g.role !== 'member' ? html` <span class="badge badge--leader">${g.role === 'leader' ? 'Leader' : 'Assistant'}</span>` : ''}${g.is_active ? '' : raw(' <span class="badge badge--nodot">Inactive group</span>')}</dd></div>
-          <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a></dd>` : g.leader_name ? html`<dd>${g.leader_name}</dd>` : raw('<dd class="none">—</dd>')}</div>
-          <div><dt>Network</dt>${g.network_id ? html`<dd><a href="#/networks/${g.network_id}">${g.network_name}</a>${g.network_leader_name ? html` <span class="small muted">· led by ${g.network_leader_name}</span>` : ''}</dd>` : raw('<dd class="none">—</dd>')}</div>
-          <div><dt>Area</dt>${g.area ? html`<dd>${g.area}</dd>` : raw('<dd class="none">—</dd>')}</div>
-          <div><dt>Schedule</dt>${fmtSchedule(g) ? html`<dd>${fmtSchedule(g)}</dd>` : raw('<dd class="none">—</dd>')}</div>
-          <div><dt>Member since</dt><dd>${fmtDate(g.joined_at)}</dd></div>
-          <div><dt>Status</dt><dd class="current">Active</dd></div>
-        </dl>`
-      : html`<div class="row row--between" style="flex-wrap:wrap">
-          <div><div><b>No Lifegroup yet</b></div><div class="small muted">${p.archived_at ? 'Archived people cannot be assigned.' : prefs ? `Prefers: ${prefs}` : 'Ask their preferred area, day and time, then find a matching group.'}</div></div>
-        </div>`}
-      ${leadershipBlock(p)}
-      ${hist.length > (g ? 1 : 0) || (hist.length && !g) ? html`<details class="mt-2 small"><summary class="muted">History (${hist.length})</summary>
-        <ul class="lg-history mt-1">${hist.map((h) => html`<li><span class="when">${fmtDate(h.joined_at, { short: true })} → ${h.left_at ? fmtDate(h.left_at, { short: true }) : raw('<span class="current">present</span>')}</span><span><a href="#/lifegroups/${h.lifegroup_id}">${h.name}</a>${h.leader_name ? html` <span class="muted">· ${h.leader_name}</span>` : ''}${h.area ? html` <span class="muted">· ${h.area}</span>` : ''}</span></li>`)}</ul></details>` : ''}
-    </div>
-  </div>`;
-}
-
-/** "Leads" / "Reports to" chain: person → Lifegroup leader → Network leader → parent Network leader. */
-function leadershipBlock(p) {
-  const l = p.leadership;
-  if (!l || (!l.leads_groups.length && !l.leads_networks.length && !l.reports_to.length)) return '';
-  const leads = [
-    ...l.leads_networks.map((n) => html`<a href="#/networks/${n.id}">${n.name}</a> <span class="muted">(Network)</span>`),
-    ...l.leads_groups.map((g) => html`<a href="#/lifegroups/${g.id}">${g.name}</a>${g.network_name ? html` <span class="muted">· ${g.network_name}</span>` : ''}`),
-  ];
-  return html`<div class="leadership mt-2">
-    ${leads.length ? html`<div class="row small" style="gap:6px;flex-wrap:wrap"><span class="muted" style="min-width:80px">Leads</span><span>${leads.map((x, i) => html`${i ? raw('<span class="muted"> · </span>') : ''}${x}`)}</span></div>` : ''}
-    ${l.reports_to.length ? html`<div class="row small mt-1" style="gap:6px;flex-wrap:wrap;align-items:flex-start"><span class="muted" style="min-width:80px">Reports to</span><span class="chain">${l.reports_to.map((r, i) => html`${i ? raw('<span class="muted"> → </span>') : ''}${r.person_id ? html`<a href="#/people/${r.person_id}">${r.name}</a>` : r.name} <span class="muted">(${r.level} · ${r.via})</span>`)}</span></div>` : ''}
-  </div>`;
 }

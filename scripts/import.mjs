@@ -1,4 +1,0 @@
-import 'dotenv/config';import fs from 'node:fs/promises';import {importData} from '../src/migration.js';import {closePool} from '../src/db.js';
-const args=process.argv.slice(2),value=k=>args[args.indexOf(k)+1];
-try{if(!args.includes('--file'))throw new Error('Usage: npm run db:import -- --file private-data/export.json [--source-key tracker-original] [--apply]. Default is dry-run.');
-const data=JSON.parse(await fs.readFile(value('--file'),'utf8'));const result=await importData(data,{sourceKey:args.includes('--source-key')?value('--source-key'):undefined,dryRun:!args.includes('--apply')});console.log(JSON.stringify(result,null,2));console.log(args.includes('--apply')?'Import committed. Original source data was not changed.':'Dry-run rolled back. Add --apply only after reviewing the result.');}catch(e){console.error('Import failed; transaction rolled back:',e.message);process.exitCode=1;}finally{await closePool();}
