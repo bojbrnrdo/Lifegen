@@ -17,7 +17,7 @@ import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.19';
+const ADMIN_ASSET_VERSION='2.2.20';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -139,6 +139,17 @@ async function customMethod(req,name,args) {
    r.best_streak=Math.min(best,4);
    r.completed=best>=4;
    r.month_start=monthStart;
+  }
+  // Graduate completed VIPs to Regular attendee (they leave the prize pool).
+  const graduate=rows.filter(r=>r.completed&&(r.person_status==='first_timer'||r.person_status==='new_believer'));
+  if(graduate.length){
+   await transaction(async client=>{
+    for(const r of graduate){
+     const u=await client.query("UPDATE people SET status='regular',updated_at=now() WHERE id=$1 AND status IN ('first_timer','new_believer')",[r.person_id]);
+     if(u.rowCount)await logAction(client,actor,'people',r.person_id,'vip_completed_4_week_streak',{month:r.month_start});
+    }
+   });
+   for(const r of graduate)r.person_status='regular';
   }
   return {items:rows};
  }

@@ -3,17 +3,18 @@ import { state, can } from '../app.js';
 import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce } from '../ui.js';
 /** Prize progress: 4 consecutive Sundays (weeks) earns the prize. The counter is a
  *  streak — it never shows above 4/4, missing a Sunday resets it, and once a VIP
- *  reaches 4 in a row the month stays marked complete even if they miss later weeks. */
+ *  completes 4/4 they graduate to Regular attendee and leave the prize pool. */
 function prizeState(r){
  const streak=Math.min(Number(r.streak)||0,4);
  const best=Math.min(Number(r.best_streak)||0,4);
- if(r.completed||best>=4)return {n:4,state:'complete'};
+ const graduated=r.completed||best>=4||['regular','member','leader','volunteer'].includes(r.person_status||'first_timer');
+ if(graduated)return {n:4,state:'graduate'};
  if(streak>=1)return {n:streak,state:'building'};
  return {n:0,state:'idle'};
 }
 function attendeeCell(r){
  const p=prizeState(r);
- if(p.state==='complete')return html`<span class="badge badge--present">4/4</span><div class="small muted">4 weeks in a row · prize earned</div>`;
+ if(p.state==='graduate')return html`<span class="badge badge--present">Regular attendee</span><div class="small muted">${r.completed||Number(r.best_streak)>=4?'Completed 4/4 · no longer eligible for the prize':'No longer eligible for the prize'}</div>`;
  if(p.state==='building')return html`<span class="badge badge--regular">${p.n}/4</span><div class="small muted">${p.n===1?'1st week':p.n+' weeks'} in a row · ${4-p.n} more for the prize</div>`;
  return html`<span class="badge badge--na">0/4</span><div class="small muted">No streak yet — attend this Sunday to start</div>`;
 }
@@ -24,7 +25,7 @@ export async function refreshPendingBadge(){
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
  main.innerHTML=html`<div class="page-header"><div><h1>VIP registrations</h1><p class="sub">From the LIFEGEN website, directly into the shared database.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="exportCsv">${icon('download')} Export CSV</button><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
- <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. <i>This month</i> shows each VIP's streak of consecutive Sundays — 4 weeks in a row earns the prize. No specific Sunday is required; missing a week restarts the streak at 0/4, and once a VIP completes 4/4 they stay marked complete for the month.</div>
+ <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. <i>This month</i> shows each VIP's streak of consecutive Sundays — 4 weeks in a row earns the prize. No specific Sunday is required; missing a week restarts the streak at 0/4. Completing 4/4 promotes the VIP to <b>Regular attendee</b>, and they are no longer eligible for the prize.</div>
  <div class="card mb-2"><div class="card__header"><h2>Sunday check-ins awaiting validation</h2></div><div class="card__body" id="pendingChecks">Loading…</div></div>
  <div class="toolbar"><div class="filter-tabs" id="vipFilters"><button data-f="new" class="${filter==='new'?'active':''}">New</button><button data-f="reviewed" class="${filter==='reviewed'?'active':''}">Reviewed</button><button data-f="all" class="${filter==='all'?'active':''}">All</button></div><div class="gsearch grow">${icon('search')}<input id="vipSearch" type="search" value="${search}" placeholder="Search VIP, inviter or contact" aria-label="Search registrations"/></div></div><div class="card" id="vipList"></div>`;
  async function load(){
@@ -39,8 +40,8 @@ export async function renderRegistrations({main,query}){
   const {items}=await api.registrations({status:'all',q:''});
   if(!items.length){toast('No registrations to export.','info');return;}
   const cell=v=>{const t=v==null?'':String(v);return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
-  const head=['person_code','full_name','age','school','invited_by','contact','review_status','registered_at','reviewed_at','person_status','streak_this_month','completed_4_in_a_row','sundays_attended_all_time'];
-  const rows=items.map(r=>[r.person_code,r.full_name,r.age,r.school,r.inviter,r.contact,r.review_status,r.created_at,r.reviewed_at,r.person_status,r.streak,r.completed?'yes':'no',r.sundays_attended].map(cell).join(','));
+  const head=['person_code','full_name','age','school','invited_by','contact','review_status','registered_at','reviewed_at','person_status','streak_this_month','prize_status','sundays_attended_all_time'];
+  const rows=items.map(r=>{const p=prizeState(r);return [r.person_code,r.full_name,r.age,r.school,r.inviter,r.contact,r.review_status,r.created_at,r.reviewed_at,r.person_status,r.streak,p.state==='graduate'?'regular_attendee':p.state==='building'?'building_streak':'no_streak',r.sundays_attended].map(cell).join(',');});
   downloadBlob(new Blob(['\ufeff'+[head.join(','),...rows].join('\r\n')],{type:'text/csv;charset=utf-8'}),'vip-registrations.csv');
   toast(`Exported ${items.length} VIP registration${items.length===1?'':'s'}.`);
  });

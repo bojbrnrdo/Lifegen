@@ -56,6 +56,26 @@ export function promoteVipMemberIfEligible(personId) {
   return true;
 }
 
+/** Graduate a VIP to Regular attendee once they complete 4 consecutive Sundays
+ *  within the current month. Regular attendees are out of the VIP prize pool;
+ *  the later Member promotion (5 distinct Sundays) still applies on top. */
+export function promoteVipRegularIfCompleted(personId) {
+  const d = load();
+  const person = findPerson(personId);
+  if (!person || !['first_timer', 'new_believer'].includes(person.status)) return false;
+  if (!(d.vip_registrations || []).some((registration) => Number(registration.person_id) === person.id)) return false;
+  const t = today(); const monthStart = t.slice(0, 8) + '01';
+  const attended = new Set(presentRecordsOf(person.id).map((record) => record.service.service_date).filter((dt) => dt >= monthStart && dt <= t));
+  const sundays = d.services.map((x) => x.service_date).filter((dt) => dt >= monthStart && dt <= t).sort();
+  let best = 0, run = 0;
+  for (const dt of sundays) { if (attended.has(dt)) { run++; if (run > best) best = run; } else run = 0; }
+  if (best < 4) return false;
+  person.status = 'regular';
+  person.updated_at = nowSql();
+  save();
+  return true;
+}
+
 function nextPersonCode(dateRegistered) {
   const year = String(dateRegistered).slice(0, 4);
   const max = load().people.filter((p) => (p.person_code || '').startsWith(`LG-${year}-`)).reduce((m, p) => Math.max(m, Number(p.person_code.slice(8)) || 0), 0);
@@ -317,13 +337,13 @@ export const domain = {
     const old = r ? { ...r } : null;
     if (status === 'present') classification = classification || old?.classification || autoClassify(p, s.service_date); else classification = null;
     if (r && r.status === status && (r.classification || null) === (classification || null)) {
-      if (status === 'present') promoteVipMemberIfEligible(p.id);
+      if (status === 'present') { promoteVipRegularIfCompleted(p.id); promoteVipMemberIfEligible(p.id); }
       return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: true };
     }
     if (r) Object.assign(r, { status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', updated_at: nowSql() });
     else { r = { id: nextId('records'), service_id: s.id, person_id: p.id, status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', recorded_at: nowSql(), updated_at: nowSql() }; d.records.push(r); }
     audit({ service_id: s.id, person_id: p.id, action: old ? 'update' : 'mark', old_status: old?.status || null, new_status: status, old_classification: old?.classification || null, new_classification: classification });
-    if (status === 'present') { if (!p.date_first_attended || p.date_first_attended > s.service_date) p.date_first_attended = s.service_date; promoteVipMemberIfEligible(p.id); }
+    if (status === 'present') { if (!p.date_first_attended || p.date_first_attended > s.service_date) p.date_first_attended = s.service_date; promoteVipRegularIfCompleted(p.id); promoteVipMemberIfEligible(p.id); }
     else if (old?.status === 'present') rollbackFirstAttended(p, s.service_date);
     save();
     return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: false };
