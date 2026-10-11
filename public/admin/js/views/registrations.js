@@ -2,22 +2,23 @@ import { api, downloadBlob } from '../api.js';
 import { state, can } from '../app.js';
 import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce } from '../ui.js';
 /** Monthly progress: how many Sundays they attended this month, and prize standing.
- *  Missing the most recent recorded Sunday marks them ineligible; attending again
- *  (next week) makes them eligible again. Completing 4 Sundays completes the month. */
+ *  Complete 4 Sundays in the month to earn that month's prize. Missing any Sunday
+ *  makes the VIP ineligible for this month's prize; the count resets and prize
+ *  eligibility starts fresh next month when they attend. */
 function prizeState(r){
  const n=Number(r.month_attended)||0;
- if(n>=4)return {n,label:'4 timer',state:'complete'};
- if(n>=1){
-  const missed=r.latest_check_service&&(!r.month_last_attended||String(r.month_last_attended).slice(0,10)<String(r.latest_check_service).slice(0,10));
-  return {n,label:n===1?'1st timer':`${n} timer`,state:missed?'ineligible':'eligible'};
- }
- return {n,label:null,state:'none'};
+ if(n===0)return {n,label:null,state:'none'};
+ const attendedBefore=Number(r.month_attended_before)||0;
+ const elapsed=Number(r.month_elapsed_since_first)||0;
+ const missed=attendedBefore<elapsed;
+ if(n>=4&&!missed)return {n,label:'4 timer',state:'complete'};
+ return {n,label:n===1?'1st timer':`${Math.min(n,4)} timer`,state:missed?'ineligible':'eligible'};
 }
 function attendeeCell(r){
  const p=prizeState(r);
  if(p.state==='complete')return html`<span class="badge badge--present">${p.label}</span><div class="small muted">4 weeks complete · prize earned</div>`;
  if(p.state==='eligible')return html`<span class="badge badge--regular">${p.label}</span><div class="small muted">On track · prize eligible</div>`;
- if(p.state==='ineligible')return html`<span class="badge badge--absent">${p.label}</span><div class="small muted">Missed last Sunday · prize ineligible</div>`;
+ if(p.state==='ineligible')return html`<span class="badge badge--absent">${p.label}</span><div class="small muted">Missed a Sunday · ineligible for this month's prize</div>`;
  return html`<span class="muted">No attendance this month</span>`;
 }
 export async function refreshPendingBadge(){
@@ -27,7 +28,7 @@ export async function refreshPendingBadge(){
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
  main.innerHTML=html`<div class="page-header"><div><h1>VIP registrations</h1><p class="sub">From the LIFEGEN website, directly into the shared database.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="exportCsv">${icon('download')} Export CSV</button><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
- <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. <i>This month</i> counts Sundays attended in the current month — complete 4 weeks to earn the monthly prize. Missing an elapsed Sunday marks a VIP ineligible until they attend again.</div>
+ <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. <i>This month</i> counts Sundays attended in the current month — complete 4 Sundays in one month to earn that month's prize. Missing a Sunday makes a VIP ineligible for this month's prize; the count resets and eligibility starts fresh next month when they attend.</div>
  <div class="card mb-2"><div class="card__header"><h2>Sunday check-ins awaiting validation</h2></div><div class="card__body" id="pendingChecks">Loading…</div></div>
  <div class="toolbar"><div class="filter-tabs" id="vipFilters"><button data-f="new" class="${filter==='new'?'active':''}">New</button><button data-f="reviewed" class="${filter==='reviewed'?'active':''}">Reviewed</button><button data-f="all" class="${filter==='all'?'active':''}">All</button></div><div class="gsearch grow">${icon('search')}<input id="vipSearch" type="search" value="${search}" placeholder="Search VIP, inviter or contact" aria-label="Search registrations"/></div></div><div class="card" id="vipList"></div>`;
  async function load(){
