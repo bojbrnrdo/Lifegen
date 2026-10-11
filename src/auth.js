@@ -23,8 +23,8 @@ export async function passwordMatches(password,encoded) {
  const value=await scrypt(password,salt,32,{N:32768,r:8,p:1,maxmem:64*1024*1024});
  return safeEqual(value.toString('hex'),expected);
 }
-export const previewSessionTokensEnabled=()=>process.env.HOSTED_PREVIEW==='true'&&process.env.NODE_ENV!=='production'&&!process.env.VERCEL;
-export const cookieOptions=req=>{const preview=(process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true')&&String(req.get('x-forwarded-host')||req.get('host')||'').endsWith('.e2b.app');return {httpOnly:true,secure:preview||process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL)||req.secure,path:'/',sameSite:preview?'none':'lax',...(preview?{partitioned:true}:{})};};
+export const previewSessionTokensEnabled=()=>(process.env.HOSTED_PREVIEW==='true'||process.env.LOCAL_DEMO==='true')&&process.env.NODE_ENV!=='production'&&!process.env.VERCEL;
+export const cookieOptions=req=>{const host=String(req.get('x-forwarded-host')||req.get('host')||'');const preview=process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||host.endsWith('.e2b.app');return {httpOnly:true,secure:preview||process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL)||req.secure,path:'/',sameSite:preview?'none':'lax',...(preview?{partitioned:true}:{})};};
 export const setStaffCookie=(req,res,token)=>{if(!previewSessionTokensEnabled())res.cookie('lg_staff',token,{...cookieOptions(req),maxAge:12*60*60*1000});};
 export const setVipCookie=(req,res,token)=>res.cookie('lg_vip',token,{...cookieOptions(req),maxAge:90*24*60*60*1000});
 export const clearStaffCookie=(req,res)=>res.clearCookie('lg_staff',cookieOptions(req));
