@@ -1,13 +1,24 @@
 import { api, downloadBlob } from '../api.js';
 import { state, can } from '../app.js';
 import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce } from '../ui.js';
-/** Attendee column reflects the linked person's status and Sunday attendance count. */
+/** Monthly progress: how many Sundays they attended this month, and prize standing.
+ *  Missing the most recent recorded Sunday marks them ineligible; attending again
+ *  (next week) makes them eligible again. Completing 4 Sundays completes the month. */
+function prizeState(r){
+ const n=Number(r.month_attended)||0;
+ if(n>=4)return {n,label:'4 timer',state:'complete'};
+ if(n>=1){
+  const missed=r.latest_check_service&&(!r.month_last_attended||String(r.month_last_attended).slice(0,10)<String(r.latest_check_service).slice(0,10));
+  return {n,label:n===1?'1st timer':`${n} timer`,state:missed?'ineligible':'eligible'};
+ }
+ return {n,label:null,state:'none'};
+}
 function attendeeCell(r){
- const n=Number(r.sundays_attended)||0;
- if(r.person_status==='member')return html`<span class="badge badge--regular">Member</span><div class="small muted">${n} Sundays since ${fmtDate(r.first_attended,{short:true})}</div>`;
- if(r.long_time_attendee)return html`<span class="badge badge--regular">5+ Sundays</span><div class="small muted">${n} Sundays since ${fmtDate(r.first_attended,{short:true})}</div>`;
- if(n)return html`<span class="small">${n} ${n===1?'Sunday':'Sundays'}</span>`;
- return html`<span class="muted">—</span>`;
+ const p=prizeState(r);
+ if(p.state==='complete')return html`<span class="badge badge--present">${p.label}</span><div class="small muted">4 weeks complete · prize earned</div>`;
+ if(p.state==='eligible')return html`<span class="badge badge--regular">${p.label}</span><div class="small muted">On track · prize eligible</div>`;
+ if(p.state==='ineligible')return html`<span class="badge badge--absent">${p.label}</span><div class="small muted">Missed last Sunday · prize ineligible</div>`;
+ return html`<span class="muted">No attendance this month</span>`;
 }
 export async function refreshPendingBadge(){
  if(!state.user||!can('registrations:manage'))return;
@@ -16,7 +27,7 @@ export async function refreshPendingBadge(){
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
  main.innerHTML=html`<div class="page-header"><div><h1>VIP registrations</h1><p class="sub">From the LIFEGEN website, directly into the shared database.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="exportCsv">${icon('download')} Export CSV</button><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
- <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. After five distinct Sunday visits are recorded as present, their status automatically changes to Member. Reviewing a registration does not create a second person.</div>
+ <div class="sync-note mb-2"><b>Already connected.</b> Every VIP signup creates a First Timer in <a href="#/people">People</a>. <i>This month</i> counts Sundays attended in the current month — complete 4 weeks to earn the monthly prize. Missing an elapsed Sunday marks a VIP ineligible until they attend again.</div>
  <div class="card mb-2"><div class="card__header"><h2>Sunday check-ins awaiting validation</h2></div><div class="card__body" id="pendingChecks">Loading…</div></div>
  <div class="toolbar"><div class="filter-tabs" id="vipFilters"><button data-f="new" class="${filter==='new'?'active':''}">New</button><button data-f="reviewed" class="${filter==='reviewed'?'active':''}">Reviewed</button><button data-f="all" class="${filter==='all'?'active':''}">All</button></div><div class="gsearch grow">${icon('search')}<input id="vipSearch" type="search" value="${search}" placeholder="Search VIP, inviter or contact" aria-label="Search registrations"/></div></div><div class="card" id="vipList"></div>`;
  async function load(){
@@ -24,15 +35,15 @@ export async function renderRegistrations({main,query}){
   const [data,pending]=await Promise.all([api.registrations({status:filter,q:search}),api.pendingCheckins()]);
   if(!main.contains(box)||!main.contains(list))return;box.innerHTML=pending.length?html`<div class="stack">${pending.map(c=>html`<div class="row row--between"><div><a href="#/people/${c.person_id}"><b>${c.full_name}</b></a><div class="small muted">${c.date_key} · ${c.person_code}</div></div><div class="row">${can('attendance:write')?html`<button class="btn btn--primary btn--sm" data-check="${c.id}" data-valid="true">Validate</button><button class="btn btn--sm" data-check="${c.id}" data-valid="false">Decline</button>`:''}</div></div>`)}</div>`:'<p class="small muted">No pending check-ins.</p>';
   box.querySelectorAll('[data-check]').forEach(b=>b.onclick=e=>withLoading(b,async()=>{try{await api.validateCheckin(Number(b.dataset.check),b.dataset.valid==='true');toast('Check-in updated.');load();}catch(err){toast(err.message,'error');}}));
-  list.innerHTML=data.items.length?html`<div class="table-wrap"><table class="table table--stack"><thead><tr><th>VIP / Person</th><th>Age</th><th>School</th><th>Inviter</th><th>Attendee</th><th>Registered</th><th></th></tr></thead><tbody>${data.items.map(r=>html`<tr><td data-label="VIP"><a href="#/people/${r.person_id}"><b>${r.full_name}</b></a><div class="small muted">${r.person_code} · ${r.review_status==='new'?'New':'Reviewed'}</div></td><td data-label="Age">${r.age??'—'}</td><td data-label="School">${r.school||'—'}</td><td data-label="Inviter">${r.inviter||'—'}</td><td data-label="Attendee">${attendeeCell(r)}</td><td data-label="Registered" class="small">${fmtDateTime(r.created_at)}</td><td><button class="btn btn--sm" data-view="${r.id}">View</button></td></tr>`)}</tbody></table></div><div class="card__footer small muted">${data.items.length} registrations shown</div>`:'<div class="empty"><h3>No registrations here yet</h3><p>New VIP signups appear automatically. No CSV import or manual refresh is needed.</p></div>';
+  list.innerHTML=data.items.length?html`<div class="table-wrap"><table class="table table--stack"><thead><tr><th>VIP / Person</th><th>Age</th><th>School</th><th>Inviter</th><th>This month</th><th>Registered</th><th></th></tr></thead><tbody>${data.items.map(r=>html`<tr><td data-label="VIP"><a href="#/people/${r.person_id}"><b>${r.full_name}</b></a><div class="small muted">${r.person_code} · ${r.review_status==='new'?'New':'Reviewed'}</div></td><td data-label="Age">${r.age??'—'}</td><td data-label="School">${r.school||'—'}</td><td data-label="Inviter">${r.inviter||'—'}</td><td data-label="This month">${attendeeCell(r)}</td><td data-label="Registered" class="small">${fmtDateTime(r.created_at)}</td><td><button class="btn btn--sm" data-view="${r.id}">View</button></td></tr>`)}</tbody></table></div><div class="card__footer small muted">${data.items.length} registrations shown</div>`:'<div class="empty"><h3>No registrations here yet</h3><p>New VIP signups appear automatically. No CSV import or manual refresh is needed.</p></div>';
   list.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>openVip(Number(b.dataset.view),load));refreshPendingBadge();
  }
  main.querySelector('#exportCsv').onclick=e=>withLoading(e.currentTarget,async()=>{
   const {items}=await api.registrations({status:'all',q:''});
   if(!items.length){toast('No registrations to export.','info');return;}
   const cell=v=>{const t=v==null?'':String(v);return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
-  const head=['person_code','full_name','age','school','invited_by','contact','review_status','registered_at','reviewed_at','person_status','sundays_attended','first_attended','last_attended'];
-  const rows=items.map(r=>[r.person_code,r.full_name,r.age,r.school,r.inviter,r.contact,r.review_status,r.created_at,r.reviewed_at,r.person_status,r.sundays_attended,r.first_attended,r.last_attended].map(cell).join(','));
+  const head=['person_code','full_name','age','school','invited_by','contact','review_status','registered_at','reviewed_at','person_status','attended_this_month','prize_status','sundays_attended_all_time'];
+  const rows=items.map(r=>{const p=prizeState(r);return [r.person_code,r.full_name,r.age,r.school,r.inviter,r.contact,r.review_status,r.created_at,r.reviewed_at,r.person_status,p.n,p.state,r.sundays_attended].map(cell).join(',');});
   downloadBlob(new Blob(['\ufeff'+[head.join(','),...rows].join('\r\n')],{type:'text/csv;charset=utf-8'}),'vip-registrations.csv');
   toast(`Exported ${items.length} VIP registration${items.length===1?'':'s'}.`);
  });
