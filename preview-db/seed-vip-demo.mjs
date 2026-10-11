@@ -21,8 +21,10 @@ const specs = [
   ['Demo', 'FourWeeks',  ['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25']], // 4 timer, complete
   ['Demo', 'ThreeWeeks', ['2026-10-04', '2026-10-11', '2026-10-18']],               // 3 timer
   ['Demo', 'TwoWeeks',   ['2026-10-04', '2026-10-11']],                              // 2 timer
-  ['Demo', 'OneWeek',    ['2026-10-04']],                                            // 1st timer
-  ['Demo', 'TodayOnly',  ['2026-10-11']],                                            // 1st timer
+  ['Demo', 'OneWeek',    ['2026-10-04']],                                            // streak resets to 0 if they miss Oct 11
+  ['Demo', 'TodayOnly',  ['2026-10-11']],                                            // streak 1
+  ['Demo', 'LastTwoWeeks',['2026-10-18','2026-10-25']],                              // streak 2 late in the month
+  ['Demo', 'ThreeInARow',['2026-10-11','2026-10-18','2026-10-25']],                  // streak 3 late in the month
 ];
 
 let code = 9001;

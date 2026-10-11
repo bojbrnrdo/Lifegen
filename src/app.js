@@ -17,7 +17,7 @@ import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.18';
+const ADMIN_ASSET_VERSION='2.2.19';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -109,7 +109,38 @@ async function customMethod(req,name,args) {
  if(name==='registrationCounts')return (await query('SELECT count(*)::int AS total,count(*) FILTER(WHERE review_status=\'new\')::int AS pending,count(*) FILTER(WHERE review_status=\'reviewed\')::int AS reviewed FROM vip_registrations')).rows[0];
  if(name==='registrations'){
   const p=args[0]||{},filter=['new','reviewed'].includes(p.status)?p.status:null;
-  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status,coalesce(a.sundays_attended,0)::int AS sundays_attended,a.first_attended,a.last_attended,coalesce(a.sundays_attended,0)>=$3::int AS long_time_attendee,coalesce(m.month_attended,0)::int AS month_attended,m.month_first_attended,m.month_attended_before,(SELECT count(DISTINCT s2.service_date)::int FROM services s2 WHERE s2.service_date>=date_trunc(\'month\',$4::date) AND s2.service_date>=m.month_first_attended::date AND s2.service_date<$4::date) AS month_elapsed_since_first FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS month_attended,min(s.service_date)::text AS month_first_attended,count(DISTINCT CASE WHEN s.service_date<$4::date THEN s.service_date END)::int AS month_attended_before FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\' AND s.service_date>=date_trunc(\'month\',$4::date) AND s.service_date<=$4::date) m ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'',VIP_MEMBER_ATTENDANCE_THRESHOLD,today()]);return {items:rows};
+  const t=today(),monthStart=t.slice(0,8)+'01';
+  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status,coalesce(a.sundays_attended,0)::int AS sundays_attended,a.first_attended,a.last_attended,coalesce(a.sundays_attended,0)>=$3::int AS long_time_attendee FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'',VIP_MEMBER_ATTENDANCE_THRESHOLD]);
+  // Consecutive-week streak within the current month, capped at 4/4. A VIP needs
+  // 4 Sundays IN A ROW (no specific week required). Missing a past Sunday resets
+  // the streak; once a streak of 4 is reached the month is latched "complete".
+  const sundays=(await query('SELECT service_date::text AS d FROM services WHERE service_date>=$1 AND service_date<=$2 ORDER BY service_date',[monthStart,t])).rows.map(r=>r.d);
+  const attendedBy={};
+  if(rows.length&&sundays.length){
+   const att=(await query('SELECT r.person_id,s.service_date::text AS d FROM records r JOIN services s ON s.id=r.service_id WHERE r.status=\'present\' AND s.service_date>=$1 AND s.service_date<=$2',[monthStart,t])).rows;
+   for(const a of att){(attendedBy[a.person_id]??=new Set()).add(a.d);}
+  }
+  for(const r of rows){
+   const attended=attendedBy[r.person_id]||new Set();
+   let streak=0;
+   for(let k=sundays.length-1;k>=0;k--){
+    const d=sundays[k];
+    if(attended.has(d)){streak=Math.min(streak+1,4);continue;}
+    if(d===t)continue;
+    break;
+   }
+   let best=0,run=0;
+   for(const d of sundays){
+    if(d>t)break;
+    if(attended.has(d)){run++;if(run>best)best=run;}
+    else if(d!==t)run=0;
+   }
+   r.streak=streak;
+   r.best_streak=Math.min(best,4);
+   r.completed=best>=4;
+   r.month_start=monthStart;
+  }
+  return {items:rows};
  }
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
