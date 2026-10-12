@@ -20,13 +20,10 @@ export const api={
  logout:async()=>{try{await request('/api/auth/logout',{method:'POST',body:{}});}finally{csrf=null;previewSessionToken=null;stopSync?.();}},
  clearPreviewSession:()=>{previewSessionToken=null;csrf=null;},
 changePassword:(current,next)=>request('/api/auth/password',{method:'POST',body:{current,next}}),
- migrate:(data,{sourceKey,dryRun=true}={})=>request('/api/migration',{method:'POST',body:{data,source_key:sourceKey,dry_run:dryRun}}),
  backup:async()=>{const r=await request('/api/backup',{blob:true});downloadBlob(r.blob,r.filename||'lifegen-neon-backup.json');},
- restore:data=>api.migrate(data,{dryRun:false}),
- download:async url=>{try{const r=await request('/api/exports',{method:'POST',body:{url},blob:true});downloadBlob(r.blob,r.filename||'lifegen-report.csv');}catch(e){window.dispatchEvent(new CustomEvent('api:message',{detail:{message:e.message,type:'error'}}));}},
  blob:async url=>(await request(url,{blob:true})).blob,
 };
-const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','updatePreferences','services','serviceByDate','service','serviceAudit','openService','updateService','mark','undoMark','dashboard','reportSummary','reportYears','reportLifegroups','search','lifegroups','lifegroup','lifegroupOptions','lifegroupNeeds','lifegroupRecommend','networks','network','createNetwork','updateNetwork','deleteNetwork','createLifegroup','updateLifegroup','deleteLifegroup','assignLifegroup','leaveLifegroup','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent'];
+const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','dashboard','search','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','lifegroupOutcomes','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent'];
 for(const method of methods)api[method]=(...args)=>call(method,...args);
 export function startLiveUpdates(){
  stopSync?.();let stopped=false,source,lastRevision=null,pollTimer,reconcileTimer;
@@ -38,4 +35,4 @@ export function startLiveUpdates(){
  reconcileTimer=setInterval(poll,30000);const onVisible=()=>{if(document.visibilityState==='visible')poll();};document.addEventListener('visibilitychange',onVisible);
  stopSync=()=>{stopped=true;source?.close();clearInterval(pollTimer);clearInterval(reconcileTimer);document.removeEventListener('visibilitychange',onVisible);};return stopSync;
 }
-window.__lgDownload=url=>api.download(url);
+

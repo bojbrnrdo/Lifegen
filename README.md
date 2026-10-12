@@ -23,6 +23,8 @@ A successful VIP signup saves a registration **and its linked First Timer** in a
 
 The public landing page places its **Events** section (`#events`) directly below the hero and Welcome section, so the month-view calendar is part of the page without needing to open a separate view. Visitors browse months, filter by event type, tap a day for full details, follow the **Announcements** list, and can add any single event to Google Calendar or download it for Apple Calendar / Outlook (`/api/public/event.ics?id=…`). All times are Asia/Manila.
 
+Below the calendar, **Stories & highlights** (`#stories`) holds two video testimonies ("Stories of Grace") and one featured LIFEGEN highlight video ("This is LIFEGEN"). To add a video, paste its link into that slot's `data-video` attribute in `public/lifegen/index.html` (YouTube, Facebook, Vimeo, Google Drive shared as "Anyone with the link", or a direct .mp4) and update the card's title and caption; use `data-ratio="9/16"` for vertical phone videos. Empty slots show a "Video coming soon" placeholder. Below the highlight video, a horizontal **photo & poster deck** scrolls like a spread hand of cards; clicking a card opens that photo in a full-size lightbox (arrow keys or the side buttons move between photos, Esc closes). To add a picture, add a `<button class="deck-card" data-img="…" data-caption="…">` entry inside `#photoDeck` (drop image files into `public/brand/gallery/`); cards without `data-img` show a "coming soon" placeholder.
+
 - The weekly **Sunday service (1:00–3:00 PM)** appears on every Sunday automatically — no data required. A stored event in the **Sunday service** category takes over its date instead, so nothing is duplicated.
 - Staff manage events in **Admin → Calendar**: create, edit and delete events, set category, date, times or all-day, location, description, and publish or keep as a staff-only draft. Every change is audit-logged and appears on the public calendar immediately (live updates included).
 - Categories with fixed colours: Sunday service, Worship night, Prayer gathering, Youth, Lifegroup, Outreach, Special event.
@@ -126,6 +128,18 @@ The schema initializer creates tables non-destructively and records applied vers
 - Passwords are hashed; sessions are HttpOnly cookies; writes require appropriate authorization and CSRF/origin checks.
 - New anonymous prayer posts discard the supplied author name. Prayer wall content is public, so do not include confidential information.
 - Church staff must define retention, privacy contacts, lawful processing and appropriate handling for younger visitors. This package is not a legal-compliance certification.
+
+## Content & legal checklist (before going live)
+
+The public site ships with privacy-protective defaults: third-party video players (YouTube, Facebook, Vimeo, Google Drive) are **click-to-load** — no visitor data reaches a provider until a visitor taps play — YouTube uses the no-cookie player, Vimeo uses do-not-track, and the `/privacy` page discloses the embeds, the consent practice and a takedown procedure. Staff remain responsible for the content they publish:
+
+- **Replace placeholders.** The bundled gallery photos are AI-generated samples that depict no real person; swap them for the church's own photos before launch.
+- **Only embed what you may.** Add videos via each platform's share link only when the church created the video or the owner enabled embedding. Do not re-upload or embed third-party content without permission; embedding through the official players keeps playback under the provider's terms.
+- **Get consent first.** Publish photos, posters or testimonies only with the permission of the people shown. For minors, get a parent's or guardian's consent. Keep consent records with the church's documents.
+- **Honor removals.** The `/privacy` page names the privacy contact (set in Admin → Settings). If someone asks to be removed from a photo, video or record, take it down promptly — the same contact receives copyright/takedown reports.
+- **Prayer wall.** Posts are public; moderate from Admin and remove anything sensitive or infringing when reported.
+
+Licenses and credits: icons are [Lucide](https://lucide.dev) (ISC), fonts are Fraunces, Instrument Sans and Caveat via Google Fonts (SIL Open Font License). Everything else in this repository is the church's own material.
 
 ## Live updates and backups
 

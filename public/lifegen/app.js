@@ -724,9 +724,7 @@ qsa(".seg-btn").forEach(b => b.addEventListener("click", () => {
             t = el.querySelector(".post-time");
         p && t && (t.textContent = timeAgo(p.created_at))
     })
-}, 6e4), qsa(".g-bell").forEach(b=>b.addEventListener("click",()=>{
- const a=document.createElement('a');a.href='/api/public/service.ics';a.download='lifegen-sunday-service.ics';a.click();b.innerHTML='<i data-lucide="calendar-check"></i>Calendar file downloaded';renderIcons();toast('Open the calendar file to add your Sunday reminder.','calendar');
-})), document.addEventListener("visibilitychange", () => {
+}, 6e4), document.addEventListener("visibilitychange", () => {
     "visible" === document.visibilityState && (getDevice() && getDevice().token && !$("vip-attendance-dashboard").hidden && loadVipAttendance(), loadPosts())
 }), restoreDraft(), syncVipDashboardState(), loadPosts(), scheduleMidnightRefresh();
 try {

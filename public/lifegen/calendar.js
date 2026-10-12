@@ -205,25 +205,6 @@
         grid.querySelector(`[data-date="${selectedKey}"]`)?.classList.add("is-selected");
     }
 
-    // ---- Coming up list -------------------------------------------------------
-    function renderUpcoming(data) {
-        todayKey = data.today || todayKey;
-        const list = $("calUpcoming");
-        const events = data.events || [];
-        if (!events.length) {
-            list.innerHTML = `<li class="cal-none">No announcements right now. Join us on Sunday!</li>`;
-            return;
-        }
-        list.innerHTML = events.map((e, i) => {
-            const [, m, d] = parts(e.date);
-            const rel = relLabel(e.date);
-            return `<li><button type="button" class="cal-up-item cat-${catOf(e)}" data-date="${e.date}">
-              <span class="cal-up-date"><small>${MONTHS_SHORT[m - 1]}</small><b>${d}</b></span>
-              <span class="cal-up-body"><strong>${esc(e.title)}</strong><small>${DAYS_SHORT[dateOf(e.date).getDay()]} · ${esc(fmtRange(e))}${e.location ? ` · ${esc(e.location)}` : ""}</small></span>
-              ${rel ? `<span class="cal-rel${i === 0 ? " is-next" : ""}">${esc(rel)}</span>` : ""}</button></li>`;
-        }).join("");
-    }
-
     // ---- Day modal (tablet / desktop) ------------------------------------------
     const modal = $("eventModal"), modalBody = $("eventModalBody");
     async function openDay(dateKey) {
@@ -262,13 +243,6 @@
         if (!cell) return;
         if (phone.matches) { selectedKey = cell.dataset.date; markSelected(); renderAgenda(); }
         else if (cell.classList.contains("has-events")) openDay(cell.dataset.date);
-    });
-    $("calUpcoming").addEventListener("click", (e) => {
-        const item = e.target.closest("button[data-date]");
-        if (!item) return;
-        const prevCat = activeCat;
-        activeCat = null; // always show the full day from the upcoming list
-        openDay(item.dataset.date).finally(() => { activeCat = prevCat; });
     });
     const shiftMonth = (delta) => {
         if (loading) return;
@@ -319,17 +293,8 @@
         }
     }
 
-    async function loadUpcoming() {
-        try {
-            renderUpcoming(await getJson("/api/public/calendar-upcoming?days=120&limit=6"));
-        } catch {
-            $("calUpcoming").innerHTML = '<li class="cal-none">Upcoming events will appear here.</li>';
-        }
-    }
-
     phone.addEventListener?.("change", () => current && renderAgenda());
     const now = new Date();
     view = new Date(now.getFullYear(), now.getMonth(), 1);
     show();
-    loadUpcoming();
-})();
+    })();

@@ -98,6 +98,7 @@ export function addDays(str, n) { const d = parseDate(str); d.setDate(d.getDate(
 
 export const STATUS_LABELS = {
   first_timer: 'First Timer', new_believer: 'New Believer', regular: 'Regular Attendee',
+  visitor_3: '3-Time Visitor', visitor_2: '2-Time Visitor', visitor_1: '1-Time Visitor', no_returns: 'No Returns',
   member: 'Member', leader: 'Leader', volunteer: 'Volunteer', inactive: 'Inactive',
 };
 export const DAY_LABELS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
@@ -111,7 +112,7 @@ export function fmtClock(hhmm) {
 }
 /** "Saturday 5:00 PM" or "Schedule not set". */
 export const fmtSchedule = (g) => (g.schedule_day || g.schedule_time ? `${DAY_LABELS[g.schedule_day] || ''} ${fmtClock(g.schedule_time)}`.trim() : '');
-export const ROLE_LABELS = { admin: 'Admin', staff: 'Attendance Staff', viewer: 'Viewer / Leader' };
+export const ROLE_LABELS = { admin: 'Admin', staff: 'Attendance Staff', viewer: 'Viewer' };
 
 export const fullName = (p) => p.full_name || `${p.first_name} ${p.last_name}`;
 export const initials = (p) => `${(p.first_name || '?')[0]}${(p.last_name || '')[0] || ''}`.toUpperCase();

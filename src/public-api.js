@@ -119,9 +119,4 @@ publicRouter.post('/posts/:id/pray',async(req,res)=>{
   return (await client.query('SELECT count(*)::int AS total FROM prayer_reactions WHERE post_id=$1',[id])).rows[0].total;
  });res.json({prayer_count:count,prayed:true});
 });
-publicRouter.get('/service.ics',(req,res)=>{
- const day=new Date(today()+'T12:00:00Z');while(day.getUTCDay()!==0)day.setUTCDate(day.getUTCDate()+1);
- const date=day.toISOString().slice(0,10).replaceAll('-','');
- const cal=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LIFEGEN//Sunday service//EN','BEGIN:VEVENT','UID:lifegen-sunday-service@lifegen', `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z')}`,`DTSTART:${date}T050000Z`,`DTEND:${date}T070000Z`,'RRULE:FREQ=WEEKLY;BYDAY=SU','SUMMARY:LIFEGEN Sunday Service','LOCATION:Lifegiver Church of Faith - Central','DESCRIPTION:Sunday service from 1 to 3 PM Asia/Manila.','BEGIN:VALARM','TRIGGER:-PT1H','ACTION:DISPLAY','DESCRIPTION:LIFEGEN service starts in one hour.','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
- res.type('text/calendar').attachment('lifegen-sunday-service.ics').send(cal);
-});
+
