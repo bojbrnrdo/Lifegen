@@ -125,6 +125,51 @@
         card.addEventListener("click", () => openLightbox(index));
     });
 
+    // ---- Scroll-driven horizontal drift (poster wall) ------------------
+    // The deck slides sideways as the page scrolls vertically (Readymag-style).
+    // Falls back to native horizontal scrolling for reduced motion or when
+    // the track fits the viewport.
+    (function () {
+        const deck = document.getElementById("photoDeck");
+        const wrap = deck ? deck.closest(".deck-wrap") : null;
+        if (!deck || !wrap) return;
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let held = null;
+        const maxX = () => Math.max(0, deck.scrollWidth - window.innerWidth + 24);
+        const apply = (x) => { deck.style.transform = "translate3d(" + (-x).toFixed(1) + "px,0,0)"; };
+        function update() {
+            if (!deck.classList.contains("is-driven")) return;
+            if (held !== null) { apply(held); return; }
+            const r = wrap.getBoundingClientRect();
+            const vh = window.innerHeight || 1;
+            const p = Math.min(1, Math.max(0, (vh - r.top) / (vh + r.height)));
+            apply(p * maxX());
+        }
+        function enable() {
+            if (reduced.matches || maxX() <= 0) {
+                deck.classList.remove("is-driven");
+                deck.style.transform = "";
+                return;
+            }
+            deck.classList.add("is-driven");
+            update();
+        }
+        let tick = false;
+        window.addEventListener("scroll", () => {
+            held = null;
+            if (!tick) { tick = true; requestAnimationFrame(() => { tick = false; update(); }); }
+        }, { passive: true });
+        window.addEventListener("resize", enable);
+        reduced.addEventListener?.("change", enable);
+        deck.addEventListener("focusin", (e) => {
+            const card = e.target.closest(".deck-card");
+            if (!card || !deck.classList.contains("is-driven")) return;
+            held = Math.min(maxX(), Math.max(0, card.offsetLeft - window.innerWidth * 0.25));
+            apply(held);
+        });
+        enable();
+    })();
+
     // ---- Lightbox (full-size photo view) ------------------------------
     const lightbox = document.getElementById("lightbox");
     const lbImg = document.getElementById("lbImg");
