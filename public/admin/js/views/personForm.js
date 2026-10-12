@@ -42,7 +42,7 @@ export function personFormHtml(p = {}, { compact = false, defaults = {} } = {}) 
         ${field('last_name', 'Last name', { required: !p?.full_name, autocomplete: 'family-name' })}
         ${field('contact_number', 'Contact number', { type: 'tel', required: false, placeholder: '09XX XXX XXXX', autocomplete: 'tel' })}
         <div class="field"><label for="f_status">Status<span class="req">*</span></label>
-          <select id="f_status" name="status">${Object.entries(STATUS_LABELS).filter(([k]) => k !== 'inactive' || p?.status === 'inactive').map(([k, l]) => html`<option value="${k}" ${(v('status') || 'first_timer') === k ? 'selected' : ''}>${l}</option>`)}</select></div>
+          <select id="f_status" name="status">${Object.entries(STATUS_LABELS).filter(([k]) => (!['visitor_3','visitor_2','visitor_1','no_returns'].includes(k) || p?.status === k) && (k !== 'inactive' || p?.status === 'inactive')).map(([k, l]) => html`<option value="${k}" ${(v('status') || 'first_timer') === k ? 'selected' : ''}>${l}</option>`)}</select></div>
       </div>
     </div>
     <div class="form-section">

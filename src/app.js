@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { query, transaction, withState, runDomain, logAction } from './db.js';
-import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday, VIP_MEMBER_ATTENDANCE_THRESHOLD, vipWindowResult } from './domain.js';
+import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
@@ -16,8 +16,10 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
+import { handleLifegroupMethod } from './lifegroups.js';
+import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.21';
+const ADMIN_ASSET_VERSION='2.2.22';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -28,7 +30,7 @@ app.use(cookieParser());app.use(express.json({limit:'12mb'}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
-app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'neon-postgresql'});}catch{res.status(503).json({ok:false,message:'Set the database connection and apply database/001_init.sql.'});}});
+app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch{res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 app.get('/api/auth/status',async(req,res)=>{
  const user=await readStaff(req);const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[Object.keys(DEFAULT_SETTINGS)])).rows.map(r=>[r.key,r.value]));
  const count=Number((await query('SELECT count(*) FROM staff_users')).rows[0].count);
@@ -58,18 +60,31 @@ app.get('/api/events/stream',requireStaff,async(req,res)=>{requirePermission(req
 const methods={
  people:['people:view',false],person:['people:view',false],duplicates:['people:write',false],search:['people:view',false],
  calendarEvents:['dashboard:view',false],saveCalendarEvent:['calendar:manage',true],deleteCalendarEvent:['calendar:manage',true],
+ services:['attendance:view',false],serviceByDate:['attendance:view',false],service:['attendance:view',false],serviceAudit:['attendance:view',false],openService:['attendance:write',true],mark:['attendance:write',true],undoMark:['attendance:write',true],updateService:['attendance:write',true],reportYears:['reports:view',false],reportSummary:['reports:view',false],
  createPerson:['people:write',true],updatePerson:['people:write',true],archivePerson:['people:delete',true],restorePerson:['people:delete',true],setPersonStatus:['people:write',true],deletePerson:['people:delete',true],
  dashboard:['dashboard:view',false],
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
  registrations:['registrations:manage',false],
- lifegroupOutcomes:['registrations:manage',true],registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],vipAttendanceCounts:['registrations:manage',false]
+ lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
+ createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
+ registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
  const actor=req.actor;
  // Hot read paths: answer from narrow SQL queries instead of loading every tracker table.
  if(name==='dashboard')return dashboardRead();
+ if(name==='services')return listServices(args[0]||{});
+ if(name==='serviceByDate')return serviceByDate(args[0],actor);
+ if(name==='service')return serviceDetail(args[0]);
+ if(name==='serviceAudit')return serviceAudit(args[0]);
+ if(name==='openService')return openService(args[0],actor);
+ if(name==='mark')return markAttendance(args[0],args[1],args[2],args[3],args[4],actor);
+ if(name==='undoMark')return undoAttendance(args[0],args[1],args[2],actor);
+ if(name==='updateService')return updateService(args[0],args[1]||{},actor);
+ if(name==='reportYears')return reportYears();
+ if(name==='reportSummary')return reportSummary(args[0]||{});
  if(name==='people')return peopleList(args[0]||{});
  if(name==='search')return peopleSearch(args[0],args[1]||{});
  if(name==='calendarEvents'){
@@ -104,14 +119,14 @@ async function customMethod(req,name,args) {
  if(['users','roles','createUser','updateUser'].includes(name))return userAccounts(actor,name,args);
  if(name==='system'){
   const counts={};for(const t of ['people','services','records','staff_users'])counts[t]=(await query(`SELECT count(*) FROM "${t}"`)).rows[0].count;
-  return {counts:{people:counts.people,services:counts.services,attendance_records:counts.records,users:counts.staff_users},db_file:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Shared Neon PostgreSQL',node:process.versions.node,migrations:(await query('SELECT * FROM schema_migrations ORDER BY applied_at')).rows};
+  return {counts:{people:counts.people,services:counts.services,attendance_records:counts.records,users:counts.staff_users},db_file:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL',node:process.versions.node,migrations:(await query('SELECT * FROM schema_migrations ORDER BY applied_at')).rows};
  }
  if(name==='activity')return (await query('SELECT actor_name,action,details,created_at FROM audit_log WHERE entity=\'people\' AND entity_id=$1 ORDER BY id DESC LIMIT 100',[String(validId(args[0]))])).rows;
  if(name==='registrationCounts')return (await query('SELECT count(*)::int AS total,count(*) FILTER(WHERE review_status=\'new\')::int AS pending,count(*) FILTER(WHERE review_status=\'reviewed\')::int AS reviewed FROM vip_registrations')).rows[0];
  if(name==='registrations'){
   const p=args[0]||{},filter=['new','reviewed'].includes(p.status)?p.status:null;
   const t=today(),monthStart=t.slice(0,8)+'01';
-  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status,coalesce(a.sundays_attended,0)::int AS sundays_attended,a.first_attended,a.last_attended,coalesce(a.sundays_attended,0)>=$3::int AS long_time_attendee FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'',VIP_MEMBER_ATTENDANCE_THRESHOLD]);
+  const {rows}=await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status,coalesce(a.sundays_attended,0)::int AS sundays_attended FROM vip_registrations v JOIN people p ON p.id=v.person_id LEFT JOIN LATERAL (SELECT count(DISTINCT s.service_date)::int AS sundays_attended,min(s.service_date)::text AS first_attended,max(s.service_date)::text AS last_attended FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status=\'present\') a ON true WHERE ($1::text IS NULL OR v.review_status=$1) AND ($2::text=\'\' OR v.full_name ILIKE $2 OR coalesce(v.contact,\'\') ILIKE $2 OR coalesce(v.inviter,\'\') ILIKE $2) ORDER BY v.created_at DESC LIMIT 1000',[filter,p.q?`%${String(p.q).slice(0,150)}%`:'']);
   // Consecutive-week streak within the current month, capped at 4/4. A VIP needs
   // 4 Sundays IN A ROW (no specific week required). Missing a past Sunday resets
   // the streak; once a streak of 4 is reached the month is latched "complete".
@@ -154,28 +169,6 @@ async function customMethod(req,name,args) {
   }
   return {items:rows};
  }
- if(name==='lifegroupOutcomes')return withState(async({client})=>{
-  // Lifegroup tracker export list: every VIP with their 4-week window since
-  // invitation, how many window Sundays they came back, and — once the window
-  // closes — the person status they were exported as (applied exactly once).
-  const rows=(await client.query('SELECT v.id,v.person_id,v.full_name,v.created_at,v.window_outcome,v.outcome_applied_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id ORDER BY v.created_at DESC')).rows;
-  const att=(await client.query("SELECT r.person_id,s.service_date::text AS d FROM records r JOIN services s ON s.id=r.service_id WHERE r.status='present'")).rows;
-  const attBy={};for(const a of att){(attBy[a.person_id]??=new Set()).add(a.d);}
-  const t=today();const items=[];
-  for(const r of rows){
-   const invite=String(r.created_at).slice(0,10);
-   const res=vipWindowResult([...(attBy[r.person_id]||[])],invite,t)||{window:[],attended:[],count:0,closed:false,outcome:'no_returns'};
-   let exported=!!r.outcome_applied_at,outcome=r.window_outcome||res.outcome,personStatus=r.person_status;
-   if(res.closed&&!exported){
-    await client.query('UPDATE vip_registrations SET window_outcome=$1,outcome_applied_at=now() WHERE id=$2 AND outcome_applied_at IS NULL',[res.outcome,r.id]);
-    const u=await client.query("UPDATE people SET status=$1,updated_at=now() WHERE id=$2 AND status IN ('first_timer','new_believer','regular','visitor_3','visitor_2','visitor_1','no_returns') RETURNING id",[res.outcome,r.person_id]);
-    if(u.rowCount)await logAction(client,actor,'people',r.person_id,'vip_window_outcome_exported',{window:res.window,came_back:res.count,outcome:res.outcome});
-    exported=true;outcome=res.outcome;if(u.rowCount)personStatus=res.outcome;
-   }
-   items.push({id:r.id,person_id:r.person_id,full_name:r.full_name,person_code:r.person_code,person_status:personStatus,invited:invite,window:res.window,attended:res.attended,count:res.count,closed:res.closed,outcome,exported});
-  }
-  return {items,today:t};
- },{actor,write:true});
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
  }
@@ -189,7 +182,7 @@ async function customMethod(req,name,args) {
   else {const s=data.services.find(s=>s.service_date===c.date_key),r=s&&data.records.find(r=>r.person_id===c.person_id&&r.service_id===s.id);if(r?.source==='vip'&&Number(r.source_checkin_id)===c.id)await domain.undoMark(s.id,c.person_id);}
   const status=valid?'valid':'invalid';await client.query('UPDATE vip_checkins SET status=$1,validated_by=$2,validated_at=now() WHERE id=$3',[status,actor.id,id]);await logAction(client,actor,'vip_checkins',id,status,{person_id:c.person_id});return {id,status};
  },{actor,write:true});
- if(name==='vipAttendanceCounts'){const month=today().slice(0,7);return Object.fromEntries((await query("SELECT c.registration_id,count(DISTINCT c.date_key)::int AS count FROM vip_checkins c WHERE c.status='valid' AND c.date_key LIKE $1 GROUP BY c.registration_id",[month+'%'])).rows.map(r=>[String(r.registration_id),r.count]));}
+
  if(name==='getPrize')return {value:await currentPrize(),month:today().slice(0,7)};
  if(name==='setPrize')return transaction(async client=>{const value=String(args[0]||'').trim();if(!value||value.length>1000)throw httpError(400,'Enter a prize description up to 1000 characters.');const month=today().slice(0,7);await client.query('INSERT INTO monthly_prizes(month,description) VALUES($1,$2) ON CONFLICT(month) DO UPDATE SET description=EXCLUDED.description,updated_at=now()',[month,value]);await logAction(client,actor,'monthly_prizes',month,'update');return {value,month};});
  if(name==='qrRegistration'){const {public_url}=siteUrls(req);let url=public_url+'#vip';if(public_url.startsWith('/'))url=`${req.protocol}://${req.get('host')}${url}`;return {url,svg:await QRCode.toString(url,{type:'svg',width:360,margin:2}),enabled:true};}
@@ -204,21 +197,28 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
- const custom=await customMethod(req,name,args);
+ const groupResult=await handleLifegroupMethod(name,args,req.actor);
+ const custom=groupResult===undefined?await customMethod(req,name,args):groupResult;
  let result=custom===undefined?await runDomain(name,args,req.actor,write):custom;
  if(!req.actor.permissions.includes('people:view_private'))result=redactForViewer(result);
  res.json(result??{});
 });
+app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
 app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
 async function page(res,which) {let html=await fs.readFile(path.join(root,'public',which,'index.html'),'utf8');if(which==='admin'){const base=`/admin/_assets-${ADMIN_ASSET_VERSION}`;html=html.replaceAll('/admin/styles.css',base+'/styles.css').replaceAll('/admin/js/app.js',base+'/js/app.js');}res.set('Cache-Control','no-store').type('html').send(html.replaceAll('<script',`<script nonce="${res.locals.nonce}"`));}
-app.get('/',(req,res)=>req.query.view==='admin'?res.redirect('/admin'):page(res,'lifegen'));
+app.get('/',(req,res)=>{
+ if(req.query.view==='website')return page(res,'lifegen');
+ if(process.env.PREVIEW_TRACKER_HOME==='true'||req.query.view==='tracker')return res.redirect('/admin#/lifegroups?tab=needs');
+ if(req.query.view==='admin')return res.redirect('/admin');
+ return page(res,'lifegen');
+});
 app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
 app.get(['/tracker','/tracker/index.html'],(req,res)=>res.redirect(308,'/admin'));
 app.get(['/lifegen','/lifegen/index.html'],(req,res)=>res.redirect(308,'/'));
 app.get('/privacy',async(req,res)=>{
  let settings={};try{settings=Object.fromEntries((await query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]));}catch{}
  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- res.type('html').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIFEGEN · Privacy notice</title><style>body{font:16px/1.8 system-ui,sans-serif;color:#123c24;background:#f4f8f1;margin:0}main{max-width:760px;margin:48px auto;padding:32px;background:white;border-radius:18px}h1,h2{line-height:1.3}a{color:#17633a}small{color:#596a5f}</style><main><a href="/">← Back to LIFEGEN</a><h1>Privacy notice</h1><p>${esc(settings.church_name||'Lifegiver Church of Faith')} uses this system for visitor welcome, VIP registration and Sunday attendance.</p><h2>What we store</h2><p>Your name, age, school/institution, inviter and optional contact number, plus registration, attendance and consent records. Staff may add optional profile details you provide.</p><h2>Where and who</h2><p>Records are stored in a shared Neon PostgreSQL database. Authorized staff access them through signed-in accounts. Viewer accounts receive names and attendance counts, not private contact/profile fields. Database credentials are kept only on the server.</p><h2>Prayer wall</h2><p>Posts are public. Do not include information you want kept confidential. New anonymous posts omit your name entirely. Legacy imported posts may retain their original source information privately for the church administrator.</p><h2>Cookies and security</h2><p>Necessary secure cookies keep you signed into your VIP portal or staff account and remember prayer reactions. Temporary hashed request information limits spam and sign-in abuse. There are no advertising trackers.</p><h2>Your choices</h2><p>Ask the LIFEGEN team to see, correct, withdraw consent for or delete your details. Records are retained for church follow-up and should be reviewed under the church’s retention policy. Downloaded backups must be stored securely.</p><p><b>Privacy contact:</b> ${esc(settings.privacy_contact||settings.church_contact||'Ask a LIFEGEN leader; the administrator should set a privacy contact in Settings.')}</p><h2>Videos and third-party players</h2><p>Testimony and highlight videos play through the official YouTube, Facebook, Vimeo or Google Drive players and load only after you tap play; no connection is made to the provider before that. When a video plays, the provider receives the technical data needed for playback (such as your IP address) and may apply its own cookies under its own privacy policy. YouTube videos use the privacy-enhanced no-cookie player, and Vimeo uses do-not-track mode, where available. Provider policies: <a href="https://policies.google.com/privacy">Google / YouTube</a>, <a href="https://www.facebook.com/privacy/policy/">Facebook</a>, <a href="https://vimeo.com/privacy">Vimeo</a>.</p><h2>Photos, testimonies and consent</h2><p>Photos, posters and testimonies on this site are published by the church with the permission of the people shown. If you appear in a photo or video and would like it corrected or removed, contact the privacy contact below and it will be taken down promptly.</p><h2>Reporting content concerns</h2><p>If you believe anything on this site infringes your copyright or any other right, send the web address of the page and a short description to the privacy contact. Every report is reviewed and infringing content is removed promptly.</p><small>This notice describes the software. The church must establish its lawful basis, retention policy and appropriate handling for younger attendees under the Philippine Data Privacy Act.</small></main></html>`);
+ res.type('html').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIFEGEN · Privacy notice</title><style>body{font:16px/1.8 system-ui,sans-serif;color:#123c24;background:#f4f8f1;margin:0}main{max-width:760px;margin:48px auto;padding:32px;background:white;border-radius:18px}h1,h2{line-height:1.3}a{color:#17633a}small{color:#596a5f}</style><main><a href="/">← Back to LIFEGEN</a><h1>Privacy notice</h1><p>${esc(settings.church_name||'Lifegiver Church of Faith')} uses this system for visitor welcome, VIP registration and Sunday attendance.</p><h2>What we store</h2><p>Your name, age, school/institution, inviter and optional contact number, plus registration, attendance and consent records. Staff may add optional profile details you provide.</p><h2>Where and who</h2><p>Records are stored in a Supabase PostgreSQL database. Authorized staff access them through signed-in accounts. Viewer accounts receive names and attendance counts, not private contact/profile fields. Database credentials are kept only on the server.</p><h2>Prayer wall</h2><p>Posts are public. Do not include information you want kept confidential. New anonymous posts omit your name entirely. Legacy imported posts may retain their original source information privately for the church administrator.</p><h2>Cookies and security</h2><p>Necessary secure cookies keep you signed into your VIP portal or staff account and remember prayer reactions. Temporary hashed request information limits spam and sign-in abuse. There are no advertising trackers.</p><h2>Your choices</h2><p>Ask the LIFEGEN team to see, correct, withdraw consent for or delete your details. Records are retained for church follow-up and should be reviewed under the church’s retention policy. Downloaded backups must be stored securely.</p><p><b>Privacy contact:</b> ${esc(settings.privacy_contact||settings.church_contact||'Ask a LIFEGEN leader; the administrator should set a privacy contact in Settings.')}</p><h2>Videos and third-party players</h2><p>Testimony and highlight videos play through the official YouTube, Facebook, Vimeo or Google Drive players and load only after you tap play; no connection is made to the provider before that. When a video plays, the provider receives the technical data needed for playback (such as your IP address) and may apply its own cookies under its own privacy policy. YouTube videos use the privacy-enhanced no-cookie player, and Vimeo uses do-not-track mode, where available. Provider policies: <a href="https://policies.google.com/privacy">Google / YouTube</a>, <a href="https://www.facebook.com/privacy/policy/">Facebook</a>, <a href="https://vimeo.com/privacy">Vimeo</a>.</p><h2>Photos, testimonies and consent</h2><p>Photos, posters and testimonies on this site are published by the church with the permission of the people shown. If you appear in a photo or video and would like it corrected or removed, contact the privacy contact below and it will be taken down promptly.</p><h2>Reporting content concerns</h2><p>If you believe anything on this site infringes your copyright or any other right, send the web address of the page and a short description to the privacy contact. Every report is reviewed and infringing content is removed promptly.</p><small>This notice describes the software. The church must establish its lawful basis, retention policy and appropriate handling for younger attendees under the Philippine Data Privacy Act.</small></main></html>`);
 });
 app.use((req,res,next)=>{const u=new URL(req.originalUrl,'http://lifegen.invalid');res.locals.immutableStatic=['GET','HEAD'].includes(req.method)&&/^\/(?:lifegen|brand|vendor)\//.test(u.pathname)&&u.searchParams.get('v')===ADMIN_ASSET_VERSION&&/\.(?:css|js|jpe?g|png|webp|svg|woff2?)$/i.test(u.pathname);next();});
 app.use((req,res,next)=>{const marker=`/admin/_assets-${ADMIN_ASSET_VERSION}/`;if(req.url.startsWith(marker)){req.url='/admin/'+req.url.slice(marker.length);res.set('Cache-Control','no-store');}else if(req.path.startsWith('/admin/')&&/\.(?:js|css)$/.test(req.path)){res.set('Cache-Control','no-store');}next();});

@@ -275,6 +275,25 @@ export function confirmDialog({ title, message, confirmText = 'Confirm', danger 
   });
 }
 
+/** Ask for a short text value such as an attendance correction reason. */
+export function promptDialog({ title, message, label = 'Reason', placeholder = '', confirmText = 'Continue', required = true, maxlength = 200 }) {
+  return new Promise((resolve) => {
+    const modal = openModal({
+      title,
+      body: `<div class="stack">${message ? `<p style="font-size:.93rem">${message}</p>` : ''}<div class="field"><label for="promptValue">${esc(label)}</label><input id="promptValue" autocomplete="off" maxlength="${maxlength}" placeholder="${esc(placeholder)}" /></div></div>`,
+      footer: `<button class="btn" data-cancel>Cancel</button><button class="btn btn--primary" data-ok ${required ? 'disabled' : ''}>${esc(confirmText)}</button>`,
+      onClose: () => resolve(null),
+    });
+    const input = modal.querySelector('#promptValue'); const ok = modal.querySelector('[data-ok]');
+    modal.querySelector('[data-cancel]').onclick = () => closeModal();
+    const done = () => { if (required && !input.value.trim()) return; activeModal.onClose = null; closeModal(); resolve(input.value.trim()); };
+    ok.onclick = done;
+    input.oninput = () => { ok.disabled = required && !input.value.trim(); };
+    input.onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); done(); } };
+    setTimeout(() => input.focus(), 30);
+  });
+}
+
 /** Read a <form> into a plain object (trimmed strings). */
 export function formData(form) {
   const out = {};

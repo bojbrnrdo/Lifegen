@@ -39,7 +39,7 @@
         }
         // Facebook (videos, reels, watch, fb.watch short links)
         if (host === "facebook.com" || host === "fb.watch" || host === "web.facebook.com") {
-            return { type: "iframe", provider: "Facebook", src: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(link)}&show_text=false` };
+            return { type: "iframe", provider: "Facebook", src: `https://www.facebook.com/plugins/video.php?height=314&href=${encodeURIComponent(link)}&show_text=false&width=560&t=0` };
         }
         // Google Drive
         if (host === "drive.google.com") {
@@ -82,11 +82,18 @@
         btn.setAttribute("aria-label", "Play video: " + label);
         btn.innerHTML =
             '<span class="vph-play" aria-hidden="true"><i data-lucide="play"></i></span>' +
-            '<span class="vph-text">Tap to play &middot; loads the ' + embed.provider + " player</span>";
+            '<span class="vph-text">Tap to play</span>';
         btn.addEventListener("click", () => {
             const f = document.createElement("iframe");
-            f.src = embed.src + (embed.provider === "Google Drive" ? "" : "&autoplay=1");
+            // Keep Facebook's iframe query identical to its official embed code;
+            // the Facebook player handles its own play control after loading.
+            f.src = embed.src + (["Google Drive", "Facebook"].includes(embed.provider) ? "" : "&autoplay=1");
             f.title = label;
+            if (embed.provider === "Facebook") {
+                f.width = "560"; f.height = "314";
+                f.setAttribute("scrolling", "no");
+                f.setAttribute("frameborder", "0");
+            }
             f.setAttribute("allowfullscreen", "");
             f.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen");
             // YouTube refuses to play embeds when no referrer is sent (the site default is no-referrer).

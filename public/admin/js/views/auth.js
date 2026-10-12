@@ -69,7 +69,7 @@ export function renderSetup(root, onSuccess) {
   root.innerHTML = shell('Welcome to LIFEGEN Admin', 'Create the first administrator for your website', `
     <form id="setupForm" class="stack" novalidate>
       <div class="alert alert--info">Use the private SETUP_KEY you configured on the server. This one-time setup cannot be claimed without that code. Add Staff and Viewer accounts later in Settings.</div>
-      <div id="setupError" class="alert alert--error" hidden></div><div class="field"><label for="setupKey">Private setup code</label><input id="setupKey" name="setup_key" type="password" autocomplete="off" required/><span class="help">SETUP_KEY from the server environment settings — never your Neon database password.</span></div>
+      <div id="setupError" class="alert alert--error" hidden></div><div class="field"><label for="setupKey">Private setup code</label><input id="setupKey" name="setup_key" type="password" autocomplete="off" required/><span class="help">SETUP_KEY from the server environment settings — never your Supabase database password.</span></div>
       <div class="field"><label for="setup_church_name">Church name</label><input id="setup_church_name" name="church_name" value="Lifegiver Church of Faith" /></div>
       <div class="field"><label for="setup_display_name">Your name <span class="req">*</span></label><input id="setup_display_name" name="display_name" placeholder="e.g. Pastor Juan" required /></div>
       <div class="field"><label for="setup_username">Username <span class="req">*</span></label><input id="setup_username" name="username" autocomplete="username" placeholder="e.g. admin" required /><span class="help">3–32 characters: letters, numbers, dots, dashes or underscores.</span></div>

@@ -1,4 +1,4 @@
-// All records live on the shared server / Neon database. No localStorage data engine.
+// All records live in Supabase PostgreSQL through the server API. No browser database engine.
 let csrf=null;
 let previewSessionToken=null; // Kept only in memory for sandboxed non-production previews; never local/session storage.
 let stopSync=null;
@@ -20,11 +20,12 @@ export const api={
  logout:async()=>{try{await request('/api/auth/logout',{method:'POST',body:{}});}finally{csrf=null;previewSessionToken=null;stopSync?.();}},
  clearPreviewSession:()=>{previewSessionToken=null;csrf=null;},
 changePassword:(current,next)=>request('/api/auth/password',{method:'POST',body:{current,next}}),
- backup:async()=>{const r=await request('/api/backup',{blob:true});downloadBlob(r.blob,r.filename||'lifegen-neon-backup.json');},
+ backup:async()=>{const r=await request('/api/backup',{blob:true});downloadBlob(r.blob,r.filename||'lifegen-supabase-backup.json');},
  blob:async url=>(await request(url,{blob:true})).blob,
 };
-const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','dashboard','search','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','lifegroupOutcomes','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent'];
+const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','dashboard','search','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent','services','serviceByDate','service','serviceAudit','openService','mark','undoMark','updateService','reportYears','reportSummary','lifegroupOverview','lifegroups','lifegroupOptions','lifegroupNeeds','lifegroupRecommend','lifegroup','lifegroupProgress','progressOverview','networkCalendar','networks','network','createLifegroup','updateLifegroup','deleteLifegroup','assignLifegroup','leaveLifegroup','setTier','createNetwork','updateNetwork','deleteNetwork','ensureNetworkLeaderGroup','saveMeeting','deleteMeeting'];
 for(const method of methods)api[method]=(...args)=>call(method,...args);
+if(typeof window!=='undefined')window.__lgDownload=async url=>{const r=await request(url,{blob:true});downloadBlob(r.blob,r.filename);};
 export function startLiveUpdates(){
  stopSync?.();let stopped=false,source,lastRevision=null,pollTimer,reconcileTimer;
  const state=s=>window.dispatchEvent(new CustomEvent('sync:state',{detail:{state:s}}));

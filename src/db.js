@@ -11,7 +11,7 @@ const DELETE_ORDER=['records','audit','services','people'];
 let pool;
 const columnCache=new Map();
 export function connectionOptions(connectionString) {
- if(!connectionString) throw httpError(503,'Database not configured. Set DATABASE_URL on the server and run the schema migration.');
+ if(!connectionString) throw httpError(503,'Supabase PostgreSQL is not configured. Set the private DATABASE_URL on the server and apply the database SQL migrations.');
  const u=new URL(connectionString); const local=['localhost','127.0.0.1','::1'].includes(u.hostname);
  if(!['postgres:','postgresql:'].includes(u.protocol)) throw new Error('DATABASE_URL must be PostgreSQL.');
  u.searchParams.delete('sslmode'); u.searchParams.delete('channel_binding');
@@ -20,7 +20,7 @@ export function connectionOptions(connectionString) {
 export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),max:3,idleTimeoutMillis:10000,allowExitOnIdle:true}); }
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
- if(url && new URL(url).hostname.includes('-pooler')) throw httpError(503,'Push updates need DATABASE_DIRECT_URL. Automatic refresh will continue instead.');
+ if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}
  return new Client(connectionOptions(url));
 }
 export const query=(text,params=[])=>getPool().query(text,params);
@@ -144,6 +144,6 @@ export async function allocateId(client,entity) {const {rows}=await client.query
 export async function databaseBackup(client) {
  const state=await loadState(client,{includeAudit:true,includeVipRegistrations:true});
  for(const t of ['vip_registrations','vip_checkins','community_posts','monthly_prizes','prayer_reactions','audit_log']) state[t]=(await client.query(`SELECT * FROM "${t}"`)).rows;
- return {app:'LifegenTracker',source:'neon',database_instance:state.settings.__database_instance,exported_at:new Date().toISOString(),...state};
+ return {app:'LifegenTracker',source:'supabase-postgresql',database_instance:state.settings.__database_instance,exported_at:new Date().toISOString(),...state};
 }
 export const closePool=async()=>{if(pool){await pool.end();pool=null;}};

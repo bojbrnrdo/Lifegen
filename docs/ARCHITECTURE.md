@@ -1,70 +1,51 @@
-# Single-site implementation reference
+# LIFEGEN architecture and ZIP review
+
+## Supplied ZIP vs. repository
+
+The supplied `google_drive/lifegentracker-update (9).zip` is a separate CommonJS Express tracker application. Its database adapter supports SQLite/libSQL/PostgreSQL behind a SQLite-compatible API and its route/schema names differ from this repository. It is not a drop-in source bundle for the current application.
+
+This repository is an ES-module Express app with normalized PostgreSQL tables and a same-origin public/Admin frontend. Tracker screens were adapted into its Admin routes and use its authenticated `/api/tracker/:method` API. Tracker persistence is implemented against this repository's schema in `src/lifegroups.js` and `database/006_lifegroup_tracker.sql`; the ZIP's database adapter, SQL migrations, and standalone routes are not copied into runtime. This avoids running two web apps or maintaining two databases.
+
+The current app uses Supabase PostgreSQL by supplying private `DATABASE_URL` and `DATABASE_DIRECT_URL` server settings. The temporary workspace preview uses local demo PostgreSQL only. It does not establish a connection to the church's Supabase project.
 
 ## Server modules
 
-- `src/app.js`: Express entry point, security headers, auth/API routes, explicit tracker operation permissions and public/Admin page routing.
-- `src/db.js`: TLS PostgreSQL connections, pooled API traffic, direct clients, consistent read snapshots, serialized transactional writes, normalized table persistence and named audit logs.
-- `src/domain.js`: adapted tracker business logic; person/attendance/group/network/report rules now execute inside server database transactions, not localStorage.
-- `src/auth.js`: scrypt password hashing, hashed session identifiers, HttpOnly cookies, CSRF/origin checks, shared rate limits, roles and server-side Viewer redaction.
-- `src/public-api.js`: atomic VIP signup/person creation, owned portal and recovery, Manila Sunday check-in, prayer/reaction persistence, monthly prize and calendar file.
-- `src/events.js`: dedicated direct `LISTEN`, finite SSE streams, heartbeat/reconnect and durable revision.
-- `src/migration.js`: tracker/Supabase/Neon backup validation, dry-run rollback, stable source mappings, merge-only import and application backup.
+- `src/app.js`: Express entry point, security headers, public/Admin page routing, API dispatch and explicit permission checks for People, attendance, registrations, Lifegroups, Networks and meetings.
+- `src/db.js`: PostgreSQL/TLS pool for application calls, separate direct/session-pooler client for migrations and `LISTEN`, transaction wrapper, data serialization and backups.
+- `src/domain.js`: People and Sunday attendance business rules, including VIP-linked status promotion after five distinct verified Sundays.
+- `src/lifegroups.js`: PostgreSQL read/write operations for the tracker: Networks, Lifegroups, membership history, VIP-needs queue, meeting attendance, progress and validation.
+- `src/auth.js`: scrypt password hashing, hashed session identifiers, HttpOnly cookies, CSRF/origin checks, roles and server-side Viewer redaction.
+- `src/public-api.js`: public VIP registration, portal/recovery, Sunday check-in, prayer/reaction persistence and public calendar endpoints.
+- `src/events.js`: persistent PostgreSQL `LISTEN`, finite SSE streams and reconnect/fallback support.
+- `src/migration.js`: application backup export; it does not automatically import the supplied ZIP's database or legacy records.
+- `database/001_init.sql` through `database/006_lifegroup_tracker.sql`: versioned PostgreSQL schema migrations. See [`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) for the execution order and Supabase configuration.
 
-## Frontends
+## Frontends and routes
 
-- `public/lifegen/`: public site extracted from the supplied live page, with Supabase browser transport replaced by same-origin server API calls.
-- `public/admin/`: uploaded tracker UI extracted to modules; browser-local data engine replaced by authenticated server API calls.
-- `public/vendor/lucide.min.js`: pinned vendored icon library.
+- `public/lifegen/`: public site, VIP signup/portal and click-to-load media embeds.
+- `public/admin/`: authenticated Admin portal.
+- `public/admin/js/views/lifegroups.js` and `progress.js`: separate Lifegroup Tracker section, Network pages and weekly progress views.
 
-The single Express application serves the public root `/` and the Admin workspace `/admin`. The tracker is directly integrated as the staff workspace, not embedded in an iframe. Both frontends use relative `/api` requests to the same application and one Neon PostgreSQL database. Admin navigation uses `/admin`; public/QR origins are inferred from the incoming request, with optional `SITE_URL` only for proxies that cannot supply the correct origin. Obsolete two-deployment environment variables are ignored.
+One Express application serves `/` and `/admin`. Both frontends call same-origin relative API URLs; there is no tracker iframe and no direct browser-to-database connection. The Admin has `#/lifegroups`, `#/lifegroups/:id`, and `#/networks/:id` routes. `lifegroups:view` and `lifegroups:manage` permissions gate the views and writes.
 
-`vercel.json` explicitly selects the Express framework and automatic output directory. The deployment project root must contain `package.json`, `vercel.json` and `src/app.js`; the Vercel deployment ZIP puts these at the archive root. No static-site `public`/`dist` output override should be used.
+## VIP registration flow
 
-Vercel's build command runs the syntax/security check and the versioned schema initializer. The initializer creates empty tables if needed; it neither imports old data nor deletes business records. One private `SETUP_KEY` authorizes the initial admin-account form. Further account management is signed-in Admin-only. Fresh mode defaults to rejecting legacy device-token restore while permitting a new signup.
+1. Validate same-origin, consent, rate limit, form details and idempotency key.
+2. In one database transaction, create the linked `people` record, `vip_registrations` row and secure portal session.
+3. The tracker needs queue joins unassigned active people against `vip_registrations`, prioritizes VIPs and marks each linked VIP visibly.
+4. When assigned, a VIP leaves the unassigned queue but remains marked in the group roster and meeting progress.
+5. Attendance reports create/update a group meeting and present/absent/devotion marks for its current roster.
 
-## Registration transaction
+The dedicated one-month VIP outcome/export flow and its migration side effects are retired. Existing legacy outcome columns, if already present, are not destructively dropped. The ordinary VIP portal's monthly prize progress is separate and remains available; it does not assign a group.
 
-1. Verify same-origin request, rate limit, consent, input and idempotency key.
-2. Check owned VIP session / prior completed request.
-3. Begin transaction and acquire the shared advisory write lock.
-4. Create normalized person with original full name, age, school, inviter and optional contact.
-5. Insert linked VIP registration and hashed recovery secret; create owned portal session.
-6. Flush person/counter/audit changes, validate deferred references and commit.
-7. PostgreSQL triggers append durable event revisions and notify after commit.
-8. Tracker refreshes affected views; fallback polling covers missing/disconnected streams.
+## PostgreSQL and Supabase safety
 
-The ID returned to the guest is not authorization. Portal ownership requires a valid HttpOnly session cookie; check-in also requires its CSRF token. Guest-supplied person/date overrides are not used to choose attendance identity or Sunday.
+- Supabase URLs are read only by the server; no Supabase keys or PostgreSQL URLs are shipped in browser assets.
+- `DATABASE_URL` supports the application pooler; `DATABASE_DIRECT_URL` must be the direct host or Supabase session pooler on port `5432`, because schema migration and long-lived notifications need a session.
+- Tracker/app tables use server-side access. Migration `006` enables row-level security and revokes `PUBLIC`, `anon`, and `authenticated` table privileges on LIFEGEN tables only. It does not change unrelated public-schema tables.
+- `003`, `004`, and `005` have been converted to non-destructive no-op migration markers so they cannot drop the tracker or recreate the one-month outcome export.
+- `database/001_init.sql` also limits its access revocation to LIFEGEN tables.
 
-## Attendance
+## Verification boundaries
 
-Guest check-in creates a pending request, not attendance. Authorized staff validation records presence for the linked person and Sunday. Staff-entered presence also appears in that person's monthly portal. Repeated entries are limited by database uniqueness and merged by distinct dates. VIP rewards count all distinct verified Sundays in the current Manila calendar month, not lifetime totals. After five distinct Sundays are recorded present, a linked VIP profile's status is promoted to `member`; the promotion is sticky and does not create a Lifegroup membership. Migration 002 applies the same rule to existing records. Reversing a VIP validation removes a VIP-origin mark only when that specific check-in created it; unrelated staff attendance is not blindly removed.
-
-## Persistence and backup
-
-Business data is normalized across PostgreSQL tables. `extras` retains compatible legacy fields that are not first-class columns; sensitive legacy credential/token keys are removed from imported raw records. Stable import mappings retain legacy IDs. Browser storage is limited to unfinished UI drafts, request retry state and the temporary old-device migration bridge, not membership/attendance databases.
-
-Application backups omit staff credentials and active sessions. They include business records, shared prayer reactions, named audit history and source mappings. Merge-import of an application backup is not a destructive restore command. A generated database-instance identifier prevents same-database merges from treating all existing IDs as new.
-
-## Permissions
-
-| Role | Access |
-|---|---|
-| Admin | Full profiles, attendance, groups, VIP review, reports/CSV, settings, imports/backups, user management and moderation |
-| Attendance Staff | Full profiles, attendance, groups, VIP review and reports/CSV; no admin imports, backups or account/settings management |
-| Viewer / Leader | Names and attendance/group/report views; private person/contact fields removed server-side, writes/CSV/backups rejected |
-
-Viewer access is not limited to a single assigned group. Admin/staff accounts must be given only to authorized church personnel. Local demo credentials and iframe-cookie exceptions are explicitly gated to a labelled development preview. Production uses secure SameSite Lax cookies and same-origin protections.
-
-## Fresh-start default
-
-For the current launch, no old records are imported. `LEGACY_VIP_RESTORE=false` is the default in both deployments. The frontend does not attempt old-device restoration or block signup on an unimported old token. The old browser identity is left untouched; the new portal depends only on its new server session/recovery code. Set the flag to true only if legacy records are deliberately imported later and old-token recovery is wanted.
-
-## Limitations / rollout boundaries
-
-- No actual source repository, exports, Neon account credentials or deployment access were provided. Original deployments are unchanged.
-- Original Supabase/standalone passwords are not transferable to the new scrypt staff-account store.
-- Same-source imports insert previously unmapped rows; they do not overwrite already mapped source rows. Final migration requires a write pause and final exports, preferably into a clean production target after staging verification.
-- Profile edits do not rewrite the historical signup's captured age/school/inviter.
-- Initial tracker calculations load consistent church-scale table snapshots. Larger deployments need measured load tests and incremental query optimization.
-- Vercel/Neon live deployment and platform quotas must be verified during staging; local PostgreSQL tests are not production deployment proof.
-- A privacy notice, role checks and password hashing are not a full compliance or penetration-test certification.
+Automated checks and a local HTTP/database integration test exercise a disposable local PostgreSQL database. They do not connect to or verify a live Supabase project. A successful build is not evidence of a Vercel deployment. See [`VERIFICATION.md`](VERIFICATION.md) for the checks run for this revision and the required limits.

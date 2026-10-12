@@ -10,6 +10,25 @@ const MAX_ZIP=5*1024*1024,MAX_FILES=180,MAX_EXPANDED=12*1024*1024;
 const TTL=30*60*1000;
 const sha=data=>crypto.createHash('sha256').update(data).digest('hex');
 const idOk=s=>typeof s==='string'&&/^[a-zA-Z0-9_-]{1,160}$/.test(s);
+function supabaseEndpoint(url){
+ const directRef=url.hostname.toLowerCase().match(/^db\.([a-z0-9]+)\.supabase\.co$/)?.[1];
+ if(directRef)return {projectRef:directRef,mode:'direct'};
+ if(!url.hostname.toLowerCase().endsWith('.pooler.supabase.com'))return null;
+ const poolRef=url.username.toLowerCase().match(/^postgres\.([a-z0-9]+)$/)?.[1];
+ const port=url.port||'5432';
+ if(!poolRef||!['5432','6543'].includes(port))return null;
+ return {projectRef:poolRef,mode:port==='6543'?'transaction-pooler':'session-pooler'};
+}
+export function validateSupabaseDatabaseUrls(databaseUrl,directUrl){
+ if(!databaseUrl||!directUrl)throw httpError(503,'Set both private Supabase PostgreSQL connection URLs on the server.');
+ let app,direct;try{app=new URL(databaseUrl);direct=new URL(directUrl);}catch{throw httpError(503,'The Supabase PostgreSQL connection URL is invalid.');}
+ if(!['postgres:','postgresql:'].includes(app.protocol)||!['postgres:','postgresql:'].includes(direct.protocol))throw httpError(503,'Use PostgreSQL connection URLs from Supabase.');
+ const appEndpoint=supabaseEndpoint(app),directEndpoint=supabaseEndpoint(direct);
+ if(!appEndpoint)throw httpError(503,'DATABASE_URL must use a Supabase PostgreSQL connection URL.');
+ if(!directEndpoint||directEndpoint.mode==='transaction-pooler')throw httpError(503,'DATABASE_DIRECT_URL must use the Supabase direct host or session pooler on port 5432; transaction pooling is not suitable for migrations/live updates.');
+ if(appEndpoint.projectRef!==directEndpoint.projectRef||app.pathname!==direct.pathname)throw httpError(503,'Use the app connection URL and direct URL for the same Supabase project and database.');
+ return true;
+}
 export const DEPLOY_SETTINGS={framework:'express',installCommand:'npm ci',buildCommand:'npm run build && npm run db:migrate',outputDirectory:null,rootDirectory:null,nodeVersion:'22.x'};
 export const deploymentHelperEnabled=()=>process.env.ENABLE_DEPLOY_HELPER==='true'&&!process.env.VERCEL;
 
@@ -100,9 +119,7 @@ export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipP
    if(!project||!idOk(project_id))throw httpError(400,'Choose a project from your connected account/team.');
    if(confirm!==true)throw httpError(400,'Confirm that you want to publish to the selected existing project.');
    if(!s.archive||s.archive.hash!==archive_hash)throw httpError(409,'Choose and validate your ZIP again.');
-   const env=config();if(!env.DATABASE_URL||!env.DATABASE_DIRECT_URL)throw httpError(503,'The private Neon connection is not available on this server.');
-   const db=new URL(env.DATABASE_URL),direct=new URL(env.DATABASE_DIRECT_URL);
-   if(!db.hostname.endsWith('.neon.tech')||!direct.hostname.endsWith('.neon.tech')||db.pathname!==direct.pathname)throw httpError(503,'Use the pooled and direct URLs for the same Neon database.');
+   const env=config();validateSupabaseDatabaseUrls(env.DATABASE_URL,env.DATABASE_DIRECT_URL);
    const projectScope=s.scope||(project.account_id?.startsWith('team_')?project.account_id:'');
    s.busy=true;
    try{
