@@ -125,24 +125,42 @@
         card.addEventListener("click", () => openLightbox(index));
     });
 
-    // ---- Stacked-poster scroll effect (pinned cards) --------------------
-    // Cards are sticky-pinned via CSS; this adds depth — the covered card
-    // gently scales down and dims as the next poster slides over it.
+    // ---- Stacked-poster scroll effect (sideways entry) ------------------
+    // Each poster pins in place; the next one slides in FROM THE RIGHT over
+    // it as you scroll, then the covered poster shrinks and dims for depth.
     (function () {
         const deck = document.getElementById("photoDeck");
-        if (!deck) return;
+        const wrap = deck ? deck.closest(".deck-wrap") : null;
+        if (!deck || !wrap) return;
         const cards = Array.from(deck.querySelectorAll(".deck-card"));
         if (cards.length < 2) return;
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const stickyTop = () => {
+            const vh = window.innerHeight || 1;
+            return Math.min(Math.max(76, vh * 0.1), 120);
+        };
         function fx() {
-            for (let i = 0; i < cards.length - 1; i++) {
-                if (reduced.matches) { cards[i].style.transform = ""; cards[i].style.filter = ""; continue; }
-                const r = cards[i + 1].getBoundingClientRect();
-                const vh = window.innerHeight || 1;
-                const p = Math.min(1, Math.max(0, 1 - (r.top - 90) / (vh * 0.85)));
-                cards[i].style.transform = "scale(" + (1 - p * 0.06).toFixed(4) + ")";
-                cards[i].style.filter = "brightness(" + (1 - p * 0.28).toFixed(3) + ")";
+            if (reduced.matches) {
+                cards.forEach((c) => { c.style.transform = ""; c.style.filter = ""; });
+                return;
             }
+            const vh = window.innerHeight || 1;
+            const st = stickyTop();
+            const wr = wrap.getBoundingClientRect();
+            const entry = cards.map((c, k) => {
+                if (k === 0) return 1;
+                const nat = wr.top + c.offsetTop;           // untransformed top
+                return Math.min(1, Math.max(0, (st + vh - nat) / vh));
+            });
+            cards.forEach((c, k) => {
+                const p = entry[k];
+                const x = (1 - p) * (c.offsetWidth + 90);   // slide in from right
+                const y = k === 0 ? 0 : Math.max(0, (wr.top + c.offsetTop) - st); // stay on the pin row
+                const q = k < cards.length - 1 ? entry[k + 1] : 0; // covered by next
+                const sc = 1 - q * 0.06;
+                c.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) scale(" + sc.toFixed(4) + ")";
+                c.style.filter = q > 0 ? "brightness(" + (1 - q * 0.28).toFixed(3) + ")" : "";
+            });
         }
         let tick = false;
         window.addEventListener("scroll", () => {
