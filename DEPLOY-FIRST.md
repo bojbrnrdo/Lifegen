@@ -10,13 +10,16 @@ Use the dedicated LIFEGEN Supabase project when available. Back it up first. Run
 
 For a Vercel deployment, the project root must contain `package.json`, `vercel.json`, `src/`, `public/`, `database/` and `scripts/`. Use these server-side environment variables:
 
-- `DATABASE_URL` — Supabase Transaction Pooler connection URL (typically port `6543`).
-- `DATABASE_DIRECT_URL` — Supabase direct database URL, or Session Pooler URL on port `5432` (not the transaction pooler).
+- `DATABASE_URL` — Supabase pooler connection URL (Session Pooler on port `5432`, or Transaction Pooler on `6543`).
+- `DATABASE_DIRECT_URL` — Supabase direct database URL when this host can reach it, otherwise the Session Pooler URL on port `5432` (not the transaction pooler). The direct `db.<project-ref>.supabase.co` host is IPv6-only on many projects, so Vercel commonly reports `ENETUNREACH` for it; the pooler host is IPv4-reachable.
+- `DATABASE_SSL_ROOT_CERT` — optional. The Supabase project CA in PEM form, used only when the deployment reports `self-signed certificate in certificate chain`. Certificate verification stays enabled; LIFEGEN adds this CA to Node's system root certificates.
 - `SETUP_KEY` — private random setup code of 32+ characters; needed only until the first Admin is created.
 
-The two database URLs must point to the same Supabase project and database. Never put them in public/build-time browser variables. See the SQL guide for how to locate the URLs and an IPv4/session-pooler alternative.
+The two database URLs must point to the same Supabase project and database. Never put them in public/build-time browser variables, and never set `NODE_TLS_REJECT_UNAUTHORIZED=0`. See the SQL guide for how to locate the URLs, download the project certificate, and use the session-pooler alternative.
 
-Vercel should use the **Express** framework preset, no output-directory override, and the repository's configured build command `npm run build && npm run db:migrate`. Redeploy after adding environment variables. The publishing helper, if used, validates the Supabase URL pair before sending these variables to the selected Vercel project.
+Vercel should use the **Express** framework preset, no output-directory override, and the repository's configured build command `npm run build && npm run db:migrate`. Redeploy after adding environment variables. The publishing helper, if used, validates the Supabase URL pair before sending these variables to the selected Vercel project, and passes `DATABASE_SSL_ROOT_CERT` along as a sensitive value when it is set here.
+
+The build log tells you which TLS trust store `npm run db:migrate` used, for example `TLS: certificate verification is enabled with the system root certificates (no DATABASE_SSL_ROOT_CERT set).`, and it prints an actionable hint when a connection fails with an untrusted certificate chain or an unreachable host.
 
 ## 3. Create the first Admin and verify
 

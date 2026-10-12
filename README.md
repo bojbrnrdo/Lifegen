@@ -23,10 +23,11 @@ Follow [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) for the exact SQL Edit
 
 The SQL files are under `database/`. For a fresh LIFEGEN schema, run them in order from `001_init.sql` through `006_lifegroup_tracker.sql`; `003`, `004`, and `005` are retained retired no-op migration markers. For an existing LIFEGEN deployment with migrations `001`–`005` already applied, back up first and run the additive `006_lifegroup_tracker.sql` migration to restore the tracker tables.
 
-Connection variables are private server settings:
+Connection variables are private server settings (see [`.env.example`](.env.example)):
 
-- `DATABASE_URL`: Supabase transaction-pooler URL for regular server traffic.
-- `DATABASE_DIRECT_URL`: Supabase direct URL, or session-pooler URL on port `5432`, for migrations and PostgreSQL live notifications. Do not use transaction pooling for this variable.
+- `DATABASE_URL`: Supabase pooler URL for regular server traffic (Session Pooler on port `5432` or Transaction Pooler on `6543`).
+- `DATABASE_DIRECT_URL`: Supabase direct URL, or session-pooler URL on port `5432`, for migrations and PostgreSQL live notifications. Do not use transaction pooling for this variable. The direct `db.<project-ref>.supabase.co` host is IPv6-only on many projects, so IPv4-only hosts such as Vercel need the session pooler.
+- `DATABASE_SSL_ROOT_CERT`: optional Supabase project CA in PEM form, used when a host reports `self-signed certificate in certificate chain`. Certificate verification stays enabled — the CA is added to Node's system root certificates. Never disable verification instead.
 - `SETUP_KEY`: temporary private code for first-admin setup; remove it after the account is created.
 
 The runtime migration command is `npm run db:migrate`. Migrations are versioned and skip versions already recorded in `schema_migrations`. Do not run demo seed scripts against production.

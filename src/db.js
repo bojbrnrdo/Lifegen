@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import fs from 'node:fs';
+import tls from 'node:tls';
 import pg from 'pg';
 import { domain, domainContext, DEFAULT_SETTINGS, httpError } from './domain.js';
 const { Pool, Client, types } = pg;
@@ -10,12 +12,57 @@ const TABLES=['people','services','records','audit'];
 const DELETE_ORDER=['records','audit','services','people'];
 let pool;
 const columnCache=new Map();
-export function connectionOptions(connectionString) {
+// Supabase database endpoints can present a project-minted CA chain that a hosting build
+// machine (Vercel) does not carry in its root store, which surfaces as the PostgreSQL
+// error "self-signed certificate in certificate chain". The optional private
+// DATABASE_SSL_ROOT_CERT holds that Supabase project CA as PEM on the server only.
+// Certificate verification is never turned off: Node's bundled Mozilla root certificates
+// stay in the trust store and the project CA is added to them.
+const CERTIFICATE_HEADER='-----BEGIN CERTIFICATE-----', CERTIFICATE_FOOTER='-----END CERTIFICATE-----';
+export function supabaseRootCertificate(value=process.env.DATABASE_SSL_ROOT_CERT) {
+ if(value===undefined||value===null) return null;
+ const text=String(value).trim();
+ if(!text) return null;
+ // Values pasted into a hosting dashboard or CLI often arrive as one line with escaped \n.
+ const pem=text.replace(/\\r\\n|\\n/g,'\n').replace(/\r\n?/g,'\n');
+ if(!pem.includes(CERTIFICATE_HEADER)||!pem.includes(CERTIFICATE_FOOTER)) throw httpError(503,'DATABASE_SSL_ROOT_CERT must be the PEM-encoded Supabase project CA certificate (BEGIN/END CERTIFICATE lines). Set it as a private server variable only.');
+ return pem;
+}
+let extraRootsWarned=false;
+// An explicit `ca` list replaces Node's default trust store, which is where Node would have
+// added NODE_EXTRA_CA_CERTS. Read that file here as well so an existing workaround for a
+// private CA keeps working.
+export function extraRootCertificates(file=process.env.NODE_EXTRA_CA_CERTS) {
+ if(!file) return [];
+ try{return [fs.readFileSync(file,'utf8')];}
+ catch(e){if(!extraRootsWarned){extraRootsWarned=true;process.emitWarning(`Ignoring NODE_EXTRA_CA_CERTS: ${e.message}`);}return [];}
+}
+export function databaseTrustStore({rootCert,systemRoots=tls.rootCertificates,extraRoots}={}) {
+ const projectCa=supabaseRootCertificate(rootCert===undefined?process.env.DATABASE_SSL_ROOT_CERT:rootCert);
+ return [projectCa,...systemRoots,...(extraRoots===undefined?extraRootCertificates():extraRoots)].filter(Boolean);
+}
+export function databaseSslOptions({local=false,rootCert,systemRoots=tls.rootCertificates,extraRoots}={}) {
+ if(local) return false;
+ return {rejectUnauthorized:true,ca:databaseTrustStore({rootCert,systemRoots,extraRoots})};
+}
+export function connectionOptions(connectionString,{rootCert,extraRoots}={}) {
  if(!connectionString) throw httpError(503,'Supabase PostgreSQL is not configured. Set the private DATABASE_URL on the server and apply the database SQL migrations.');
- const u=new URL(connectionString); const local=['localhost','127.0.0.1','::1'].includes(u.hostname);
+ const u=new URL(connectionString); const host=u.hostname.replace(/^\[(.*)\]$/,'$1').toLowerCase(); const local=['localhost','127.0.0.1','::1'].includes(host);
  if(!['postgres:','postgresql:'].includes(u.protocol)) throw new Error('DATABASE_URL must be PostgreSQL.');
- u.searchParams.delete('sslmode'); u.searchParams.delete('channel_binding');
- return {connectionString:u.toString(),ssl:local?false:{rejectUnauthorized:true},connectionTimeoutMillis:15000,enableChannelBinding:!local};
+ // TLS is decided here, not by the connection string: only an explicit sslmode=disable (or
+ // ssl=false) asks for plaintext. Every other value, including sslmode=require, keeps
+ // verification of the server certificate chain.
+ const plaintext=['disable','false','0'].includes(String(u.searchParams.get('sslmode')||u.searchParams.get('ssl')||'').trim().toLowerCase());
+ u.searchParams.delete('sslmode'); u.searchParams.delete('ssl'); u.searchParams.delete('channel_binding');
+ return {connectionString:u.toString(),ssl:local||plaintext?false:databaseSslOptions({rootCert,extraRoots}),connectionTimeoutMillis:15000,enableChannelBinding:!local&&!plaintext};
+}
+// Actionable, credential-free hints for the two failures that hide behind a generic
+// PostgreSQL error: an untrusted certificate chain and an unreachable IPv6-only host.
+export function connectionHint(error) {
+ const text=`${error?.code||''} ${error?.message||''}`.toLowerCase();
+ if(/self[-_ ]?signed|unable_to_verify_leaf|certificate_verify_failed|unable to verify the first certificate/.test(text)) return 'TLS trust: set the private DATABASE_SSL_ROOT_CERT variable to the Supabase project CA certificate (Supabase dashboard → Project Settings → Database → SSL configuration) and redeploy. Certificate verification must stay enabled.';
+ if(/enetunreach|ehostunreach|eai_again|getaddrinfo/.test(text)) return 'Network: this runtime cannot reach the database host, which is often the IPv6-only direct Supabase host. Use the Supabase Session Pooler URL on port 5432 for DATABASE_DIRECT_URL and the pooler URL for DATABASE_URL.';
+ return null;
 }
 export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),max:3,idleTimeoutMillis:10000,allowExitOnIdle:true}); }
 export function directClient() {

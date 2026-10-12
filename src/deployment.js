@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import {unzipSync,strFromU8} from 'fflate';
 import {checkOrigin,checkCsrf,requireStaff,requirePermission} from './auth.js';
 import {httpError} from './domain.js';
+import {supabaseRootCertificate} from './db.js';
 
 const MAX_ZIP=5*1024*1024,MAX_FILES=180,MAX_EXPANDED=12*1024*1024;
 const TTL=30*60*1000;
@@ -28,6 +29,21 @@ export function validateSupabaseDatabaseUrls(databaseUrl,directUrl){
  if(!directEndpoint||directEndpoint.mode==='transaction-pooler')throw httpError(503,'DATABASE_DIRECT_URL must use the Supabase direct host or session pooler on port 5432; transaction pooling is not suitable for migrations/live updates.');
  if(appEndpoint.projectRef!==directEndpoint.projectRef||app.pathname!==direct.pathname)throw httpError(503,'Use the app connection URL and direct URL for the same Supabase project and database.');
  return true;
+}
+// The private server settings that are copied to the selected Vercel project. The Supabase
+// project CA travels with them only when it is configured here, so a host that reports
+// "self-signed certificate in certificate chain" builds and connects without ever turning
+// certificate verification off. Values are never returned to the browser.
+export function supabaseDeploymentVariables(env=process.env){
+ validateSupabaseDatabaseUrls(env.DATABASE_URL,env.DATABASE_DIRECT_URL);
+ const rootCert=supabaseRootCertificate(env.DATABASE_SSL_ROOT_CERT);
+ return [
+  ['DATABASE_URL',env.DATABASE_URL],
+  ['DATABASE_DIRECT_URL',env.DATABASE_DIRECT_URL],
+  ...(rootCert?[['DATABASE_SSL_ROOT_CERT',rootCert]]:[]),
+  ...(env.SETUP_KEY?[['SETUP_KEY',env.SETUP_KEY]]:[]),
+  ['LOCAL_DEMO','false'],['HOSTED_PREVIEW','false'],['ENABLE_DEPLOY_HELPER','false'],['LEGACY_VIP_RESTORE','false'],['SITE_URL','']
+ ].map(([key,value])=>({key,value,type:['DATABASE_URL','DATABASE_DIRECT_URL','DATABASE_SSL_ROOT_CERT','SETUP_KEY'].includes(key)?'sensitive':'plain',target:['production','preview']}));
 }
 export const DEPLOY_SETTINGS={framework:'express',installCommand:'npm ci',buildCommand:'npm run build && npm run db:migrate',outputDirectory:null,rootDirectory:null,nodeVersion:'22.x'};
 export const deploymentHelperEnabled=()=>process.env.ENABLE_DEPLOY_HELPER==='true'&&!process.env.VERCEL;
@@ -69,7 +85,7 @@ export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipP
  const sessions=new Map();
  const scrub=(text,session)=>{
   let value=String(text||'');
-  for(const secret of [session?.token,config().DATABASE_URL,config().DATABASE_DIRECT_URL,config().SETUP_KEY])if(secret)value=value.split(secret).join('[redacted]');
+  for(const secret of [session?.token,config().DATABASE_URL,config().DATABASE_DIRECT_URL,config().DATABASE_SSL_ROOT_CERT,config().SETUP_KEY])if(secret)value=value.split(secret).join('[redacted]');
   return value.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi,'[private database URL]').replace(/npg_[a-zA-Z0-9]+/g,'[redacted]').slice(0,14000);
  };
  const get=key=>{const s=sessions.get(key);if(!s||now()-s.lastUsed>TTL){sessions.delete(key);throw httpError(409,'Your publishing connection expired. Connect Vercel again.');}s.lastUsed=now();return s;};
@@ -119,12 +135,12 @@ export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipP
    if(!project||!idOk(project_id))throw httpError(400,'Choose a project from your connected account/team.');
    if(confirm!==true)throw httpError(400,'Confirm that you want to publish to the selected existing project.');
    if(!s.archive||s.archive.hash!==archive_hash)throw httpError(409,'Choose and validate your ZIP again.');
-   const env=config();validateSupabaseDatabaseUrls(env.DATABASE_URL,env.DATABASE_DIRECT_URL);
+   // Validates the connection URLs and the optional Supabase project CA before anything is sent.
+   const variables=supabaseDeploymentVariables(config());
    const projectScope=s.scope||(project.account_id?.startsWith('team_')?project.account_id:'');
    s.busy=true;
    try{
     // Never return the environment API response; it can contain sensitive values.
-    const variables=[['DATABASE_URL',env.DATABASE_URL],['DATABASE_DIRECT_URL',env.DATABASE_DIRECT_URL],...(env.SETUP_KEY?[['SETUP_KEY',env.SETUP_KEY]]:[]),['LOCAL_DEMO','false'],['HOSTED_PREVIEW','false'],['ENABLE_DEPLOY_HELPER','false'],['LEGACY_VIP_RESTORE','false'],['SITE_URL','']].map(([key,value])=>({key,value,type:['DATABASE_URL','DATABASE_DIRECT_URL','SETUP_KEY'].includes(key)?'sensitive':'plain',target:['production','preview']}));
     const saved=await api(s,'/v10/projects/'+encodeURIComponent(project.id)+'/env',{method:'POST',scope:projectScope,params:{upsert:'true'},body:variables});
     if(saved.failed?.length)throw httpError(502,'Vercel could not save all environment settings. No deployment was started. Check token permissions.');
     const deployment=await api(s,'/v13/deployments',{method:'POST',scope:projectScope,params:{forceNew:1,skipAutoDetectionConfirmation:1},body:{name:project.name,project:project.id,target:'production',files:s.archive.files,projectSettings:{...DEPLOY_SETTINGS,skipGitConnectDuringLink:true},meta:{lifegen_release:s.archive.version,lifegen_archive_sha256:s.archive.hash}}});
