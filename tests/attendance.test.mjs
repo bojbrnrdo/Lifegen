@@ -18,3 +18,10 @@ test('attendance report custom ranges reject impossible dates and reversed bound
   assert.throws(() => resolveReportRange({ from: '2026-02-30', to: '2026-03-01' }), /valid report date range/i);
   assert.throws(() => resolveReportRange({ from: '2026-10-12', to: '2026-10-11' }), /valid report date range/i);
 });
+
+test('attendance reports reject array and object values for scalar query filters', () => {
+  assert.throws(() => resolveReportRange({ from: ['2026-10-11'] }), /invalid report start date/i);
+  assert.throws(() => resolveReportRange({ to: { date: '2026-10-11' } }), /invalid report end date/i);
+  assert.throws(() => resolveReportRange({ year: ['2026'] }), /invalid report year/i);
+  assert.throws(() => resolveReportRange([]), /invalid report filters/i);
+});

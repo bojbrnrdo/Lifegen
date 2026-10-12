@@ -4,10 +4,10 @@ import { serviceSummaries } from './read-model.js';
 
 const num = (v) => Number(v || 0);
 const isoDate = (v) => {
-  const value = String(v || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  if (typeof v !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const date = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === v;
 };
 const idOf = (v, label = 'record ID') => {
   const id = Number(v);
@@ -31,7 +31,7 @@ function lockState(date, actor) {
 }
 
 function validateSunday(value) {
-  const date = String(value || '').trim();
+  const date = typeof value === 'string' ? value.trim() : '';
   if (!isoDate(date) || !isSunday(date)) throw httpError(400, 'Lifegen attendance is Sunday only — please choose a valid Sunday.');
   if (date > today()) throw httpError(400, 'Future Sundays cannot be recorded yet.');
   return date;
@@ -154,11 +154,24 @@ function monthRange(year, month) {
   return [from, `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`];
 }
 
-export function resolveReportRange(params = {}) {
-  const year = Number(params.year) || null;
-  const month = Number(params.month) || null;
-  const quarter = Number(params.quarter) || null;
-  let from = params.from || null, to = params.to || null, label = '';
+function reportFilterScalar(value, name, { numeric = false } = {}) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' && typeof value !== 'number') throw httpError(400, `Invalid report ${name}.`);
+  const text = String(value).trim();
+  if (!text) return null;
+  if (!numeric) return text;
+  if (!/^\d+$/.test(text)) throw httpError(400, `Invalid report ${name}.`);
+  const number = Number(text);
+  if (!Number.isSafeInteger(number)) throw httpError(400, `Invalid report ${name}.`);
+  return number || null;
+}
+
+export function resolveReportRange(input = {}) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) throw httpError(400, 'Invalid report filters.');
+  const year = reportFilterScalar(input.year, 'year', { numeric: true });
+  const month = reportFilterScalar(input.month, 'month', { numeric: true });
+  const quarter = reportFilterScalar(input.quarter, 'quarter', { numeric: true });
+  let from = reportFilterScalar(input.from, 'start date'), to = reportFilterScalar(input.to, 'end date'), label = '';
   if (year && month) {
     if (month < 1 || month > 12) throw httpError(400, 'Invalid report month.');
     [from, to] = monthRange(year, month);
