@@ -135,18 +135,27 @@
         if (!deck || !wrap) return;
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
         let held = null;
-        const maxX = () => Math.max(0, deck.scrollWidth - window.innerWidth + 24);
-        const apply = (x) => { deck.style.transform = "translate3d(" + (-x).toFixed(1) + "px,0,0)"; };
+        // Travel works on ANY screen width: if the wall is narrower than the
+        // viewport it starts centered and drifts left; if wider, it pans fully.
+        function metrics() {
+            const trackW = deck.scrollWidth;
+            const vw = window.innerWidth || 1;
+            const startX = Math.max(0, (vw - trackW) / 2);
+            const travel = Math.max(vw * 0.55, trackW - vw + 48);
+            return { startX, travel };
+        }
+        const setX = (d) => { deck.style.transform = "translate3d(" + d.toFixed(1) + "px,0,0)"; };
         function update() {
             if (!deck.classList.contains("is-driven")) return;
-            if (held !== null) { apply(held); return; }
+            if (held !== null) { setX(held); return; }
             const r = wrap.getBoundingClientRect();
             const vh = window.innerHeight || 1;
             const p = Math.min(1, Math.max(0, (vh - r.top) / (vh + r.height)));
-            apply(p * maxX());
+            const { startX, travel } = metrics();
+            setX(startX - p * travel);
         }
         function enable() {
-            if (reduced.matches || maxX() <= 0) {
+            if (reduced.matches) {
                 deck.classList.remove("is-driven");
                 deck.style.transform = "";
                 return;
@@ -164,8 +173,10 @@
         deck.addEventListener("focusin", (e) => {
             const card = e.target.closest(".deck-card");
             if (!card || !deck.classList.contains("is-driven")) return;
-            held = Math.min(maxX(), Math.max(0, card.offsetLeft - window.innerWidth * 0.25));
-            apply(held);
+            const { startX, travel } = metrics();
+            const end = startX - travel;
+            held = Math.min(startX, Math.max(end, window.innerWidth * 0.3 - card.offsetLeft));
+            setX(held);
         });
         enable();
     })();
