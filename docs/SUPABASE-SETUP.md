@@ -52,22 +52,48 @@ DATABASE_DIRECT_URL='postgresql://…' \
 npm run db:migrate
 ```
 
+Add `DATABASE_SSL_ROOT_CERT='-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----'` in the same way when this machine reports the self-signed-chain error (see the TLS section below).
+
 Do not paste real connection strings into source code, browser JavaScript, a public ZIP, chat, or Git. For local work, keep them in a private `.env` file ignored by Git. Do not run demo seed scripts against the church database.
 
 ## Set the Supabase connection variables
 
 In **Project Settings → Database → Connection string**, copy connection URIs for the same project and `postgres` database:
 
-- `DATABASE_URL`: use Supabase's **Transaction pooler** URI (usually port `6543`) for normal application requests on a serverless host.
+- `DATABASE_URL`: use a Supabase **pooler** URI (`aws-0-<region>.pooler.supabase.com`) for normal application requests on a serverless host. The pooler host is IPv4-reachable, so it works from Vercel; the transaction pooler (port `6543`) and the session pooler (port `5432`) are both accepted here.
 - `DATABASE_DIRECT_URL`: use the direct `db.<project-ref>.supabase.co` URI when reachable. If the host cannot reach Supabase's direct endpoint, use Supabase's **Session pooler** URI on port `5432` instead. The session pooler is required for schema migrations and persistent PostgreSQL `LISTEN` updates; do **not** use transaction pooling for this variable.
+
+Supabase's direct `db.<project-ref>.supabase.co` record is IPv6-only for projects without the IPv4 add-on. On a host without IPv6 egress (Vercel reports `ENETUNREACH`) the build and the app cannot use it: put the Session Pooler URL on port `5432` in `DATABASE_DIRECT_URL` and the pooler URL in `DATABASE_URL`. A session-pooler URI looks like `postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`; note that the pooler username contains the project reference. LIFEGEN's migration command accepts the direct host or the session pooler on port `5432`, but not the port `6543` transaction pooler.
 
 The server verifies that both URLs refer to the same Supabase project/database. Keep both values private and set them only in the server environment (for example, Vercel Project → Settings → Environment Variables). Also set `SETUP_KEY` to a random secret of at least 32 characters before first-admin setup. Never expose it in a public environment variable.
 
-For local development, copy the names into a Git-ignored `.env` file in the repository root. Do not change `LOCAL_DEMO=true` to production; the production host should use the Supabase variables and `LOCAL_DEMO=false`.
+For local development, copy the names from `.env.example` into a Git-ignored `.env` file in the repository root. Do not change `LOCAL_DEMO=true` to production; the production host should use the Supabase variables and `LOCAL_DEMO=false`.
+
+## TLS trust for the Supabase certificate (`DATABASE_SSL_ROOT_CERT`)
+
+LIFEGEN always verifies the database server certificate. Depending on the endpoint and the host's root store, a deployment can fail with:
+
+```text
+error: self-signed certificate in certificate chain
+```
+
+Supabase's database endpoints can present a chain that ends in a project-minted CA, which a Vercel build machine does not carry in its own trust store. The fix is to give the server that CA; it is never a reason to disable verification:
+
+1. In the Supabase dashboard open **Project Settings → Database → SSL configuration** and download the project certificate (a PEM `.crt` file). Keep the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines.
+2. Add a private server variable `DATABASE_SSL_ROOT_CERT` whose value is that PEM text. Multi-line values work; a single line with `\n` escapes is also accepted. Vercel: **Project → Settings → Environment Variables**, Production and Preview.
+3. Redeploy. LIFEGEN adds the project CA to Node's bundled Mozilla root certificates, so both the project CA and the public roots stay trusted. Certificate verification (`rejectUnauthorized: true`) is unchanged.
+4. Confirm it took effect: in the build log, the `npm run db:migrate` step prints either `TLS: certificate verification is enabled with the Supabase project CA from DATABASE_SSL_ROOT_CERT plus the system root certificates.` or `... (no DATABASE_SSL_ROOT_CERT set)`. It never prints the certificate itself. Then check `/api/health`.
+
+Notes:
+
+- This variable is optional. The session pooler (port `5432`) and transaction pooler (port `6543`) hosts chain to a public CA, so they usually need no extra setting. Set it when the direct `db.<project-ref>.supabase.co` host, or a pooler region, presents the project CA — or whenever the deployment reports the self-signed-chain error.
+- Never set `NODE_TLS_REJECT_UNAUTHORIZED=0` and never disable certificate checks in code. `npm run build` fails if either pattern appears in server code. `NODE_EXTRA_CA_CERTS`, if you already use it for another private CA, stays effective: LIFEGEN re-reads that file because an explicit `ca` list would otherwise replace Node's default trust store.
+- If the error continues after the CA is set, the value is not the CA for that project (or the host is being intercepted). Re-download it rather than weakening TLS.
+- `DATABASE_URL`/`DATABASE_DIRECT_URL` may include `?sslmode=require`; that is fine. `sslmode=disable` (or `ssl=false`) is the only value that asks for a plaintext connection and must not be used for Supabase.
 
 ## Deploy and verify
 
-1. Set the private `DATABASE_URL`, `DATABASE_DIRECT_URL`, and `SETUP_KEY` on the server/hosting project.
+1. Set the private `DATABASE_URL`, `DATABASE_DIRECT_URL`, and `SETUP_KEY` on the server/hosting project. Use the pooler host on Vercel, and add `DATABASE_SSL_ROOT_CERT` only if the build reports the self-signed-chain error (see the TLS section above).
 2. Deploy the application. The configured build runs `npm run build && npm run db:migrate`; the migration command uses `DATABASE_DIRECT_URL` and skips versions already applied in the SQL Editor.
 3. Visit `/api/health`. A configured and migrated database returns `{"ok":true,"database":"supabase-postgresql"}`.
 4. Open `/admin`, create the first administrator using `SETUP_KEY`, then remove `SETUP_KEY` from the host and redeploy.
@@ -79,5 +105,8 @@ The tracker tables have row-level security enabled and browser-role grants revok
 
 - **`Database schema is missing` / `/api/health` is not OK:** confirm the URLs are for the same project and run the SQL files in order. Do not add a second database just to make the error go away.
 - **Connection or migration timeout:** confirm `DATABASE_DIRECT_URL` is the direct endpoint or session pooler on port `5432`, and that the encoded password is correct. A `6543` transaction-pooler URI belongs in `DATABASE_URL`, not `DATABASE_DIRECT_URL`.
+- **`self-signed certificate in certificate chain` (or `unable to verify the first certificate`):** set the private `DATABASE_SSL_ROOT_CERT` to the Supabase project CA and redeploy, as described in the TLS section. `npm run db:migrate` prints this reminder in the build log. Do not disable certificate verification.
+- **`ENETUNREACH` / `EHOSTUNREACH` while connecting or migrating:** the runtime has no route to the IPv6-only direct Supabase host. Switch `DATABASE_DIRECT_URL` to the Session Pooler URL on port `5432`, and use the pooler URL for `DATABASE_URL`. `npm run db:migrate` prints the same hint.
+- **A `pooler.supabase.com` URL is rejected:** use port `5432` (session) for `DATABASE_DIRECT_URL` and keep the pooler username in the `postgres.<project-ref>` form. Port `6543` (transaction pooling) may be used for `DATABASE_URL` only.
 - **SQL says a table/column already exists or a query reports missing columns:** the existing schema may be from another LIFEGEN version or app. Stop before applying schema-repair statements; take a backup and map the old schema/data explicitly.
 - **Registration appears in People but not in Needs Lifegroup:** check that its linked `vip_registrations.person_id` exists, the person is active, and they do not already have a current Lifegroup membership. The queue intentionally excludes people already assigned to a group.

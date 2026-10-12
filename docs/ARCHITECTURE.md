@@ -41,7 +41,8 @@ The dedicated one-month VIP outcome/export flow and its migration side effects a
 ## PostgreSQL and Supabase safety
 
 - Supabase URLs are read only by the server; no Supabase keys or PostgreSQL URLs are shipped in browser assets.
-- `DATABASE_URL` supports the application pooler; `DATABASE_DIRECT_URL` must be the direct host or Supabase session pooler on port `5432`, because schema migration and long-lived notifications need a session.
+- `DATABASE_URL` supports the application pooler; `DATABASE_DIRECT_URL` must be the direct host or Supabase session pooler on port `5432`, because schema migration and long-lived notifications need a session. The pooler host is also the IPv4-reachable choice for hosts such as Vercel that report `ENETUNREACH` for the IPv6-only direct host.
+- Database TLS is built in one place (`connectionOptions`/`databaseSslOptions` in `src/db.js`): verification is always on, Node's bundled Mozilla root certificates are always trusted, and the optional private `DATABASE_SSL_ROOT_CERT` PEM adds the Supabase project CA for hosts that need it. The connection string cannot weaken this — the old `sslmode`/`ssl` parameters are stripped, and only `sslmode=disable`/`ssl=false` requests an explicit plaintext connection. `scripts/check.mjs` fails the build if `NODE_TLS_REJECT_UNAUTHORIZED` or a disabled `rejectUnauthorized` appears in server code.
 - Tracker/app tables use server-side access. Migration `006` enables row-level security and revokes `PUBLIC`, `anon`, and `authenticated` table privileges on LIFEGEN tables only. It does not change unrelated public-schema tables.
 - `003`, `004`, and `005` have been converted to non-destructive no-op migration markers so they cannot drop the tracker or recreate the one-month outcome export.
 - `database/001_init.sql` also limits its access revocation to LIFEGEN tables.
