@@ -125,50 +125,38 @@
         card.addEventListener("click", () => openLightbox(index));
     });
 
-    // ---- Stacked-poster scroll effect (sideways entry) ------------------
-    // Each poster pins in place; the next one slides in FROM THE RIGHT over
-    // it as you scroll, then the covered poster shrinks and dims for depth.
+    // ---- Horizontal poster wall (pinned stage — wheel pans sideways) -----
+    // The section pins full-screen; vertical wheel / trackpad / touch scroll
+    // is converted into a smooth horizontal pan across the poster wall.
     (function () {
+        const wrap = document.getElementById("photoWall");
+        const pin = wrap ? wrap.querySelector(".deck-pin") : null;
         const deck = document.getElementById("photoDeck");
-        const wrap = deck ? deck.closest(".deck-wrap") : null;
-        if (!deck || !wrap) return;
-        const cards = Array.from(deck.querySelectorAll(".deck-card"));
-        if (cards.length < 2) return;
+        if (!wrap || !pin || !deck) return;
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const stickyTop = () => {
-            const vh = window.innerHeight || 1;
-            return Math.min(Math.max(76, vh * 0.1), 120);
-        };
-        function fx() {
+        function drive() {
             if (reduced.matches) {
-                cards.forEach((c) => { c.style.transform = ""; c.style.filter = ""; });
+                deck.classList.remove("is-driven");
+                deck.style.transform = "";
+                wrap.style.height = "";
                 return;
             }
             const vh = window.innerHeight || 1;
-            const st = stickyTop();
-            const wr = wrap.getBoundingClientRect();
-            const entry = cards.map((c, k) => {
-                if (k === 0) return 1;
-                const nat = wr.top + c.offsetTop;           // untransformed top
-                return Math.min(1, Math.max(0, (st + vh - nat) / vh));
-            });
-            cards.forEach((c, k) => {
-                const p = entry[k];
-                const x = (1 - p) * (c.offsetWidth + 90);   // slide in from right
-                const y = k === 0 ? 0 : Math.max(0, (wr.top + c.offsetTop) - st); // stay on the pin row
-                const q = k < cards.length - 1 ? entry[k + 1] : 0; // covered by next
-                const sc = 1 - q * 0.06;
-                c.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) scale(" + sc.toFixed(4) + ")";
-                c.style.filter = q > 0 ? "brightness(" + (1 - q * 0.28).toFixed(3) + ")" : "";
-            });
+            const maxX = Math.max(0, deck.scrollWidth - window.innerWidth);
+            wrap.style.height = (vh + maxX + 120) + "px"; // 1px scroll = 1px pan
+            deck.classList.add("is-driven");
+            const r = wrap.getBoundingClientRect();
+            const total = wrap.offsetHeight - vh;
+            const p = Math.min(1, Math.max(0, -r.top / (total || 1)));
+            deck.style.transform = "translate3d(" + (-p * maxX).toFixed(1) + "px,0,0)";
         }
         let tick = false;
         window.addEventListener("scroll", () => {
-            if (!tick) { tick = true; requestAnimationFrame(() => { tick = false; fx(); }); }
+            if (!tick) { tick = true; requestAnimationFrame(() => { tick = false; drive(); }); }
         }, { passive: true });
-        window.addEventListener("resize", fx);
-        reduced.addEventListener?.("change", fx);
-        fx();
+        window.addEventListener("resize", drive);
+        reduced.addEventListener?.("change", drive);
+        drive();
     })();
 
     // ---- Lightbox (full-size photo view) ------------------------------
