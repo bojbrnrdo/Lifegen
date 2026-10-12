@@ -28,8 +28,5 @@
     "helmet": "8.1.0",
     "pg": "8.20.0",
     "qrcode": "1.5.4"
-  },
-  "devDependencies": {
-    "@playwright/test": "1.64.0"
   }
 }

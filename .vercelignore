@@ -1,0 +1,12 @@
+# Material that must not ship with a Git-based Vercel deployment.
+# The runtime needs: package.json, package-lock.json, vercel.json, src/, public/,
+# database/ and scripts/ (see scripts/check.mjs and DEPLOY-FIRST.md).
+# Note: docs/ and DEPLOY-FIRST.md are intentionally NOT ignored here, to stay
+# consistent with scripts/package-vercel.mjs, which ships them in the release ZIP.
+tests/
+preview-db/
+private-data/
+test-results/
+playwright-report/
+*.log
+.env.*
