@@ -15,12 +15,13 @@
 
 The integration script rejects a remote database URL and requires a local disposable PostgreSQL database plus a test Admin account.
 
-## Not verified
+## Deployment status and remaining verification
 
-- No live Supabase credentials were present in this workspace; the Supabase SQL was **not** applied to a church/production project and no live Supabase connection was tested.
-- No Vercel deployment or real hosting publish was performed.
+- Vercel Preview deployment for commit `9737b15` completed successfully on 2026-10-12. This was a Preview deployment, not a Production deployment.
+- The repository's Vercel build command includes `npm run db:migrate`. The Preview deployment therefore uses the database URLs configured for Vercel Preview; this workspace cannot inspect whether those URLs point to a dedicated preview database or a production Supabase project. Confirm that target before promoting the deployment.
+- No live Supabase credentials were present in this workspace, and no direct Supabase connection or SQL execution was run from the workspace.
 - No browser automation was run for the new tracker pages. The end-to-end test covers HTTP/API/database flows, and the build check covers JavaScript assets, not pixel-level browser rendering.
-- No real visitor data was created in Supabase. The local preview/test uses disposable demo or synthetic records only.
+- No real visitor data was created by the local preview/test; it uses disposable demo or synthetic records only.
 
 ## Supabase setup
 
