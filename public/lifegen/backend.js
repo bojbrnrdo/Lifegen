@@ -1,4 +1,4 @@
-// Same-origin HTTP API adapter. No Neon or Supabase credentials are exposed to the browser.
+// Same-origin HTTP API adapter. No database credentials are exposed to the browser.
 window.Lifegen=(()=>{
  let vipState=null,config=null,clockBase=Date.now(),clockAt=performance.now(),notify=()=>{};
  const utcNow=()=>new Date(clockBase+performance.now()-clockAt);
@@ -20,8 +20,8 @@ window.Lifegen=(()=>{
   document.getElementById('show-vip-recovery').onclick=()=>{document.getElementById('vip-recovery-form').hidden=false;document.getElementById('vip-recovery-code').focus();};
   document.getElementById('vip-recovery-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await request('/api/public/vip/restore',{recovery_code:document.getElementById('vip-recovery-code').value});await refreshVip();sync();e.target.hidden=true;toast('Welcome back. Your VIP portal is restored.','check');}catch(err){document.getElementById('vip-recovery-error').textContent=err.message;}finally{b.disabled=false;}};
   try{config=await request('/api/public/config');clockBase=new Date(config.server_time).getTime();clockAt=performance.now();
-   if(config.hosted_preview&&!config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Connected preview · your real Neon database. New registrations are saved here.';document.body.prepend(note);}
-   if(config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Demonstration · temporary local PostgreSQL, not your Neon project. Test records only.';document.body.prepend(note);}
+   if(config.hosted_preview&&!config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Connected preview · your Supabase database. New registrations are saved here.';document.body.prepend(note);}
+   if(config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Demonstration · temporary local PostgreSQL, not your Supabase project. Test records only.';document.body.prepend(note);}
    await refreshVip();
    if(!vipState.registered&&config.legacy_restore_enabled===true){let old=null;try{old=JSON.parse(localStorage.getItem('lifegen_device'));}catch{}if(old?.token){try{await request('/api/public/vip/restore',{legacy_token:old.token});await refreshVip();localStorage.removeItem('lifegen_device');}catch{toast('Your old VIP record must be imported before this portal can be restored. Contact the LIFEGEN team.','info');document.querySelector('#vip-signup-form button[type=submit]').disabled=true;}}}
    sync();verse(false);if(location.hash==='#vip'){const target=vipState.registered?document.getElementById('vip-attendance-dashboard'):document.getElementById('vip-signup-form');target.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});}

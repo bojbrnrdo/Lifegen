@@ -3,7 +3,7 @@
   "version": "2.2.11",
   "private": true,
   "type": "module",
-  "description": "LIFEGEN website with integrated LifegroupTracker Admin portal and one Neon database",
+  "description": "LIFEGEN website with an integrated Lifegroup Tracker Admin portal and Supabase PostgreSQL",
   "engines": {
     "node": ">=20.19.0"
   },
@@ -16,9 +16,7 @@
     "db:backup": "node scripts/backup.mjs",
     "demo:seed": "node scripts/seed-demo.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:site": "node tests/single-site-smoke.mjs",
-    "test:publisher": "node tests/deployment-browser.mjs",
-    "test:preview-auth": "node tests/preview-auth-smoke.mjs",
+    "test:lifegroup-integration": "node tests/lifegroup-integration.mjs",
     "package:vercel": "node scripts/package-vercel.mjs"
   },
   "dependencies": {

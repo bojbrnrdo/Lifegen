@@ -1,55 +1,29 @@
-# Drop this LIFEGEN ZIP into the publisher
+# Deploy LIFEGEN with Supabase
 
-**Recommended:** open the connected LIFEGEN setup preview → Admin → Publish website. Connect your Vercel account using a private access token, choose your existing LIFEGEN project, drop this ZIP and click Publish LIFEGEN.
+The app serves the public LIFEGEN website at `/` and its signed-in Admin portal at `/admin` from one Express deployment. Both use the same Supabase PostgreSQL database through the server-side API.
 
-Do not extract the ZIP for this method. The publishing tool takes care of the project root, Express configuration, private Neon environment settings and source upload. No GitHub or terminal is needed. The archive alone cannot authorize your hosting account; a valid token is still required.
+## 1. Prepare the Supabase database
 
-Nothing is published until you explicitly confirm the project and click Publish. Your church data is not imported or deleted. A READY status/link appears only when Vercel actually reports it.
+Use the dedicated LIFEGEN Supabase project when available. Back it up first. Run the SQL files in [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) **in order** in Supabase SQL Editor, or provide the private connection variables to the host and run `npm run db:migrate`. Do not run this against an incompatible schema or assume it imports records from another application.
 
-## Alternative: manual deployment to Vercel
+## 2. Configure the hosting project
 
-This is ONE Express application: the public homepage is `/` and the full Admin portal is `/admin`. It is not a static HTML-only website.
+For a Vercel deployment, the project root must contain `package.json`, `vercel.json`, `src/`, `public/`, `database/` and `scripts/`. Use these server-side environment variables:
 
-## Use the correct project root
+- `DATABASE_URL` — Supabase Transaction Pooler connection URL (typically port `6543`).
+- `DATABASE_DIRECT_URL` — Supabase direct database URL, or Session Pooler URL on port `5432` (not the transaction pooler).
+- `SETUP_KEY` — private random setup code of 32+ characters; needed only until the first Admin is created.
 
-Extract `LIFEGEN-Vercel-Deploy.zip`. Its top level contains:
+The two database URLs must point to the same Supabase project and database. Never put them in public/build-time browser variables. See the SQL guide for how to locate the URLs and an IPv4/session-pooler alternative.
 
-```text
-package.json
-package-lock.json
-vercel.json
-src/
-public/
-database/
-scripts/
-```
+Vercel should use the **Express** framework preset, no output-directory override, and the repository's configured build command `npm run build && npm run db:migrate`. Redeploy after adding environment variables. The publishing helper, if used, validates the Supabase URL pair before sending these variables to the selected Vercel project.
 
-Upload/commit these files to the root of the source repository used by your existing LIFEGEN Vercel project. Do not wrap them in another folder unless you also change Vercel's Root Directory.
+## 3. Create the first Admin and verify
 
-## Check three settings, then redeploy
+1. Visit `/admin` and use `SETUP_KEY` once to create the first administrator.
+2. Remove `SETUP_KEY` from the host and redeploy.
+3. Visit `/api/health`; a successful connection reports `supabase-postgresql`.
+4. Submit one test VIP registration on the public site.
+5. In Admin → **Lifegroup Tracker → Needs Lifegroup**, confirm the person appears with a VIP badge. Assign the person to a group and verify their roster entry.
 
-Vercel project → Settings → Build and Deployment:
-
-1. **Root Directory:** `./` when these files are at the repository root. If they are nested, select the actual folder containing `package.json` and `vercel.json`.
-2. **Framework Preset:** **Express**. The included `vercel.json` explicitly sets this.
-3. **Output Directory:** turn off any override. Do not set `public`, `dist` or `build`. Express serves the pages through the server function.
-
-The included configuration sets installation to `npm ci` and the build command to `npm run build && npm run db:migrate`.
-
-Keep the server's `DATABASE_URL` and `DATABASE_DIRECT_URL` private environment variables set for Production. Both must point to your existing Neon database. Do not create another database. `SETUP_KEY` is needed only if the first admin account has not been created yet.
-
-**Redeploy after saving the settings/source/environment variables.** If the deployment fails, inspect its Build Logs rather than opening an older deployment URL.
-
-After a successful deployment, check:
-
-- `/` — public LIFEGEN homepage
-- `/admin` — first-admin setup or staff sign-in
-- `/api/health` — should report a successful Neon connection
-
-## If a 404 remains
-
-The 404's request ID is not the website address. Send the full failing URL and the deployment's latest Build Log/error, with database passwords removed. That is needed to distinguish a project-root/framework problem from a missing/old deployment or domain problem.
-
-The original LIFEGEN homepage `https://lifegen-nine.vercel.app/` returned HTTP 200 when checked during this investigation. The failing deployed URL was not provided, so this package addresses the identified packaging risk; it is not proof that your actual Vercel deployment has been fixed.
-
-No database credentials, private setup code, old records or demo database are included in this ZIP.
+The supplied workspace preview is a local demo database and has not been connected to or used to change a production Supabase project. Local tests/builds do not publish a live site; verify the deployment itself after the project owner authorizes and completes deployment.

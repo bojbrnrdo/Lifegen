@@ -6,9 +6,9 @@ const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
- admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','registrations:manage','calendar:manage','users:manage','settings:manage'],
- staff:['dashboard:view','people:view','people:view_private','people:write','attendance:view','attendance:write','registrations:manage','calendar:manage'],
- viewer:['dashboard:view','people:view','attendance:view']
+ admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','attendance:correct','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage','users:manage','settings:manage'],
+ staff:['dashboard:view','people:view','people:view_private','people:write','attendance:view','attendance:write','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage'],
+ viewer:['dashboard:view','people:view','attendance:view','reports:view','lifegroups:view']
 };
 export const publicUser=u=>({id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:PERMISSIONS[u.role_id]||[],is_active:u.is_active});
 export function safeEqual(a,b) {const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}

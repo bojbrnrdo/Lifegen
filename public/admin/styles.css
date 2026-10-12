@@ -631,6 +631,7 @@ a { color: var(--accent); }
 .badge--admin::before { background: #7c3aed; } .badge--staff::before { background: var(--accent); } .badge--viewer::before { background: #b7bcc3; }
 .badge--demo { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 .badge--demo::before { background: #d97706; }
+.badge--vip { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
 .avatar { background: #f0f1f3; color: #4b5058; font-weight: 600; }
 .avatar--xl { border-radius: 16px; }
 

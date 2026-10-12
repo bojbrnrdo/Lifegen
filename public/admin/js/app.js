@@ -7,9 +7,13 @@ import { esc, html, raw, icon, toast, avatar, fullName, statusBadge, debounce, e
 import { renderLogin, renderSetup } from './views/auth.js';
 import { renderPrivacy, renderPublicPrivacy } from './views/privacy.js';
 import { renderDashboard } from './views/dashboard.js';
+import { renderAttendance } from './views/attendance.js';
+import { renderHistory, renderServiceDetail } from './views/history.js';
+import { renderReports } from './views/reports.js';
 import { renderPeople } from './views/people.js';
 import { renderPersonForm } from './views/personForm.js';
 import { renderPerson } from './views/person.js';
+import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
 import { renderCalendar } from './views/calendar.js';
@@ -37,6 +41,13 @@ const routes = [
   { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'people', perm: 'people:write' },
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
+  { path: /^\/attendance$/, view: renderAttendance, nav: 'attendance', perm: 'attendance:view' },
+  { path: /^\/attendance\/history$/, view: renderHistory, nav: 'attendance', perm: 'attendance:view' },
+  { path: /^\/attendance\/history\/(\d+)$/, view: (c, m) => renderServiceDetail(c, m[1]), nav: 'attendance', perm: 'attendance:view' },
+  { path: /^\/reports$/, view: renderReports, nav: 'reports', perm: 'reports:view' },
+  { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
+  { path: /^\/lifegroups\/(\d+)$/, view: (c, m) => renderLifegroup(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
+  { path: /^\/networks\/(\d+)$/, view: (c, m) => renderNetwork(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
   { path: /^\/registrations$/, view: renderRegistrations, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/qr-poster$/, view: renderQrPoster, nav: 'settings', perm: 'registrations:manage' },
@@ -126,6 +137,9 @@ function renderShell() {
         </div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${navLink('#/people', 'people', 'People', 'people')}
+        ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check') : ''}
+        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroup Tracker', 'group') : ''}
+        ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
@@ -156,7 +170,7 @@ function renderShell() {
   };
   setupGlobalSearch();
   refreshPendingBadge();
-  const bar=document.createElement('div');bar.className='connection-bar';bar.id='connectionBar';bar.innerHTML=`<span class="connection-dot"></span><span id="connectionText">Connecting live updates…</span>${state.preview?'<span class="preview-tag">Demo · local PostgreSQL, not your Neon project</span>':state.hostedPreview?'<span class="preview-tag">Connected preview · real Neon database</span>':''}<a href="#" id="applyLiveUpdate" hidden>New updates — refresh view</a>`;
+  const bar=document.createElement('div');bar.className='connection-bar';bar.id='connectionBar';bar.innerHTML=`<span class="connection-dot"></span><span id="connectionText">Connecting live updates…</span>${state.preview?'<span class="preview-tag">Demo · temporary local PostgreSQL, not Supabase</span>':state.hostedPreview?'<span class="preview-tag">Connected preview · Supabase PostgreSQL</span>':''}<a href="#" id="applyLiveUpdate" hidden>New updates — refresh view</a>`;
   document.getElementById('main').before(bar); startLiveUpdates();
 }
 
@@ -237,6 +251,10 @@ export async function boot() {
   state.authDisabled = Boolean(status.auth_disabled);
   state.standalone = Boolean(status.standalone);
   state.preview = Boolean(status.preview); state.hostedPreview = Boolean(status.hosted_preview); state.deployHelper = Boolean(status.deploy_helper_enabled); state.serverToday = status.today; app.dataset.demo=state.preview?"true":"false"; app.dataset.recovery=status.setup_available?"true":"false";
+  if (!location.hash) {
+    const startHash = state.preview && state.hostedPreview ? '#/lifegroups?tab=needs' : '#/dashboard';
+    history.replaceState(null, '', `${location.pathname}${location.search}${startHash}`);
+  }
   document.title = `LIFEGEN Admin · ${state.settings.church_name}`;
 
   if (status.needs_setup) {
@@ -248,7 +266,11 @@ export async function boot() {
     app.className = '';
     if ((location.hash.replace(/^#/, '') || '').split('?')[0] === '/privacy') { renderPublicPrivacy(app); return; }
     renderLogin(app, async () => {
-      try { const verified=await api.status(); if(!verified.user) return false; history.replaceState(null, '', `${location.pathname}${location.search}#/dashboard`); await boot(); return true; } catch { return false; }
+      try {
+        const verified=await api.status(); if(!verified.user) return false;
+        if(!location.hash) history.replaceState(null, '', `${location.pathname}${location.search}#/dashboard`);
+        await boot(); return true;
+      } catch { return false; }
     });
     return;
   }

@@ -1,5 +1,5 @@
--- LIFEGEN shared PostgreSQL / Neon schema. Non-destructive: no business table is dropped.
--- Run once in Neon SQL Editor, or: npm run db:migrate
+-- LIFEGEN application schema for Supabase PostgreSQL (or compatible PostgreSQL).
+-- Additive: no business table is dropped. Run in Supabase SQL Editor or use npm run db:migrate.
 BEGIN;
 SELECT pg_advisory_xact_lock(72114026);
 CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
@@ -122,7 +122,24 @@ DO $$ DECLARE t text; BEGIN
   EXECUTE format('CREATE TRIGGER lifegen_changed AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION lifegen_notify_change()',t);
  END LOOP;
 END $$;
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
+-- Revoke browser/public access from LIFEGEN tables only. A shared Supabase
+-- project may contain unrelated public-schema tables that this app must not alter.
+DO $$
+DECLARE table_name text; sequence_name text;
+BEGIN
+ FOREACH table_name IN ARRAY ARRAY[
+  'schema_migrations','id_counters','staff_users','staff_sessions','people','services','records','audit',
+  'settings','monthly_prizes','vip_registrations','vip_sessions','vip_checkins','community_posts',
+  'prayer_reactions','import_mappings','migration_runs','audit_log','rate_limits','app_events','calendar_events'
+ ] LOOP
+  IF to_regclass('public.' || table_name) IS NOT NULL THEN
+   EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC',table_name);
+   IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.' || table_name) AND attname='id' AND attnum>0 AND NOT attisdropped) THEN
+    sequence_name:=pg_get_serial_sequence(format('public.%I',table_name),'id');
+    IF sequence_name IS NOT NULL THEN EXECUTE format('REVOKE ALL ON SEQUENCE %s FROM PUBLIC',sequence_name); END IF;
+   END IF;
+  END IF;
+ END LOOP;
+END $$;
 INSERT INTO schema_migrations(version) VALUES('001_init') ON CONFLICT DO NOTHING;
 COMMIT;

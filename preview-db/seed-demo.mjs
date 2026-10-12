@@ -141,5 +141,18 @@ for (const [cid, d] of [[801, sundays[1]], [802, sundays[0]]]) {
 }
 console.log('QA rows ready (person 25 / reg 901 / checkins 801-802)');
 
+// Keep ID generators ahead of the fixed QA IDs, so the VIP preview seed and
+// subsequent app writes do not collide with person 25 / registration 901.
+for (const [entity, table] of Object.entries({
+  people: 'people', services: 'services', records: 'records', audit: 'audit',
+  vip_registrations: 'vip_registrations', vip_checkins: 'vip_checkins',
+  community_posts: 'community_posts', calendar_events: 'calendar_events',
+})) {
+  await db.query(
+    `UPDATE id_counters SET last_id=GREATEST(last_id, COALESCE((SELECT max(id) FROM ${table}), 0)) WHERE entity=$1`,
+    [entity],
+  );
+}
+
 await db.close();
 console.log('seed complete');

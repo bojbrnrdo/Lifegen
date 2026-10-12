@@ -7,34 +7,6 @@ const save = () => { domainContext.getStore().dirty = true; };
 const nextId = (table) => ++load().seq[table];
 const ADMIN = new Proxy({}, {get:(_,k)=>domainContext.getStore()?.actor?.[k] ?? ({id:null,display_name:'Imported / system'})[k]});
 const STATUSES = ['first_timer','new_believer','regular','visitor_3','visitor_2','visitor_1','no_returns','member','leader','volunteer','inactive'];
-// Lifegroup tracker export: when a VIP's 4-week window since invitation closes,
-// their person status is exported as Regular Attendee (4/4) or a label that fits
-// how many of the 4 window Sundays they came back.
-export const VIP_WINDOW_WEEKS = 4;
-export const VIP_OUTCOME_LABELS = { regular: 'Regular Attendee', visitor_3: '3-Time Visitor', visitor_2: '2-Time Visitor', visitor_1: '1-Time Visitor', no_returns: 'No Returns' };
-// Statuses the window export may overwrite; member/leader/volunteer/inactive are terminal-ish.
-export const VIP_OUTCOME_OVERWRITABLE = new Set(['first_timer', 'new_believer', 'regular', 'visitor_3', 'visitor_2', 'visitor_1', 'no_returns']);
-/** First 4 Sundays on/after the invite date (invite day counts when it is a Sunday). */
-export function vipWindowSundays(inviteDate) {
-  const d = new Date(inviteDate + 'T12:00:00');
-  if (!isValidDate(inviteDate) || Number.isNaN(d.getTime())) return [];
-  while (d.getDay() !== 0) d.setDate(d.getDate() + 1);
-  const out = [];
-  while (out.length < VIP_WINDOW_WEEKS) { out.push(toISO(d)); d.setDate(d.getDate() + 7); }
-  return out;
-}
-/** Evaluate a VIP's 4-week window: which window Sundays were attended, the count,
- *  whether the window has closed, and the export outcome status. */
-export function vipWindowResult(attendedDates, inviteDate, todayDate = today()) {
-  const window = vipWindowSundays(inviteDate);
-  if (!window.length) return null;
-  const set = new Set(attendedDates);
-  const attended = window.map((dt) => set.has(dt));
-  const count = attended.filter(Boolean).length;
-  const closed = todayDate > window[window.length - 1];
-  const outcome = count >= 4 ? 'regular' : count === 3 ? 'visitor_3' : count === 2 ? 'visitor_2' : count === 1 ? 'visitor_1' : 'no_returns';
-  return { window, attended, count, closed, outcome };
-}
 // Promote linked VIP profiles after five distinct Sunday attendances (more than four visits).
 export const VIP_MEMBER_ATTENDANCE_THRESHOLD = 5;
 const VIP_PROMOTION_STATUSES = new Set(['first_timer','new_believer','regular']);
