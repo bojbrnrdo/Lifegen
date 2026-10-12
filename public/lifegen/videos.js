@@ -125,40 +125,6 @@
         card.addEventListener("click", () => openLightbox(index));
     });
 
-    // ---- Horizontal poster wall (pinned stage — wheel pans sideways) -----
-    // The section pins full-screen; vertical wheel / trackpad / touch scroll
-    // is converted into a smooth horizontal pan across the poster wall.
-    (function () {
-        const wrap = document.getElementById("photoWall");
-        const pin = wrap ? wrap.querySelector(".deck-pin") : null;
-        const deck = document.getElementById("photoDeck");
-        if (!wrap || !pin || !deck) return;
-        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-        function drive() {
-            if (reduced.matches) {
-                deck.classList.remove("is-driven");
-                deck.style.transform = "";
-                wrap.style.height = "";
-                return;
-            }
-            const vh = window.innerHeight || 1;
-            const maxX = Math.max(0, deck.scrollWidth - window.innerWidth);
-            wrap.style.height = (vh + maxX + 120) + "px"; // 1px scroll = 1px pan
-            deck.classList.add("is-driven");
-            const r = wrap.getBoundingClientRect();
-            const total = wrap.offsetHeight - vh;
-            const p = Math.min(1, Math.max(0, -r.top / (total || 1)));
-            deck.style.transform = "translate3d(" + (-p * maxX).toFixed(1) + "px,0,0)";
-        }
-        let tick = false;
-        window.addEventListener("scroll", () => {
-            if (!tick) { tick = true; requestAnimationFrame(() => { tick = false; drive(); }); }
-        }, { passive: true });
-        window.addEventListener("resize", drive);
-        reduced.addEventListener?.("change", drive);
-        drive();
-    })();
-
     // ---- Lightbox (full-size photo view) ------------------------------
     const lightbox = document.getElementById("lightbox");
     const lbImg = document.getElementById("lbImg");
