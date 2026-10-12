@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { query, transaction, withState, runDomain, logAction } from './db.js';
-import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday, VIP_MEMBER_ATTENDANCE_THRESHOLD } from './domain.js';
+import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday, VIP_MEMBER_ATTENDANCE_THRESHOLD, vipWindowResult } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
@@ -17,7 +17,7 @@ import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.20';
+const ADMIN_ASSET_VERSION='2.2.21';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -62,7 +62,8 @@ const methods={
  dashboard:['dashboard:view',false],
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
- registrations:['registrations:manage',false],registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],vipAttendanceCounts:['registrations:manage',false]
+ registrations:['registrations:manage',false],
+ lifegroupOutcomes:['registrations:manage',true],registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],vipAttendanceCounts:['registrations:manage',false]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
@@ -153,6 +154,28 @@ async function customMethod(req,name,args) {
   }
   return {items:rows};
  }
+ if(name==='lifegroupOutcomes')return withState(async({client})=>{
+  // Lifegroup tracker export list: every VIP with their 4-week window since
+  // invitation, how many window Sundays they came back, and — once the window
+  // closes — the person status they were exported as (applied exactly once).
+  const rows=(await client.query('SELECT v.id,v.person_id,v.full_name,v.created_at,v.window_outcome,v.outcome_applied_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id ORDER BY v.created_at DESC')).rows;
+  const att=(await client.query("SELECT r.person_id,s.service_date::text AS d FROM records r JOIN services s ON s.id=r.service_id WHERE r.status='present'")).rows;
+  const attBy={};for(const a of att){(attBy[a.person_id]??=new Set()).add(a.d);}
+  const t=today();const items=[];
+  for(const r of rows){
+   const invite=String(r.created_at).slice(0,10);
+   const res=vipWindowResult([...(attBy[r.person_id]||[])],invite,t)||{window:[],attended:[],count:0,closed:false,outcome:'no_returns'};
+   let exported=!!r.outcome_applied_at,outcome=r.window_outcome||res.outcome,personStatus=r.person_status;
+   if(res.closed&&!exported){
+    await client.query('UPDATE vip_registrations SET window_outcome=$1,outcome_applied_at=now() WHERE id=$2 AND outcome_applied_at IS NULL',[res.outcome,r.id]);
+    const u=await client.query("UPDATE people SET status=$1,updated_at=now() WHERE id=$2 AND status IN ('first_timer','new_believer','regular','visitor_3','visitor_2','visitor_1','no_returns') RETURNING id",[res.outcome,r.person_id]);
+    if(u.rowCount)await logAction(client,actor,'people',r.person_id,'vip_window_outcome_exported',{window:res.window,came_back:res.count,outcome:res.outcome});
+    exported=true;outcome=res.outcome;if(u.rowCount)personStatus=res.outcome;
+   }
+   items.push({id:r.id,person_id:r.person_id,full_name:r.full_name,person_code:r.person_code,person_status:personStatus,invited:invite,window:res.window,attended:res.attended,count:res.count,closed:res.closed,outcome,exported});
+  }
+  return {items,today:t};
+ },{actor,write:true});
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
  }

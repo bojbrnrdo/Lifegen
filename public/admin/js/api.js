@@ -23,7 +23,7 @@ changePassword:(current,next)=>request('/api/auth/password',{method:'POST',body:
  backup:async()=>{const r=await request('/api/backup',{blob:true});downloadBlob(r.blob,r.filename||'lifegen-neon-backup.json');},
  blob:async url=>(await request(url,{blob:true})).blob,
 };
-const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','dashboard','search','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent'];
+const methods=['people','person','createPerson','updatePerson','duplicates','archivePerson','restorePerson','setPersonStatus','deletePerson','dashboard','search','saveSettings','system','users','roles','createUser','updateUser','demoStatus','demoLoad','demoRemove','activity','registrations','registration','registrationCounts','reviewRegistration','recoverRegistration','pendingCheckins','validateCheckin','lifegroupOutcomes','getPrize','setPrize','qrRegistration','postsAdmin','moderatePost','calendarEvents','saveCalendarEvent','deleteCalendarEvent'];
 for(const method of methods)api[method]=(...args)=>call(method,...args);
 export function startLiveUpdates(){
  stopSync?.();let stopped=false,source,lastRevision=null,pollTimer,reconcileTimer;

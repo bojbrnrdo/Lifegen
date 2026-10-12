@@ -98,6 +98,7 @@ export function addDays(str, n) { const d = parseDate(str); d.setDate(d.getDate(
 
 export const STATUS_LABELS = {
   first_timer: 'First Timer', new_believer: 'New Believer', regular: 'Regular Attendee',
+  visitor_3: '3-Time Visitor', visitor_2: '2-Time Visitor', visitor_1: '1-Time Visitor', no_returns: 'No Returns',
   member: 'Member', leader: 'Leader', volunteer: 'Volunteer', inactive: 'Inactive',
 };
 export const DAY_LABELS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };

@@ -257,6 +257,10 @@ img { max-width: 100%; display: block; }
 .badge--first_timer { background: var(--amber-100); color: #92400e; }
 .badge--new_believer { background: var(--pink-100); color: #9d174d; }
 .badge--regular { background: var(--blue-100); color: #1e40af; }
+.badge--visitor_3 { background: var(--blue-100); color: #1e40af; }
+.badge--visitor_2 { background: var(--amber-100); color: #92400e; }
+.badge--visitor_1 { background: var(--pink-100); color: #9d174d; }
+.badge--no_returns { background: var(--red-100); color: #991b1b; }
 .badge--member { background: var(--brand-100); color: var(--brand-900); }
 .badge--leader { background: var(--purple-100); color: #5b21b6; }
 .badge--volunteer { background: #e0f2fe; color: #075985; }
@@ -612,6 +616,10 @@ a { color: var(--accent); }
 .badge--first_timer { color: #4b5058; } .badge--first_timer::before { background: #d97706; }
 .badge--new_believer { color: #4b5058; } .badge--new_believer::before { background: #db2777; }
 .badge--regular { color: #4b5058; } .badge--regular::before { background: #2563eb; }
+.badge--visitor_3 { color: #4b5058; } .badge--visitor_3::before { background: #2563eb; }
+.badge--visitor_2 { color: #4b5058; } .badge--visitor_2::before { background: #d97706; }
+.badge--visitor_1 { color: #4b5058; } .badge--visitor_1::before { background: #db2777; }
+.badge--no_returns { color: #b91c1c; } .badge--no_returns::before { background: #dc2626; }
 .badge--member { color: #4b5058; } .badge--member::before { background: var(--accent); }
 .badge--leader { color: #4b5058; } .badge--leader::before { background: #7c3aed; }
 .badge--volunteer { color: #4b5058; } .badge--volunteer::before { background: #0284c7; }
