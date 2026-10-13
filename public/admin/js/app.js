@@ -18,6 +18,7 @@ import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
+import { renderDesigns } from './views/designs.js';
 
 export const state = {
   user: null,
@@ -51,6 +52,7 @@ const routes = [
   { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
   { path: /^\/registrations$/, view: renderRegistrations, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/qr-poster$/, view: renderQrPoster, nav: 'settings', perm: 'registrations:manage' },
+  { path: /^\/designs$/, view: renderDesigns, nav: 'designs', perm: 'settings:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
   { path: /^\/deploy$/, view: renderDeployment, nav: 'deploy', perm: 'settings:manage' },
   { path: /^\/privacy$/, view: renderPrivacy, nav: 'settings' },
@@ -142,6 +144,7 @@ function renderShell() {
         ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}
+        ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>

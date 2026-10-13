@@ -1,6 +1,6 @@
 {
   "name": "lifegen-neon",
-  "version": "2.2.11",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "description": "LIFEGEN website with an integrated Lifegroup Tracker Admin portal and Supabase PostgreSQL",
@@ -17,7 +17,8 @@
     "demo:seed": "node scripts/seed-demo.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:lifegroup-integration": "node tests/lifegroup-integration.mjs",
-    "package:vercel": "node scripts/package-vercel.mjs"
+    "package:vercel": "node scripts/package-vercel.mjs",
+    "test:vip-design-integration": "node tests/vip-design-integration.mjs"
   },
   "dependencies": {
     "cookie-parser": "1.4.7",

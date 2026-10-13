@@ -11,6 +11,7 @@ import { query, transaction, withState, runDomain, logAction, connectionHint } f
 import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
+import { listDesigns, countDesigns, createDesign, updateDesign, deleteDesign, readDesignBytes, designForSunday, setSelection, previewRandomPick, selectableSundays, storageKind, MAX_BYTES, ALLOWED_TYPES, attributeServiceDate } from './vip-designs.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
 import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
@@ -19,7 +20,7 @@ import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.2.22';
+const ADMIN_ASSET_VERSION='2.4.1';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -205,6 +206,51 @@ app.post('/api/tracker/:method',async(req,res)=>{
 });
 app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
 app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
+// ---- VIP Design Library (administrator only) --------------------------------
+// Uploads are raw image bodies, matching how /api/deploy/archive already accepts
+// a ZIP: no multipart parser, and express.json() is bypassed for this path.
+const vipDesigns=express.Router();
+vipDesigns.use(requireStaff,(req,res,next)=>{try{requirePermission(req.actor,'settings:manage');next();}catch(e){next(e);}});
+const designWrite=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
+vipDesigns.get('/',async(req,res)=>res.json({
+ storage:storageKind(),storage_bucket:storageKind()==='supabase'?(process.env.SUPABASE_STORAGE_BUCKET||'vip-designs'):null,
+ max_bytes:MAX_BYTES,allowed_types:Object.keys(ALLOWED_TYPES),today:today(),today_sunday:attributeServiceDate(new Date()),timezone:'Asia/Manila',
+ sundays:selectableSundays(today()),counts:await countDesigns(),designs:await listDesigns(),
+}));
+// Selection for one Sunday (creates the automatic pick the first time it is read).
+vipDesigns.get('/selection/:date',async(req,res)=>{
+ const date=String(req.params.date||'');if(!isSunday(date))throw httpError(400,'Choose a Sunday service date.');
+ const pick=await transaction(async client=>await designForSunday(date,client),{write:true});
+ res.json({...pick,preview_pick:await previewRandomPick(date)});
+});
+// express.raw() enforces the byte cap before the handler runs; translate its
+// error into the same clear message the validator produces.
+const designImageBody=(req,res,next)=>express.raw({type:Object.keys(ALLOWED_TYPES),limit:MAX_BYTES})(req,res,(err)=>{
+ if(err&&(err.type==='entity.too.large'||err.status===413))return next(httpError(413,`That design is too large. The limit is ${(MAX_BYTES/1024/1024).toFixed(0)} MB per file.`));
+ next(err);
+});
+vipDesigns.post('/',designImageBody,designWrite,async(req,res)=>{
+ const body=req.body;if(!Buffer.isBuffer(body)||!body.length)throw httpError(400,'Send the image bytes in the request body.');
+ // The title arrives URI-encoded because HTTP header values are latin-1.
+ let title='';try{title=decodeURIComponent(String(req.get('x-design-title')||''));}catch{title=String(req.get('x-design-title')||'');}
+ const mode=String(req.get('x-design-mode')||'background');
+ res.status(201).json(await transaction(async client=>await createDesign({buffer:body,title:title.trim().slice(0,160),displayMode:mode,actorId:req.actor?.id},client),{write:true}));
+});
+vipDesigns.patch('/:id',designWrite,async(req,res)=>res.json(await transaction(async client=>await updateDesign(req.params.id,req.body||{},client),{write:true})));
+vipDesigns.delete('/:id',designWrite,async(req,res)=>res.json(await transaction(async client=>await deleteDesign(req.params.id,req.actor?.id,client),{write:true})));
+// Admin preview of the exact bytes, and a dry-run random pick.
+vipDesigns.get('/:id/file',async(req,res)=>{const f=await readDesignBytes(req.params.id);res.type(f.mime_type).set('Cache-Control','private, max-age=300').send(f.bytes);});
+vipDesigns.get('/preview/:date',async(req,res)=>{
+ const date=String(req.params.date||'');if(!isSunday(date))throw httpError(400,'Choose a Sunday service date.');
+ res.json({design:await previewRandomPick(date)});
+});
+// Manual override / reset to automatic for one Sunday.
+vipDesigns.post('/selection/:date',designWrite,async(req,res)=>{
+ const date=String(req.params.date||'');if(!isSunday(date))throw httpError(400,'Choose a Sunday service date.');
+ const mode=req.body?.mode==='manual'?'manual':'automatic';
+ res.json(await transaction(async client=>await setSelection({serviceDate:date,designId:req.body?.design_id,mode,actorId:req.actor?.id},client),{write:true}));
+});
+app.use('/api/vip-designs',vipDesigns);
 async function page(res,which) {let html=await fs.readFile(path.join(root,'public',which,'index.html'),'utf8');if(which==='admin'){const base=`/admin/_assets-${ADMIN_ASSET_VERSION}`;html=html.replaceAll('/admin/styles.css',base+'/styles.css').replaceAll('/admin/js/app.js',base+'/js/app.js');}res.set('Cache-Control','no-store').type('html').send(html.replaceAll('<script',`<script nonce="${res.locals.nonce}"`));}
 app.get('/',(req,res)=>{
  if(req.query.view==='website')return page(res,'lifegen');
@@ -213,6 +259,11 @@ app.get('/',(req,res)=>{
  return page(res,'lifegen');
 });
 app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
+// Fullscreen VIP announcement projector. Deliberately public and read-only: it
+// exposes only the VIP full name and inviter that are already projected in the
+// room, and pulls them live from /api/public/vip-announcement. No contact
+// number, age, school or recovery code is ever included in that payload.
+app.get(['/vip-announce','/vip-announce/','/vip-announce/index.html'],(req,res)=>page(res,'vip-announce'));
 app.get(['/tracker','/tracker/index.html'],(req,res)=>res.redirect(308,'/admin'));
 app.get(['/lifegen','/lifegen/index.html'],(req,res)=>res.redirect(308,'/'));
 app.get('/privacy',async(req,res)=>{
@@ -223,7 +274,7 @@ app.get('/privacy',async(req,res)=>{
 // Versioned public assets (?v=x.y.z) are content-addressed by the HTML, so they can be
 // cached immutably for a year. The HTML references per-file versions (styles.css?v=…,
 // app.js?v=…), so accept any semver-like version, not just ADMIN_ASSET_VERSION.
-app.use((req,res,next)=>{const u=new URL(req.originalUrl,'http://lifegen.invalid');res.locals.immutableStatic=['GET','HEAD'].includes(req.method)&&/^\/(?:lifegen|brand|vendor)\//.test(u.pathname)&&/^\d+\.\d+\.\d+$/.test(u.searchParams.get('v')||'')&&/\.(?:css|js|jpe?g|png|webp|svg|woff2?)$/i.test(u.pathname);next();});
+app.use((req,res,next)=>{const u=new URL(req.originalUrl,'http://lifegen.invalid');res.locals.immutableStatic=['GET','HEAD'].includes(req.method)&&/^\/(?:lifegen|vip-announce|brand|vendor)\//.test(u.pathname)&&/^\d+\.\d+\.\d+$/.test(u.searchParams.get('v')||'')&&/\.(?:css|js|jpe?g|png|webp|svg|woff2?)$/i.test(u.pathname);next();});
 app.use((req,res,next)=>{const marker=`/admin/_assets-${ADMIN_ASSET_VERSION}/`;if(req.url.startsWith(marker)){req.url='/admin/'+req.url.slice(marker.length);res.set('Cache-Control','no-store');}else if(req.path.startsWith('/admin/')&&/\.(?:js|css)$/.test(req.path)){res.set('Cache-Control','no-store');}next();});
 app.use(express.static(path.join(root,'public'),{index:false,maxAge:'5m',setHeaders(res,filePath){if(res.locals.immutableStatic)res.setHeader('Cache-Control','public, max-age=31536000, immutable');}}));
 app.use('/api',(req,res)=>res.status(404).json({message:'API route not found.'}));
