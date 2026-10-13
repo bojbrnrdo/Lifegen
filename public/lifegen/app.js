@@ -8,13 +8,6 @@ const $ = id => document.getElementById(id),
     } [c])),
     qs = (sel, root) => (root || document).querySelector(sel),
     qsa = (sel, root) => Array.prototype.slice.call((root || document).querySelectorAll(sel)),
-    safeParse = (k, fb) => {
-        try {
-            return JSON.parse(localStorage.getItem(k)) ?? fb
-        } catch {
-            return fb
-        }
-    },
     renderIcons = () => {
         window.lucide && lucide.createIcons()
     };
@@ -31,33 +24,13 @@ function toast(msg, icon = "check") {
     }, 4200)
 }
 
-function lsGetJSON(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        if (null === raw) return fallback;
-        const val = JSON.parse(raw);
-        return null == val ? fallback : val
-    } catch (e) {
-        return console.error("[LIFEGEN] read failed:", key, e), fallback
-    }
-}
-
-function lsSetJSON(key, value) {
-    try {
-        return localStorage.setItem(key, JSON.stringify(value)), !0
-    } catch (e) {
-        return console.error("[LIFEGEN] save failed:", key, e), toast("Sorry, your device could not save this data (storage may be full).", "alert-triangle"), !1
-    }
-}
-
-function lsRemove(key) {
-    try {
-        localStorage.removeItem(key)
-    } catch (e) {}
-}
-
+// crypto.randomUUID needs a secure context (https/localhost); fall back so registration
+// and the prayer wall keep working on plain-HTTP LAN deployments.
 const getDevice=()=>Lifegen.getDevice(),setDevice=()=>Lifegen.setDevice(),getChurchNow=()=>Lifegen.churchNow(),churchUTCNow=()=>Lifegen.utcNow();
-const makeToken=()=>crypto.randomUUID();
+const makeToken = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : r & 3 | 8).toString(16)
+}));
 const DB=Lifegen.DB;
 const VERSES = [{
         ref: "Philippians 4:13",
@@ -253,9 +226,16 @@ renderVerse(!1), $("prevVerse").addEventListener("click", () => {
     }
 });
 const vPanel = $("versePanel");
+// rAF-coalesced spotlight: one style update per frame instead of one per mouse event.
+let vpRaf = 0, vpEvt = null;
 vPanel.addEventListener("mousemove", e => {
-    const r = vPanel.getBoundingClientRect();
-    vPanel.style.setProperty("--mx", e.clientX - r.left + "px"), vPanel.style.setProperty("--my", e.clientY - r.top + "px")
+    vpEvt = e;
+    if (vpRaf) return;
+    vpRaf = requestAnimationFrame(() => {
+        vpRaf = 0;
+        const r = vPanel.getBoundingClientRect();
+        vPanel.style.setProperty("--mx", vpEvt.clientX - r.left + "px"), vPanel.style.setProperty("--my", vpEvt.clientY - r.top + "px")
+    })
 }), $("year").textContent = (new Date).getFullYear();
 const nav = $("nav"),
     onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 30);
@@ -413,20 +393,13 @@ function clearLiveValidation(formId) {
         })
     })
 }
-async function updatePrize() {
-    const prizeInput = $("prize-input"),
-        prizeDisplay = $("current-prize-display");
-    if (!prizeInput) return;
-    const newPrize = prizeInput.value.trim();
-    if (!newPrize) return toast("Please enter a prize description first.", "alert-triangle"), void prizeInput.focus();
-    try {
-        await DB.setPrize(newPrize), prizeDisplay && (prizeDisplay.textContent = newPrize), prizeInput.value = "", toast("Prize updated! VIPs will now see this prize.", "trophy")
-    } catch (e) {
-        toast("Could not save the prize: " + e.message, "alert-triangle")
-    }
-}
 async function loadPrizeInVipSection() {
-    $("vip-prize-value").textContent = await DB.getPrize()
+    const el = $("vip-prize-value");
+    try {
+        el.textContent = await DB.getPrize()
+    } catch (e) {
+        el.textContent = "—"
+    }
 }
 qsa("[data-story]").forEach(b => b.addEventListener("click", e => {
     e.preventDefault(), $("storyModal").classList.add("open"), document.body.style.overflow = "hidden"
@@ -441,7 +414,9 @@ function syncVipDashboardState() {
     const signup = $("vip-signup-form-container"),
         dash = $("vip-attendance-dashboard"),
         device = getDevice();
-    device && device.token && device.name ? (signup.hidden = !0, dash.hidden = !1, $("vip-welcome-name").textContent = device.name, loadVipAttendance(), loadPrizeInVipSection()) : (signup.hidden = !1, dash.hidden = !0, clearLiveValidation("vip-signup-form"))
+    // loadVipAttendance refreshes the VIP state first, so the prize display below can
+    // reuse that response instead of making a second request.
+    device && device.token && device.name ? (signup.hidden = !0, dash.hidden = !1, $("vip-welcome-name").textContent = device.name, loadVipAttendance().finally(loadPrizeInVipSection)) : (signup.hidden = !1, dash.hidden = !0, clearLiveValidation("vip-signup-form"))
 }
 
 function validateVipForm() {
@@ -458,8 +433,8 @@ function validateVipForm() {
         name = nameInput.value.trim();
     name.length < 2 && fail(nameInput, "Please enter your full name (at least 2 characters).");
     const age = ageInput.value.trim(),
-        ageNum = parseInt(age, 10);
-    (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) && fail(ageInput, "Please enter a valid age between 1 and 120."), schoolInput.value.trim().length < 2 && fail(schoolInput, "Please enter your school or institution."), inviterInput.value.trim().length < 2 && fail(inviterInput, "Please tell us who invited you.");
+        ageNum = Number(age);
+    (!age || !Number.isInteger(ageNum) || ageNum < 1 || ageNum > 120) && fail(ageInput, "Please enter a valid age between 1 and 120."), schoolInput.value.trim().length < 2 && fail(schoolInput, "Please enter your school or institution."), inviterInput.value.trim().length < 2 && fail(inviterInput, "Please tell us who invited you.");
     const contact = contactInput.value.trim();
     return contact && !/^[0-9+\-() ]{7,20}$/.test(contact) && fail(contactInput, "Please enter a valid contact number, or leave this blank."), firstInvalid ? (firstInvalid.focus(), toast("Please check the highlighted fields.", "alert-triangle"), null) : {
         name: name,
@@ -595,8 +570,7 @@ const TYPE_META = {
 };
 let posts = [],
     filter = "all";
-const voted = new Set(safeParse("lifegen_voted", [])),
-    amens = lsGetJSON("lifegen_amens", {});
+const voted = new Set();
 
 function timeAgo(value) {
     const d = new Date(value);
@@ -720,7 +694,7 @@ qsa(".seg-btn").forEach(b => b.addEventListener("click", () => {
  btn.disabled=true;try{const r=await Lifegen.request('/api/public/posts/'+encodeURIComponent(btn.dataset.amen)+'/pray',{});btn.querySelector('b').textContent=r.prayer_count;btn.querySelector('span').textContent='Amen';btn.classList.add('voted');voted.add(btn.dataset.amen);toast('Amen — we’re praying with you.','heart-handshake');}catch(err){toast(err.message,'alert-triangle');}finally{btn.disabled=false;}
 }), setInterval(() => {
     qsa(".post").forEach(el => {
-        const p = posts.find(x => (x.id || x.created_at + (x.author || "")) === el.dataset.id),
+        const p = posts.find(x => String(x.id || x.created_at + (x.author || "")) === el.dataset.id),
             t = el.querySelector(".post-time");
         p && t && (t.textContent = timeAgo(p.created_at))
     })

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import crypto from 'node:crypto';
@@ -26,7 +27,13 @@ const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL
 app.disable('x-powered-by');if(process.env.VERCEL||process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||process.env.TRUST_PROXY==='true')app.set('trust proxy',1);
 app.use((req,res,next)=>{res.locals.nonce=crypto.randomBytes(16).toString('base64');next();});
 app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:['https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
-app.use(cookieParser());app.use(express.json({limit:'12mb'}));
+app.use(cookieParser());
+// Gzip/deflate responses (HTML, CSS, JS, JSON, ICS) whenever the client accepts it.
+// The SSE live-update stream is excluded so events are never delayed by buffering.
+app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content-Type')||'');if(type.includes('text/event-stream')||type.includes('application/zip'))return false;return compression.filter(req,res);}}));
+// All tracker and public API payloads are small JSON documents (the deployment ZIP
+// upload uses its own raw-body parser with a separate limit).
+app.use(express.json({limit:'512kb'}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
