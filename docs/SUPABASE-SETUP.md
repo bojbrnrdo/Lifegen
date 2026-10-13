@@ -23,11 +23,15 @@ The scripts are additive and do not drop business tables. Migrations `003`, `004
    5. `database/004_vip_window_outcome.sql` (retired no-op; does not add the export columns)
    6. `database/005_people_status_outcomes.sql` (retired no-op; does not add outcome statuses)
    7. `database/006_lifegroup_tracker.sql`
+   8. `database/007_vip_service_date.sql`
+   9. `database/008_vip_design_library.sql`
 
-   Run the files one at a time, in that order, and wait for a successful completion before moving to the next. Keep the SQL text unchanged. `001` and `006` also create private migration/version records; all files are transaction-wrapped.
+   Run the files one at a time, in that order, and wait for a successful completion before moving to the next. Keep the SQL text unchanged. `001`, `006`, `007` and `008` also create private migration/version records; all files are transaction-wrapped.
 
 3. If LIFEGEN migrations `001`–`005` were already applied to this project, **do not recreate or reset the database**. Back it up and run `database/006_lifegroup_tracker.sql` to restore the tracker tables. The retired `003` file in this branch is a no-op, so it will not drop existing tracker data.
-4. Verify the migration versions and tracker tables in SQL Editor:
+4. If LIFEGEN migrations `001`–`006` are already applied, run `database/007_vip_service_date.sql` on its own. It is additive and non-destructive: it adds `vip_registrations.service_date`, backfills it from `created_at` in `Asia/Manila`, adds two partial unique indexes that stop duplicate registrations inflating the announced VIP count, and creates the announcement-window settings rows. No registration row is deleted.
+5. If LIFEGEN migrations `001`–`007` are already applied, run `database/008_vip_design_library.sql` on its own. It is additive and non-destructive: it creates the `vip_designs` artwork library and the `vip_service_designs` per-Sunday selection table, and touches no existing table. No VIP registration, person or lifegroup record is read, changed or deleted.
+6. Verify the migration versions and tracker tables in SQL Editor:
 
    ```sql
    SELECT version FROM public.schema_migrations ORDER BY version;
@@ -97,7 +101,40 @@ Notes:
 2. Deploy the application. The configured build runs `npm run build && npm run db:migrate`; the migration command uses `DATABASE_DIRECT_URL` and skips versions already applied in the SQL Editor.
 3. Visit `/api/health`. A configured and migrated database returns `{"ok":true,"database":"supabase-postgresql"}`.
 4. Open `/admin`, create the first administrator using `SETUP_KEY`, then remove `SETUP_KEY` from the host and redeploy.
-5. Submit one test registration on the public website. In Admin → **Lifegroup Tracker → Needs Lifegroup**, the person should appear with a **VIP signup** badge. Assign that person to a group; they should disappear from the unassigned queue and appear in the group roster. A new registration also appears in **Registrations** because it creates the `people` and `vip_registrations` rows in the same database transaction.
+5. Open Admin → **VIP Designs** and upload one landscape PNG. Preview it on the projector
+   at `/vip-announce?preview=1`. Reload the page: the same design must come back, because
+   the pick is recorded in the database against the Sunday, not chosen per browser.
+6. Submit one test registration on the public website. In Admin → **Lifegroup Tracker → Needs Lifegroup**, the person should appear with a **VIP signup** badge. Assign that person to a group; they should disappear from the unassigned queue and appear in the group roster. A new registration also appears in **Registrations** because it creates the `people` and `vip_registrations` rows in the same database transaction.
+
+### VIP announcement artwork storage
+
+Uploaded announcement designs are the only binary files LIFEGEN stores. Choose one of two
+backends; the application detects which one is active from the environment, so no code
+change is needed.
+
+**Supabase Storage (recommended for a real deployment).** Set `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` on the server, then:
+
+1. Supabase → **Storage** → **New bucket** → name it `vip-designs` (or set
+   `SUPABASE_STORAGE_BUCKET` to whatever you named it).
+2. Keep the bucket **private**. Do not add a public-read policy.
+3. Do not create a browser-facing INSERT/UPDATE/DELETE policy for this bucket. Uploads
+   and deletes go through the LIFEGEN server with the service-role key, which is a
+   private server setting.
+
+`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security, so treat it exactly like the
+database password: server-side only, never in a `NEXT_PUBLIC_`/`VITE_` variable, never in
+browser JavaScript, never committed. The Admin portal and the projector never receive it —
+they read artwork through the same-origin route `/api/vip-design-image/:id/:file`, which
+streams the bytes after checking the request. That is why the bucket can stay private.
+
+**PostgreSQL `bytea` (the default when Storage is not configured).** The file bytes are
+kept in the `vip_designs.data` column. Nothing to set up; suitable for a small library, but
+it grows the database, and the JSON backup from `/api/backup` carries the metadata only —
+the bytes are restored with the database itself.
+
+Uploads are validated in both cases: PNG, JPEG or WebP only (checked from the file header,
+not the filename), 8 MB by default, and the same artwork cannot be stored twice.
 
 The tracker tables have row-level security enabled and browser-role grants revoked. LIFEGEN talks to PostgreSQL from its private server environment, not through the browser-facing Supabase Data API. The SQL does not create broad REST policies; keep database credentials server-side.
 

@@ -1,4 +1,9 @@
 import 'dotenv/config';import fs from 'node:fs/promises';import {directClient,connectionHint,supabaseRootCertificate} from '../src/db.js';
+// A Vercel Preview build has no production database connection by design, so the
+// migration step is skipped there instead of failing the whole deployment.
+// Production deployments are unchanged: they still run every migration and still
+// fail loudly when the database is unreachable.
+if(process.env.VERCEL_ENV==='preview'&&!process.env.DATABASE_URL&&!process.env.DATABASE_DIRECT_URL){console.log('Vercel preview build without a database connection — migrations are skipped. Set DATABASE_URL and DATABASE_DIRECT_URL for the Preview environment to apply them here.');process.exit(0);}
 const client=directClient();
 try{
 // Never prints the certificate itself, only whether this host trusts it.

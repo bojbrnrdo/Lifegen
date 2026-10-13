@@ -273,6 +273,14 @@ const manilaAt = (date, h) => new Date(localDateKey(date) + "T" + String(h).padS
 
 function nextService() {
     // Next Sunday 1 PM that hasn't started yet. While a service is running this is next week's.
+    // The server's answer wins when we have one: /api/public/service-cycle is the
+    // same source of truth the fullscreen VIP announcement at /vip-announce uses.
+    const cycle = serviceCycle.data;
+    if (cycle && cycle.countdown_target_iso) {
+        const target = new Date(cycle.countdown_target_iso);
+        if (!Number.isNaN(target.getTime())) return nextService.daysAway = Math.max(0, Math.round((target - churchUTCNow()) / DAY)), nextService.displayDate = cycle.countdown_service_date_label || cycle.countdown_service_date_display || null, nextService.announceDate = cycle.announce_short_date || null, target;
+    }
+    nextService.displayDate = null, nextService.announceDate = null;
     const now = getChurchNow();
     for (let add = 0; add < 8; add++) {
         const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + add, 12);
@@ -281,9 +289,37 @@ function nextService() {
 }
 
 function serviceLive() {
+    // service_is_live covers the whole 1:00–3:00 PM window on a Sunday, so the
+    // hero keeps saying "Happening now" after the projector's welcome board has
+    // already handed back to the countdown.
+    if (serviceCycle.data) return serviceCycle.data.service_is_live === true;
     const now = getChurchNow();
     return 0 === now.getDay() && now.getHours() >= SERVICE_START_H && now.getHours() < SERVICE_END_H
 }
+// Server-authoritative Sunday service cycle. The fullscreen VIP announcement at
+// /vip-announce reads this exact endpoint, so the hero countdown and the
+// projector can never disagree about which Sunday the service falls on. The
+// local maths above stays as the offline fallback when the API is unreachable.
+const serviceCycle = {
+    data: null,
+    syncedAt: 0
+};
+async function syncServiceCycle() {
+    try {
+        const cycle = await Lifegen.request("/api/public/service-cycle");
+        if (cycle && cycle.countdown_target_iso) {
+            serviceCycle.data = cycle;
+            serviceCycle.syncedAt = Date.now();
+            tickCountdown();
+        }
+    } catch {
+        /* keep the locally computed countdown */
+    }
+}
+setInterval(() => {
+    document.visibilityState && "visible" !== document.visibilityState || syncServiceCycle();
+}, 6e4);
+syncServiceCycle();
 const cdNums = Object.fromEntries(qsa("#countdown .cd-num").map(el => [el.dataset.u, el]));
 let cdLastLabel = "", cdLastLive = null;
 
@@ -308,7 +344,9 @@ function tickCountdown() {
     if (live) {
         const start = target - 7 * DAY; // today's service started 7 days before next week's
         progress = (now - start) / (2 * HOUR);
-        $("cdDate").textContent = "Today, " + new Date(start).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric" });
+        $("cdDate").textContent = "Today, " + (nextService.announceDate || new Date(start).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric" }));
+        // nextService.announceDate is the server's short form ("Oct 18"), so the
+        // "Today, " prefix reads the same as the locally computed fallback.
         $("cdPill").textContent = "Happening now";
     } else {
         setNum("d", d), setNum("h", h), setNum("m", m), setNum("s", s);
@@ -316,7 +354,7 @@ function tickCountdown() {
         const lastEnd = target - 7 * DAY + 2 * HOUR;
         progress = (now - lastEnd) / (target - lastEnd);
         const daysAway = nextService.daysAway;
-        $("cdDate").textContent = new Date(target).toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" });
+        $("cdDate").textContent = nextService.displayDate || new Date(target).toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" });
         $("cdPill").textContent = daysAway <= 0 ? "Today" : 1 === daysAway ? "Tomorrow" : "In " + daysAway + " days";
         const label = (d ? d + (1 === d ? " day " : " days ") : "") + h + (1 === h ? " hour " : " hours ") + m + (1 === m ? " minute" : " minutes") + " until the next service";
         if (label !== cdLastLabel) cdLastLabel = label, $("countdown").setAttribute("aria-label", label);

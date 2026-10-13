@@ -191,6 +191,14 @@ export async function allocateId(client,entity) {const {rows}=await client.query
 export async function databaseBackup(client) {
  const state=await loadState(client,{includeAudit:true,includeVipRegistrations:true});
  for(const t of ['vip_registrations','vip_checkins','community_posts','monthly_prizes','prayer_reactions','audit_log']) state[t]=(await client.query(`SELECT * FROM "${t}"`)).rows;
+ // VIP design library: the per-Sunday selections are tiny and must survive a
+ // restore, but the artwork bytes are megabytes each, so the JSON export carries
+ // their metadata only. The bytes stay in Supabase Storage, or in the
+ // vip_designs.data column, and are restored with the database itself.
+ const designRows=(await client.query('SELECT id,title,filename,mime_type,byte_size,width,height,checksum,storage_kind,storage_path,display_mode,layout,is_enabled,uploaded_by,created_at,updated_at FROM vip_designs ORDER BY id')).rows;
+ state.vip_designs=designRows;
+ state.vip_designs_bytes_excluded=designRows.length>0?'Image bytes are not part of this JSON export; they live in Supabase Storage or the vip_designs.data column.':null;
+ state.vip_service_designs=(await client.query('SELECT * FROM vip_service_designs ORDER BY service_date')).rows;
  return {app:'LifegenTracker',source:'supabase-postgresql',database_instance:state.settings.__database_instance,exported_at:new Date().toISOString(),...state};
 }
 export const closePool=async()=>{if(pool){await pool.end();pool=null;}};

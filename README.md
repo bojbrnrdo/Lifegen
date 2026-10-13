@@ -17,11 +17,125 @@ Each new VIP registration creates its linked `people` and `vip_registrations` ro
 
 The special one-month VIP outcome/export feature has been removed. The Registrations page no longer exports VIP attendance outcomes. The public VIP portal's monthly prize progress remains separate from Lifegroup placement.
 
+## Sunday cycle and the fullscreen VIP announcement
+
+`/vip-announce` is a public, read-only projector page for the tech team. Open it on the
+sanctuary display and press **Fullscreen** (or the `F` key). Everything on it is rendered
+from the database — no flattened image, so text changes without regenerating anything.
+
+- Dark forest-green stage, gold border and accents, LIFEGEN branding.
+- `WELCOME OUR VIPs`, the automatic Sunday date, each VIP's name and inviter, and the
+  automatic total (`01 VIP TODAY`, `09 VIPs TODAY`, `12 VIPs TODAY`).
+- Loading, empty and database-error states. A database failure keeps the last real
+  records on screen and labels them stale — placeholder names are never substituted.
+- Updates in place, so an active fullscreen session survives every refresh.
+
+### One service-date source
+
+`src/service-cycle.js` is the single source of truth for the Sunday cycle in
+`Asia/Manila`. The hero countdown on `/`, the projector at `/vip-announce` and the
+registration attribution rule all read it, so they cannot disagree about which Sunday
+is "today's". No date is hardcoded anywhere.
+
+The cycle is a date-based state machine, derived from the server clock and persisted in
+`settings` so a projector refresh never restarts the wrong phase:
+
+```
+COUNTDOWN → VIP_ANNOUNCEMENT → NEXT_SUNDAY_COUNTDOWN → COUNTDOWN …
+```
+
+| Phase | When | Projector shows |
+| --- | --- | --- |
+| `COUNTDOWN` | before the service start | countdown to the upcoming Sunday |
+| `VIP_ANNOUNCEMENT` | from the service start, for `vip_announce_minutes` | the VIP welcome board |
+| `NEXT_SUNDAY_COUNTDOWN` | after that window closes | countdown to the following Sunday |
+
+The countdown does not switch back the instant it reaches zero; the window holds for the
+configured duration.
+
+### Settings
+
+Stored in the `settings` table (created by `database/007_vip_service_date.sql`):
+
+- `vip_announce_minutes` — how long the welcome board stays up. Default `30`, range 1–600.
+  Set it to `120` to keep the board up for the whole service.
+- `vip_announce_start` / `vip_announce_service_date` — the persisted window. Written
+  automatically when the window opens; normally never edited by hand.
+- `vip_announce_start_hour`, `vip_announce_start_minute`, `vip_announce_end_hour`,
+  `vip_announce_end_minute` — optional overrides for the 13:00/15:00 service times.
+
+### Which VIPs are announced
+
+`vip_registrations.service_date` (added by migration `007`) attributes each registration
+to a Sunday: registered on a Sunday → that Sunday; registered any other day → the coming
+Sunday. The board lists every attributed registration for the Sunday it is showing.
+
+Duplicate registrations cannot inflate the count. Two partial unique indexes back this at
+the database level, and both are honoured on insert:
+
+- `vip_registrations_service_person_uniq` — one attributed registration per person per Sunday.
+- `vip_registrations_service_identity_uniq` — one per normalized name **and** inviter per Sunday.
+
+A re-submitted form is still stored with a working recovery portal but is left
+unattributed, so it is not announced. Two different people who share a name but were
+invited by different people are two real VIPs and both appear.
+
+### Live updates
+
+`GET /api/public/vip-announcement` returns the names, inviters, total, Sunday date and
+cycle. `GET /api/public/vip-announcement/stream` pushes changes over the existing
+PostgreSQL `LISTEN lifegen_changes` channel (the same mechanism Supabase Realtime
+delivers). The projector refetches on each event and also polls every 15 seconds, so it
+still updates where the notification channel is unavailable — such as the local PGlite
+preview database, which does not relay `NOTIFY`.
+
+## VIP design library
+
+The tech team uploads the announcement artwork at **Admin → VIP Designs**
+(`/admin#/designs`). Nothing about a design requires editing source or redeploying.
+
+- Batch upload by drag-and-drop or the file picker. PNG, JPEG and WebP, up to 8 MB.
+- Each design keeps its filename, upload date, dimensions, display title and availability.
+- Rename, enable/disable, delete (after confirmation) and preview before enabling.
+- The screen shows how many designs are available, and warns when an upload looks like a
+  flattened design with sample names, dates or counts already baked into the image —
+  those values cannot update, so the board would go stale.
+- **Preview on projector** opens `/vip-announce?preview=1`, which renders the real
+  announcement layout on any day of the week using the live VIP data. It is
+  presentational only: the server's cycle state is not touched.
+
+Every uploaded file is hashed on arrival, and the same artwork cannot be stored twice.
+Files live in object storage when Supabase Storage is configured, and in PostgreSQL
+otherwise; the image bytes never reach the browser, and no service-role key is ever
+served to it.
+
+### A different design every Sunday
+
+The design for a Sunday is chosen **once, in the database**, and recorded against that
+Sunday's service date (`vip_service_designs`, one row per Sunday). Every device, every
+refresh and every tech member therefore sees the same artwork, and reopening the
+projector reuses the recorded choice rather than re-rolling it.
+
+Each Sunday's pick avoids the designs used on the recent Sundays — a library of N
+designs plays through N different ones before any artwork comes round again. The rule
+relaxes in order: recent designs → just the previous Sunday → no rule at all, so a
+library of exactly one design, or a pool worn down by disabling, still resolves instead
+of leaving the Sunday blank.
+
+An administrator can override a single Sunday from the same screen — **Randomly select**,
+preview, **Use this design for this Sunday**, or **Reset to automatic**. A manual choice is
+stored as `selection_mode = 'manual'` and is never overwritten by a refresh, a poll or a
+background update.
+
+Disabled and deleted designs are never chosen for a future Sunday. With no designs at
+all, the projector shows a branded fallback layout — no design is ever invented, and no
+sample name, date, inviter or count is ever hardcoded.
+
 ## Configure Supabase
 
 Follow [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) for the exact SQL Editor sequence, Supabase connection URL guidance, deployment environment variables, and post-deploy checks.
 
-The SQL files are under `database/`. For a fresh LIFEGEN schema, run them in order from `001_init.sql` through `006_lifegroup_tracker.sql`; `003`, `004`, and `005` are retained retired no-op migration markers. For an existing LIFEGEN deployment with migrations `001`–`005` already applied, back up first and run the additive `006_lifegroup_tracker.sql` migration to restore the tracker tables.
+The SQL files are under `database/`. For a fresh LIFEGEN schema, run them in order from `001_init.sql` through `008_vip_design_library.sql`; `003`, `004`, and `005` are retained retired no-op migration markers. For an existing LIFEGEN deployment with migrations `001`–`005` already applied, back up first and run the additive `006_lifegroup_tracker.sql` migration to restore the tracker tables, then the additive `007_vip_service_date.sql` migration for the Sunday-service attribution behind the VIP announcement, then `008_vip_design_library.sql` for the announcement design library.
 
 Connection variables are private server settings (see [`.env.example`](.env.example)):
 

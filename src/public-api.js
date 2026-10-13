@@ -1,8 +1,11 @@
 import { Router } from 'express';
+import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
 import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
+import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
+import { readDesignBytes } from './vip-designs.js';
 export const publicRouter=Router();
 export function siteUrls(req) {
  const host=(req.app.get('trust proxy')?req.get('x-forwarded-host')||req.get('host'):req.get('host'))?.split(',')[0].trim()||'';
@@ -33,6 +36,55 @@ publicRouter.get('/config',async(req,res)=>{
  res.json({...siteUrls(req),settings,today:today(),server_time:new Date().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});
 });
 publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),month:today().slice(0,7)}));
+// ---- Sunday service cycle + fullscreen VIP announcement ----------------------
+// The cycle is derived from the server clock in Asia/Manila plus the persisted
+// window in settings, so it is identical for the hero countdown, every projector
+// and any later page refresh.
+publicRouter.get('/service-cycle',async(req,res)=>{
+ const cycle=await readCycle(new Date());
+ await persistCycleWindow(cycle).catch(()=>{});
+ res.json(cycle);
+});
+// Names, inviters and the total for one Sunday service, read live from the
+// database. `?date=YYYY-MM-DD` inspects another Sunday; omitted means the Sunday
+// the cycle is currently announcing.
+publicRouter.get('/vip-announcement',async(req,res)=>{
+ // Generous, because the projector polls this every 15 seconds and a whole
+ // congregation can share one public IP: 900 per 15 minutes is 60 a minute,
+ // about fifteen times what a single projector uses. It exists so the endpoint
+ // cannot be hammered into unbounded database reads, not to meter real use.
+ await rateLimit(req,'vip-announcement',900,15);
+ const date=String(req.query.date||'');
+ if(date&&!isSundayServiceDate(date))throw httpError(400,'Use a Sunday date, formatted YYYY-MM-DD.');
+ res.json(await vipAnnouncement({date:date||undefined}));
+});
+// Public, read-only change stream (PostgreSQL LISTEN/NOTIFY). The projector
+// refetches the announcement on each event; polling remains the backstop.
+// An in-memory limiter runs before the database-backed one so a flood is turned
+// away without a database round-trip; 300 per 15 minutes is looser than the 120
+// the database allows below, so a real projector never notices it.
+const streamFloodLimiter=expressRateLimit({windowMs:15*60*1000,limit:300});
+publicRouter.get('/vip-announcement/stream',streamFloodLimiter,async(req,res)=>{
+ // One long-lived connection per projector, so this only counts reconnects.
+ await rateLimit(req,'vip-announcement-stream',120,15);
+ return streamAnnouncementChanges(req,res);
+});
+// Names and count only — the hero countdown uses this to stay on one source.
+publicRouter.get('/vip-count',async(req,res)=>{
+ const cycle=await readCycle(new Date());
+ const {total}=await vipsForService(cycle.announce_service_date);
+ res.json({service_date:cycle.announce_service_date,service_date_display:cycle.announce_service_date_display,total,state:cycle.state,timezone:cycle.timezone});
+});
+// The selected design's image bytes. Public and cacheable by checksum: the
+// artwork is meant to be projected in the room, and the URL carries the content
+// hash so a replaced file can never be served from a stale cache.
+publicRouter.get('/vip-design-image/:id/:file',async(req,res)=>{
+ const file=await readDesignBytes(req.params.id);
+ const want=String(req.params.file||'');
+ const hash=want.split('.')[0];
+ if(hash&&file.checksum.slice(0,12)!==hash)throw httpError(404,'That design has been replaced.');
+ res.type(file.mime_type).set('Cache-Control','public, max-age=31536000, immutable').send(file.bytes);
+});
 publicRouter.get('/calendar-events',async(req,res)=>res.json(await publicCalendar(String(req.query.from||''),String(req.query.to||''))));
 publicRouter.get('/calendar-upcoming',async(req,res)=>res.json({today:today(),events:await upcomingEvents(req.query.days,req.query.limit)}));
 publicRouter.get('/event.ics',async(req,res)=>{
@@ -68,10 +120,20 @@ publicRouter.post('/registrations',async(req,res)=>{
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}
   const parts=name.split(' ');const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age,school,inviter,contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true});
   const id=stateId(data,'vip_registrations');const recovery='LG-'+randomToken();
-  await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[id,p.id,name,age,school,inviter,contact,hashToken(recovery),key]);
+  // Attribute this registration to the Sunday service the fullscreen
+  // announcement is showing. Safe to check-then-insert: every write runs inside
+  // the pg_advisory_xact_lock taken by withState, and the two partial unique
+  // indexes from database/007 are the backstop.
+  const service_date=attributeServiceDate(new Date());
+  // A re-submit is only a duplicate when it matches the identity the unique index
+  // uses — same normalized name AND same inviter. Two different people who share
+  // a name but were invited by different people are two real VIPs, and both are
+  // announced. person_id is checked as well to satisfy the per-person index.
+  const announcedForService=!(await client.query("SELECT 1 FROM vip_registrations WHERE service_date=$1 AND ((lower(btrim(full_name))=lower(btrim($2)) AND lower(btrim(COALESCE(inviter,'')))=lower(btrim(COALESCE($3,'')))) OR person_id=$4) LIMIT 1",[service_date,name,inviter,p.id])).rows.length;
+  await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key,service_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,p.id,name,age,school,inviter,contact,hashToken(recovery),key,announcedForService?service_date:null]);
   const session=await startVipSession(client,id);
-  await logAction(client,null,'vip_registrations',id,'public_registration',{person_id:p.id});
-  return {vip:{id,person_id:p.id,name,created_at:new Date().toISOString()},recovery_code:recovery,session};
+  await logAction(client,null,'vip_registrations',id,'public_registration',{person_id:p.id,service_date:announcedForService?service_date:null});
+  return {vip:{id,person_id:p.id,name,created_at:new Date().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
  },{write:true});
  setVipCookie(req,res,result.session.token);delete result.session;res.status(result.already_registered?200:201).json(result);
 });

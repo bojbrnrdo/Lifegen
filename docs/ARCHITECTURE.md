@@ -17,16 +17,21 @@ The current app uses Supabase PostgreSQL by supplying private `DATABASE_URL` and
 - `src/auth.js`: scrypt password hashing, hashed session identifiers, HttpOnly cookies, CSRF/origin checks, roles and server-side Viewer redaction.
 - `src/public-api.js`: public VIP registration, portal/recovery, Sunday check-in, prayer/reaction persistence and public calendar endpoints.
 - `src/events.js`: persistent PostgreSQL `LISTEN`, finite SSE streams and reconnect/fallback support.
+- `src/service-cycle.js`: the single Asia/Manila Sunday service-cycle source shared by the hero countdown, the `/vip-announce` projector and the VIP service-date attribution rule.
+- `src/vip-announcement.js`: reads the announced VIP names, inviters and total for one Sunday service and serves the public change stream behind the projector.
+- `src/vip-designs.js`: the announcement design library — validation and dimension sniffing of PNG/JPEG/WebP uploads, the storage adapter (Supabase Storage or `bytea`), and the database-backed rotation that picks one design per Sunday service date.
 - `src/migration.js`: application backup export; it does not automatically import the supplied ZIP's database or legacy records.
-- `database/001_init.sql` through `database/006_lifegroup_tracker.sql`: versioned PostgreSQL schema migrations. See [`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) for the execution order and Supabase configuration.
+- `database/001_init.sql` through `database/008_vip_design_library.sql`: versioned PostgreSQL schema migrations. See [`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) for the execution order and Supabase configuration.
 
 ## Frontends and routes
 
 - `public/lifegen/`: public site, VIP signup/portal and click-to-load media embeds.
+- `public/vip-announce/`: public, read-only fullscreen VIP announcement projector served at `/vip-announce`, including the `?preview=1` layout check.
+- `public/admin/js/views/designs.js`: the Admin → VIP Designs management screen (upload, rename, enable/disable, delete, override the Sunday pick).
 - `public/admin/`: authenticated Admin portal.
 - `public/admin/js/views/lifegroups.js` and `progress.js`: separate Lifegroup Tracker section, Network pages and weekly progress views.
 
-One Express application serves `/` and `/admin`. Both frontends call same-origin relative API URLs; there is no tracker iframe and no direct browser-to-database connection. The Admin has `#/lifegroups`, `#/lifegroups/:id`, and `#/networks/:id` routes. `lifegroups:view` and `lifegroups:manage` permissions gate the views and writes.
+One Express application serves `/`, `/vip-announce` and `/admin`. All frontends call same-origin relative API URLs; there is no tracker iframe and no direct browser-to-database connection. The Admin has `#/lifegroups`, `#/lifegroups/:id`, and `#/networks/:id` routes. `lifegroups:view` and `lifegroups:manage` permissions gate the views and writes, and `settings:manage` gates the VIP design library.
 
 ## VIP registration flow
 
