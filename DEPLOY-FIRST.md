@@ -19,6 +19,8 @@ The two database URLs must point to the same Supabase project and database. Neve
 
 Vercel should use the **Express** framework preset, no output-directory override, and the repository's configured build command `npm run build && npm run db:migrate`. Redeploy after adding environment variables. The publishing helper, if used, validates the Supabase URL pair before sending these variables to the selected Vercel project, and passes `DATABASE_SSL_ROOT_CERT` along as a sensitive value when it is set here.
 
+A **Preview** deployment that has no database variables skips the migration step with a clear build-log line instead of failing the deployment. Add the two database URLs to the Preview environment as well when preview builds should apply migrations.
+
 The build log tells you which TLS trust store `npm run db:migrate` used, for example `TLS: certificate verification is enabled with the system root certificates (no DATABASE_SSL_ROOT_CERT set).`, and it prints an actionable hint when a connection fails with an untrusted certificate chain or an unreachable host.
 
 ## 3. Create the first Admin and verify
