@@ -12,7 +12,7 @@ window.Lifegen=(()=>{
   addRegistration:async reg=>{const button=document.querySelector('#vip-signup-form button[type=submit]');button.disabled=true;try{let key=sessionStorage.getItem('lifegen_registration_request');if(!key){key=crypto.randomUUID();sessionStorage.setItem('lifegen_registration_request',key);}const r=await request('/api/public/registrations',{...reg,privacy_consent:document.getElementById('vip-consent').checked,idempotency_key:key,website:document.getElementById('vip-website').value});await refreshVip();sessionStorage.removeItem('lifegen_registration_request');if(r.recovery_code)showRecovery(r.recovery_code);}finally{button.disabled=false;}},
   listCheckinsFor:async()=> (await refreshVip()).checkins||[],addCheckin:()=>request('/api/public/checkins',{}),
   listPosts:()=>request('/api/public/posts'),addPost:p=>request('/api/public/posts',{type:p.type,author:p.author,content:p.content,is_anonymous:p.isAnonymous}),
-  getPrize:async()=> (await request('/api/public/prize')).value
+  getPrize:async()=>vipState?.prize??(await request('/api/public/prize')).value
  };
  async function initialize({sync,verse,toast,reducedMotion}){
   notify=toast;
@@ -26,7 +26,15 @@ window.Lifegen=(()=>{
    if(!vipState.registered&&config.legacy_restore_enabled===true){let old=null;try{old=JSON.parse(localStorage.getItem('lifegen_device'));}catch{}if(old?.token){try{await request('/api/public/vip/restore',{legacy_token:old.token});await refreshVip();localStorage.removeItem('lifegen_device');}catch{toast('Your old VIP record must be imported before this portal can be restored. Contact the LIFEGEN team.','info');document.querySelector('#vip-signup-form button[type=submit]').disabled=true;}}}
    sync();verse(false);if(location.hash==='#vip'){const target=vipState.registered?document.getElementById('vip-attendance-dashboard'):document.getElementById('vip-signup-form');target.scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'start'});}
   }catch(e){const note=document.createElement('div');note.className='backend-warning';note.textContent=e.message+' No registration has been saved.';document.body.prepend(note);}
-  setInterval(()=>{if(document.visibilityState==='visible'&&vipState?.registered)sync();},15000);
+  // Poll only while the tab is open and the VIP section is near the viewport; the
+  // state already refreshes whenever the visitor interacts with the portal.
+  let vipInView=true;
+  const vipSection=document.getElementById('vip');
+  if(vipSection&&window.IntersectionObserver){
+   vipInView=false;
+   new IntersectionObserver(([e])=>{vipInView=e.isIntersecting;if(e.isIntersecting&&vipState?.registered)sync();},{rootMargin:'240px'}).observe(vipSection);
+  }
+  setInterval(()=>{if(document.visibilityState==='visible'&&vipInView&&vipState?.registered)sync();},15000);
  }
  return {DB,getDevice,setDevice,churchNow,utcNow,initialize,request};
 })();
