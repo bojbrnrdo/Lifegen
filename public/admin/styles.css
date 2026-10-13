@@ -1055,3 +1055,8 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
   .dl-upload__row{grid-template-columns:1fr;gap:6px}
   .dl-upload__status{text-align:left}
 }
+
+/* VIP Gift Tracker — the card on the VIP registrations screen. */
+.gift-row { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--ink-50); }
+.gift-row .progress { margin-top: 9px; }
+.gift-row .badge, .gift-row .btn { white-space: nowrap; }

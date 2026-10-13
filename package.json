@@ -18,7 +18,8 @@
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:lifegroup-integration": "node tests/lifegroup-integration.mjs",
     "package:vercel": "node scripts/package-vercel.mjs",
-    "test:vip-design-integration": "node tests/vip-design-integration.mjs"
+    "test:vip-design-integration": "node tests/vip-design-integration.mjs",
+    "test:vip-gift-integration": "node tests/vip-gift-integration.mjs"
   },
   "dependencies": {
     "compression": "1.8.1",

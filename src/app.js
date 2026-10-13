@@ -13,6 +13,7 @@ import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } fr
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
 import { listDesigns, countDesigns, createDesign, updateDesign, deleteDesign, readDesignBytes, designForSunday, setSelection, previewRandomPick, selectableSundays, storageKind, MAX_BYTES, ALLOWED_TYPES, attributeServiceDate } from './vip-designs.js';
+import { listGiftTracker, markGiftGiven, undoGiftGiven } from './gift-tracker.js';
 import { readStaff, publicUser, requireStaff, requirePermission, checkCsrf, checkOrigin, rateLimit, setupAdmin, login, changePassword, userAccounts, setStaffCookie, clearStaffCookie, redactForViewer, randomToken, hashToken, previewSessionTokensEnabled, passwordHash, safeEqual } from './auth.js';
 import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
@@ -21,7 +22,7 @@ import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.3';
+const ADMIN_ASSET_VERSION='2.4.4';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -76,7 +77,9 @@ const methods={
  registrations:['registrations:manage',false],
  lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
  createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
- registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true]
+ registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
+ // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
+ giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
@@ -177,6 +180,11 @@ async function customMethod(req,name,args) {
   }
   return {items:rows};
  }
+ // VIP Gift Tracker: the read is derived live from existing records; the two
+ // writes only ever touch the additive vip_gift_handouts table.
+ if(name==='giftTracker')return listGiftTracker();
+ if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
  }
