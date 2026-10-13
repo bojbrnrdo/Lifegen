@@ -48,13 +48,22 @@ publicRouter.get('/service-cycle',async(req,res)=>{
 // database. `?date=YYYY-MM-DD` inspects another Sunday; omitted means the Sunday
 // the cycle is currently announcing.
 publicRouter.get('/vip-announcement',async(req,res)=>{
+ // Generous, because the projector polls this every 15 seconds and a whole
+ // congregation can share one public IP: 900 per 15 minutes is 60 a minute,
+ // about fifteen times what a single projector uses. It exists so the endpoint
+ // cannot be hammered into unbounded database reads, not to meter real use.
+ await rateLimit(req,'vip-announcement',900,15);
  const date=String(req.query.date||'');
  if(date&&!isSundayServiceDate(date))throw httpError(400,'Use a Sunday date, formatted YYYY-MM-DD.');
  res.json(await vipAnnouncement({date:date||undefined}));
 });
 // Public, read-only change stream (PostgreSQL LISTEN/NOTIFY). The projector
 // refetches the announcement on each event; polling remains the backstop.
-publicRouter.get('/vip-announcement/stream',async(req,res)=>streamAnnouncementChanges(req,res));
+publicRouter.get('/vip-announcement/stream',async(req,res)=>{
+ // One long-lived connection per projector, so this only counts reconnects.
+ await rateLimit(req,'vip-announcement-stream',120,15);
+ return streamAnnouncementChanges(req,res);
+});
 // Names and count only — the hero countdown uses this to stay on one source.
 publicRouter.get('/vip-count',async(req,res)=>{
  const cycle=await readCycle(new Date());

@@ -29,6 +29,15 @@ const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'vip-designs';
 
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
+// A Buffer, or null. Accepts a Buffer or any typed-array view of one and refuses
+// everything else, so a value that arrived from an HTTP body can never be read
+// as a string or an array by the header parsers below.
+function asBuffer(input) {
+  if (Buffer.isBuffer(input)) return input;
+  if (ArrayBuffer.isView(input)) return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  return null;
+}
+
 // ---- Object storage ---------------------------------------------------------
 export function storageConfigured() {
   return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -79,9 +88,12 @@ async function removeBytes(storagePath) {
 // ---- Image validation -------------------------------------------------------
 // Dimensions are read from the file header, so no imaging dependency is needed
 // and a mislabelled file cannot claim to be something it is not.
-export function sniffImage(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 32) return null;
-  const b = buffer;
+export function sniffImage(input) {
+  // Narrowed to a real Buffer up front. The body reaches this module as
+  // req.body, which Express types loosely, so the bytes are normalized here
+  // rather than trusted — every read below then runs on a known Buffer.
+  const b = asBuffer(input);
+  if (!b || b.length < 32) return null;
 
   if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
       && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) {
@@ -126,8 +138,9 @@ export function sniffImage(buffer) {
   return null;
 }
 
-export function validateImage(buffer, declaredName = '') {
-  if (!Buffer.isBuffer(buffer) || !buffer.length) throw httpError(400, 'The upload was empty.');
+export function validateImage(input, declaredName = '') {
+  const buffer = asBuffer(input);
+  if (!buffer || !buffer.length) throw httpError(400, 'The upload was empty.');
   if (buffer.length > MAX_BYTES) {
     throw httpError(413, `That design is ${(buffer.length / MB).toFixed(1)} MB. The limit is ${(MAX_BYTES / MB).toFixed(0)} MB.`);
   }
