@@ -29,10 +29,14 @@ const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'vip-designs';
 
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
-// A Buffer, or null. Accepts a Buffer or any typed-array view of one and refuses
-// everything else, so a value that arrived from an HTTP body can never be read
-// as a string or an array by the header parsers below.
+// A Buffer, or null. A request body can arrive as an array or a string when a
+// parameter is repeated, and neither of those is image bytes, so both shapes are
+// refused up front — before any byte is read. Accepts a Buffer or any typed-array
+// view of one and refuses everything else, so a value that arrived from an HTTP
+// body can never be read as a string or an array by the header parsers below.
 function asBuffer(input) {
+  if (Array.isArray(input)) return null;
+  if (typeof input === 'string') return null;
   if (Buffer.isBuffer(input)) return input;
   if (ArrayBuffer.isView(input)) return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
   return null;
@@ -89,9 +93,12 @@ async function removeBytes(storagePath) {
 // Dimensions are read from the file header, so no imaging dependency is needed
 // and a mislabelled file cannot claim to be something it is not.
 export function sniffImage(input) {
-  // Narrowed to a real Buffer up front. The body reaches this module as
-  // req.body, which Express types loosely, so the bytes are normalized here
-  // rather than trusted — every read below then runs on a known Buffer.
+  // Narrowed to real bytes up front. The body reaches this module as req.body,
+  // which Express types loosely, so the shape is checked here rather than
+  // trusted: an array or a string is never image bytes, and every read below
+  // then runs on a known Buffer.
+  if (Array.isArray(input)) return null;
+  if (typeof input === 'string') return null;
   const b = asBuffer(input);
   if (!b || b.length < 32) return null;
 
@@ -139,6 +146,10 @@ export function sniffImage(input) {
 }
 
 export function validateImage(input, declaredName = '') {
+  // Same shape check as sniffImage: a repeated parameter can turn the body into
+  // an array or a string, and neither is an upload.
+  if (Array.isArray(input)) throw httpError(400, 'The upload was empty.');
+  if (typeof input === 'string') throw httpError(400, 'The upload was empty.');
   const buffer = asBuffer(input);
   if (!buffer || !buffer.length) throw httpError(400, 'The upload was empty.');
   if (buffer.length > MAX_BYTES) {
