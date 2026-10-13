@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
@@ -59,7 +60,11 @@ publicRouter.get('/vip-announcement',async(req,res)=>{
 });
 // Public, read-only change stream (PostgreSQL LISTEN/NOTIFY). The projector
 // refetches the announcement on each event; polling remains the backstop.
-publicRouter.get('/vip-announcement/stream',async(req,res)=>{
+// An in-memory limiter runs before the database-backed one so a flood is turned
+// away without a database round-trip; 300 per 15 minutes is looser than the 120
+// the database allows below, so a real projector never notices it.
+const streamFloodLimiter=expressRateLimit({windowMs:15*60*1000,limit:300});
+publicRouter.get('/vip-announcement/stream',streamFloodLimiter,async(req,res)=>{
  // One long-lived connection per projector, so this only counts reconnects.
  await rateLimit(req,'vip-announcement-stream',120,15);
  return streamAnnouncementChanges(req,res);
