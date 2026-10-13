@@ -254,8 +254,8 @@ test('the admin screen manages designs and never invents one', async () => {
   assert.match(view, /data-act="roll"/, 'randomly select');
   assert.match(view, /data-act="pin"/, 'use this design for this Sunday');
   assert.match(view, /data-act="reset"/, 'reset to automatic');
-  assert.match(view, /those stay fixed/, 'warns about sample data baked into a full-background image');
-  assert.match(view, /no design is invented/, 'an empty library points at the branded fallback');
+  assert.match(view, /names, date or count inside the image stay fixed/, 'warns about sample data baked into a full-background image');
+  assert.match(view, /shows the branded LIFEGEN layout/, 'an empty library points at the branded fallback');
   // selectableSundays() returns date strings, so the picker must use them as-is.
   assert.match(view, /list\.includes\(library\.today_sunday\)/);
   assert.doesNotMatch(view, /\.service_date\b/, 'sundays are date strings here, not objects');

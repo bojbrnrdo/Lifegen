@@ -21,7 +21,7 @@ import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.1';
+const ADMIN_ASSET_VERSION='2.4.2';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);

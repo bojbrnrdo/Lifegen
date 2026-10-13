@@ -114,7 +114,7 @@ function selectionPanel() {
   const mode = selection?.selection?.mode;
   const available = selection?.available ?? library?.counts ?? { total: 0, enabled: 0 };
   const staticWarning = current && current.display_mode === 'background'
-    ? html`<p class="callout callout--warn"><b>${icon('info', 15)} Heads up.</b> “${esc(current.title)}” is set to <b>full background</b>, so the projector shows it exactly as uploaded. If the artwork contains sample names, a date or a count, those stay fixed. Switch it to <b>background template</b> to overlay the live VIP list instead.</p>`
+    ? html`<p class="callout callout--warn"><b>${icon('info', 15)} Heads up.</b> “${esc(current.title)}” shows <b>exactly as uploaded</b>. Any names, date or count inside the image stay fixed. Switch it to <b>background template</b> to overlay the live VIP list.</p>`
     : '';
   const sundayLabel = sunday ? fmtSunday(sunday) : 'no Sunday available';
   return html`<div class="card">
@@ -141,12 +141,12 @@ function selectionPanel() {
             ? html`<h3 data-sel-title>${esc(current.title)}</h3>
                 <p class="small muted">${esc(current.filename)} · ${esc(current.width || '?')} × ${esc(current.height || '?')} · ${esc(current.display_mode === 'template' ? 'background template' : 'full background')}</p>
                 <p class="small" data-sel-mode>${mode === 'manual'
-                  ? html`<b>Manually chosen</b> — this stays put until you reset it. A refresh or a background update will not change it.`
-                  : html`<b>Automatic</b> — chosen once for this Sunday and reused by every device.`}</p>
-                ${selection.selection?.design_enabled === false ? html`<p class="callout callout--warn"><b>${icon('warn', 15)}</b> This design is now disabled. It stays for this Sunday so the projector is not interrupted mid-service; reset to automatic or pick another to change it.</p>` : ''}`
+                  ? html`<b>Manual</b> — stays until you reset it.`
+                  : html`<b>Automatic</b> — same design on every device.`}</p>
+                ${selection.selection?.design_enabled === false ? html`<p class="callout callout--warn"><b>${icon('warn', 15)}</b> Disabled, but kept for this Sunday so the projector is not interrupted. Reset or pick another to change it.</p>` : ''}`
             : available.enabled === 0
-              ? html`<h3 data-sel-title>No designs available</h3><p class="small muted">Upload and enable at least one design. Until then the projector shows the built-in branded LIFEGEN layout — no design is invented.</p>`
-              : html`<h3 data-sel-title>Not selected yet</h3><p class="small muted">Choose “Randomly select” to preview a pick, or leave it — the projector picks automatically the first time it loads this Sunday.</p>`}
+              ? html`<h3 data-sel-title>No designs available</h3><p class="small muted">Upload and enable a design. Until then the projector shows the branded LIFEGEN layout.</p>`
+              : html`<h3 data-sel-title>Not selected yet</h3><p class="small muted">Leave it and the projector picks automatically on this Sunday.</p>`}
           ${previewPick ? html`<p class="small" style="margin-top:8px" data-preview-pick>${icon('info', 14)} Previewing <b>${esc(previewPick.title)}</b> — not saved yet.</p>` : ''}
         </div>
       </div>
@@ -160,7 +160,7 @@ function grid() {
     return html`<div class="card"><div class="card__body">${emptyState({
       icon: 'upload',
       title: 'No designs uploaded yet',
-      text: 'Drop your own VIP announcement artwork above. PNG, JPG and WebP; landscape 1920×1080 works best on a projector. Uploading never needs a code change or a redeploy.',
+      text: 'Drop your artwork above. Landscape 1920×1080 works best on a projector.',
     })}</div></div>`;
   }
   return html`<div class="dl-grid">${library.designs.map(designCard)}</div>`;
@@ -172,7 +172,7 @@ function paint() {
     <div class="page-header">
       <div>
         <h1>VIP Design Library</h1>
-        <p class="sub">Upload your own announcement designs. Each Sunday the projector picks one of the enabled designs automatically.</p>
+        <p class="sub">Upload your designs. One is picked automatically each Sunday.</p>
       </div>
       <div class="row" style="gap:8px">
         <a class="btn" href="/vip-announce" target="_blank" rel="noopener">${icon('link', 16)} Open projector</a>
@@ -183,21 +183,20 @@ function paint() {
     <div class="callout" data-summary>
       <b>${icon('info', 15)} ${esc(library.counts.total)} design${library.counts.total === 1 ? '' : 's'} in the library · ${esc(library.counts.enabled)} available for selection</b>
       (timezone ${esc(library.timezone)}, this Sunday ${esc(library.today_sunday || '—')}).<br />
-      <b>Storage:</b>
-      ${library.storage === 'supabase'
-        ? html`designs are stored in Supabase Storage (bucket <code>${esc(library.storage_bucket || '')}</code>). Metadata lives in PostgreSQL.`
-        : html`object storage is not configured, so design bytes are stored in PostgreSQL (<code>vip_designs.data</code>). Set <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> on the server to move them into Supabase Storage instead. Either way they survive a redeploy.`}
-      <span class="muted">Limit ${esc(mb(library.max_bytes))} per file · ${esc((library.allowed_types || []).map(typeLabel).join(', '))}.</span>
+      <span class="muted">Storage: ${library.storage === 'supabase'
+        ? html`Supabase Storage (bucket <code>${esc(library.storage_bucket || '')}</code>)`
+        : html`PostgreSQL. To use object storage instead, set <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> on the server.`}
+      · Limit ${esc(mb(library.max_bytes))} · ${esc((library.allowed_types || []).map(typeLabel).join(', '))}.</span>
     </div>
 
     <div class="card">
       <div class="card__head"><h2>${icon('upload', 18)} Upload designs</h2>
         <span class="small muted" data-count>${library.counts.enabled} available for rotation</span></div>
       <div class="card__body">
-        <div class="dl-drop" data-drop tabindex="0" role="button" aria-label="Drop design images here to upload">
+        <div class="dl-drop" data-drop tabindex="0" role="button" aria-label="Drop design images here">
           <div class="dl-drop__icon">${icon('upload', 26)}</div>
           <p><b>Drag and drop</b> several designs here, or click to choose files.</p>
-          <p class="small muted">PNG, JPG or WebP · up to ${esc(mb(library.max_bytes))} each · landscape recommended. The exact same file cannot be uploaded twice.</p>
+          <p class="small muted">PNG, JPG or WebP · up to ${esc(mb(library.max_bytes))} each · landscape works best.</p>
           <input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden data-input />
         </div>
         <ul class="dl-upload" data-uploads hidden></ul>
