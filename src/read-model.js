@@ -85,7 +85,9 @@ function monthlyBreakdown(rows) {
 }
 
 const cleanText=(v)=>v==null?'':String(v).trim();
-const digits=(v)=>String(v||'').replace(/\\D/g,'');
+// Strip every non-digit so formatted contact numbers ("0917 555 1234", "555-1234")
+// can be matched against regexp_replace(contact_number,'[^0-9]','','g') in SQL.
+export const digits=(v)=>String(v||'').replace(/\D/g,'');
 function mapPerson(row){const p={...(row.extras||{}),...row};delete p.extras;delete p._total;return p;}
 export async function peopleSearch(value, extra = {}) {
   const q=cleanText(value);if(!q||q.length<2)return {people:[]};

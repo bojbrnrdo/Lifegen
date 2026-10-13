@@ -1,5 +1,18 @@
 # LIFEGEN verification · current revision
 
+## Code & deployment audit addendum (this revision)
+
+A full-repository audit focused on code and deployment (not UI/function copy). Findings and the fixes applied:
+
+- **Fixed — Admin phone-number search never matched formatted numbers.** `src/read-model.js` defined `digits` with the regex `/\\D/g`, which matches a literal backslash followed by `D` instead of non-digits, so spaces/dashes were never stripped before the SQL `regexp_replace(contact_number,'[^0-9]','','g') LIKE …` comparison. Searching `0917 555 1234` returned 0 rows while `5551234` worked. Corrected to `/\D/g` and exported; added `tests/read-model-search.test.mjs`. Verified live: the formatted search now returns the matching person.
+- **Fixed — dead immutable-cache path for public assets.** `src/app.js` only marked an asset `public, max-age=31536000, immutable` when `?v` exactly equalled `ADMIN_ASSET_VERSION` (`2.2.22`), but `public/lifegen/index.html` references per-file versions (`?v=2.3.10`, `2.3.13`, `2.2.10`, …), so every public asset shipped with the 5-minute static cache. The check now accepts any semver-like `?v=x.y.z` under `/lifegen`, `/brand`, `/vendor`. Verified live: versioned assets return the immutable header, unversioned/garbage `v` still get `max-age=300`.
+- **Fixed — private data paths were not Git-ignored.** `scripts/backup.mjs` and `scripts/bundle-supabase.mjs` write personal records into `private-data/`, which `.gitignore` did not exclude. Added `private-data/`, `test-results/`, `playwright-report/`, `.env.*` (keep `.env.example`) to `.gitignore`.
+- **Fixed — release ZIP referenced a missing `.vercelignore`.** `scripts/package-vercel.mjs` includes `.vercelignore`, but the file did not exist. Added a `.vercelignore` that keeps `tests/`, `preview-db/`, `private-data/`, test artifacts, logs and `.env.*` files out of Git-based Vercel deployments (while keeping `docs/` and `DEPLOY-FIRST.md`, matching the release-ZIP packaging).
+- **Fixed — Express `trust proxy` was only set for Vercel/preview.** Added `TRUST_PROXY=true` support so deployments behind other reverse proxies report correct client IPs for rate limiting.
+- **Removed unused dependency.** `@playwright/test` was a devDependency but no Playwright tests exist (`npm test` runs `node --test`); removing it shrinks `npm ci` on build machines. Lockfile regenerated with `npm install --package-lock-only`.
+
+Verification for this addendum: `npm test` — **29 passed, 0 failed**; `npm run build` — passed; full local smoke run against the disposable PGlite preview database (health, public config/calendar/posts, VIP registration + idempotent duplicate + honeypot, check-in day gate, Admin dashboard/people/search/registrations/Lifegroup/report endpoints, SSE stream) — all behaving as expected, with the phone-search and cache-header fixes confirmed live. No Supabase project was contacted; only synthetic demo data was used.
+
 ## Results
 
 - `npm run build` — passed. `scripts/check.mjs` checked 43 JavaScript files, found no database credentials in public assets, and found no TLS-verification bypass (`NODE_TLS_REJECT_UNAUTHORIZED`, disabled `rejectUnauthorized`) in `src/` or `scripts/`. The new rule was confirmed to fail the build when such a pattern is introduced.
