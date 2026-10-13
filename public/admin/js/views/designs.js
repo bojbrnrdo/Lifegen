@@ -18,7 +18,7 @@
  * `sunday` below is always a YYYY-MM-DD string, never one of those objects.
  */
 import { api } from '../api.js';
-import { esc, html, icon, toast, confirmDialog, errorState, fmtDateTime, emptyState } from '../ui.js';
+import { esc, html, icon, toast, confirmDialog, errorState, fmtDateTime, emptyState, raw } from '../ui.js';
 
 let main = null;             // element this view owns
 let library = null;          // GET /api/vip-designs
@@ -109,6 +109,12 @@ function designCard(d) {
   </article>`;
 }
 
+// A new tab is right on a laptop, but an embedded preview frame usually has no
+// allow-popups, so target="_blank" silently does nothing there and the button
+// looks dead. Detect the frame and navigate in place instead.
+const embeddedFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
+const projectorTarget = embeddedFrame ? '' : ' target="_blank" rel="noopener"';
+
 function selectionPanel() {
   const current = selection?.design;
   const mode = selection?.selection?.mode;
@@ -175,8 +181,8 @@ function paint() {
         <p class="sub">Upload your designs. One is picked automatically each Sunday.</p>
       </div>
       <div class="row" style="gap:8px">
-        <a class="btn" href="/vip-announce" target="_blank" rel="noopener">${icon('link', 16)} Open projector</a>
-        <a class="btn btn--primary" href="/vip-announce?preview=1" target="_blank" rel="noopener">${icon('camera', 16)} Preview on projector</a>
+        <a class="btn" href="/vip-announce"${raw(projectorTarget)}>${icon('link', 16)} Open projector</a>
+        <a class="btn btn--primary" href="/vip-announce?preview=1"${raw(projectorTarget)}>${icon('camera', 16)} Preview on projector</a>
       </div>
     </div>
 
