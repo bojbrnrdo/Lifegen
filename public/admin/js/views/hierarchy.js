@@ -1,86 +1,158 @@
-/** LIFEGEN collapsible discipleship tree: Network → Cell leader → Members. */
+/** OSINT-style tree: only network leaders initially visible; click to reveal descendants. */
 import { api } from '../api.js';
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const key = v => encodeURIComponent(String(v));
-const statusName = v => String(v || 'Member').replaceAll('_',' ').replace(/\b\w/g, x => x.toUpperCase());
-const CSS = `
-.lgt{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:16px;padding:clamp(12px,2vw,24px);min-width:0}
-.lgt *{box-sizing:border-box}.lgt__heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.lgt__heading h2{font-size:1.1rem}.lgt__tools{display:flex;gap:8px;flex-wrap:wrap}
-.lgt__tools button{border:1px solid var(--border,#cbd5e1);border-radius:9px;background:var(--surface,#fff);color:var(--text,#0f172a);padding:7px 12px;cursor:pointer}
-.lgt__tools button:focus-visible,.lgt summary:focus-visible{outline:2px solid #0f766e;outline-offset:3px}
-.lgt__forest{display:grid;gap:18px}.lgt__network{border:1px solid #c7dfd7;border-radius:14px;padding:14px;background:linear-gradient(150deg,#f3faf6,#fff)}
-.lgt__network>summary{list-style:none;cursor:pointer;display:flex;gap:12px;align-items:center}
-.lgt summary::-webkit-details-marker{display:none}.lgt__twisty{width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;background:#ddf1e7;color:#166347;font-weight:700;transition:transform .15s}
-.lgt details[open]>summary>.lgt__twisty{transform:rotate(90deg)}.lgt__node-main{min-width:0;flex:1}
-.lgt__role{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.10em;font-weight:800;color:#0f766e}
-.lgt__name{display:block;font-size:15px;font-weight:750;color:var(--text,#17232a);overflow-wrap:anywhere}.lgt__meta{display:block;font-size:12px;color:var(--muted,#64748b);margin-top:4px}
-.lgt__action{font-size:12px;white-space:nowrap;color:#0f766e;text-decoration:none}.lgt__action:hover{text-decoration:underline}
-.lgt__branches{margin:15px 0 2px 13px;padding-left:20px;border-left:2px solid #bdd7ca;display:grid;gap:10px}
-.lgt__group{position:relative;border:1px solid #e0e9e4;border-radius:11px;background:#fff;padding:12px}
-.lgt__group:before{content:'';position:absolute;width:20px;height:2px;background:#bdd7ca;left:-21px;top:26px}
-.lgt__group>summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none}
-.lgt__group .lgt__twisty{width:22px;height:22px;font-size:12px}
-.lgt__members{border-left:2px solid #d8e7dc;margin:14px 0 0 11px;padding-left:16px;display:grid;gap:7px}
-.lgt__person{position:relative;padding:8px 10px;background:#f8faf9;border:1px solid #edf1ee;border-radius:9px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.lgt__person:before{content:'';position:absolute;width:16px;height:2px;background:#d8e7dc;left:-17px;top:19px}
-.lgt__person a{font-weight:600;font-size:13px}.lgt__pill{font-size:10px;background:#e4f2e8;color:#276148;border-radius:99px;padding:3px 8px}
-.lgt__notice{font-size:13px;color:var(--muted,#64748b);padding:12px}.lgt__empty{background:#f8faf9;border:1px dashed #d4e3dc;padding:22px;border-radius:12px;text-align:center;color:#64748b}
-.lgt__network[hidden],.lgt__group[hidden]{display:none}
-@media(max-width:650px){.lgt__network{padding:11px}.lgt__branches{margin-left:9px;padding-left:13px}.lgt__group:before{width:13px;left:-14px}.lgt__action{white-space:normal}.lgt__network>summary{flex-wrap:wrap}}
-`;
-function attachCss(){
- if(document.getElementById('lifegen-tree-style'))return;
- const e=document.createElement('style');e.id='lifegen-tree-style';e.textContent=CSS;document.head.append(e);
+const personName = p => p.full_name || [p.first_name,p.last_name].filter(Boolean).join(' ') || 'Unnamed';
+const shorten = (s,len=30) => String(s||'').length>len ? String(s).slice(0,len-1)+'…' : String(s||'');
+const CSS = [
+'.lfg{position:relative;background:#171b1e;color:#e7eeeb;border:1px solid #39423f;border-radius:12px;overflow:hidden}',
+'.lfg *{box-sizing:border-box}.lfg__heading{position:absolute;left:16px;top:14px;z-index:2;pointer-events:none}',
+'.lfg__heading b{display:block;font-size:13px}.lfg__heading small{font-size:11px;color:#97a8a2}',
+'.lfg__buttons{position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:6px}',
+'.lfg__buttons button{background:#26302d;color:#e4f3ec;border:1px solid #485d52;border-radius:7px;padding:7px 9px;font-size:12px;cursor:pointer}',
+'.lfg__buttons button:hover,.lfg__buttons button:focus-visible{background:#365147;border-color:#9bdfc2}',
+'.lfg__svg{display:block;width:100%;height:min(75vh,740px);min-height:480px;touch-action:none;cursor:grab}',
+'.lfg__svg.panning{cursor:grabbing}.lfg__edge{stroke:#607e72;stroke-width:1.35;opacity:.85;fill:none}',
+'.lfg__node{cursor:pointer;outline:none}.lfg__node circle{fill:#1c342d;stroke:#5abf93;stroke-width:2}',
+'.lfg__node[data-kind="group"] circle{stroke:#76adf3;fill:#202e41}',
+'.lfg__node[data-kind="member"] circle{stroke:#dcbe79;fill:#312c22}',
+'.lfg__node:hover circle,.lfg__node:focus-visible circle{stroke:#fff;stroke-width:3}',
+'.lfg__node text{font:13px system-ui,sans-serif;fill:#e5eee9;paint-order:stroke;stroke:#171b1e;stroke-width:3px;stroke-linejoin:round}',
+'.lfg__node .sub{font-size:11px;fill:#91aa9f}.lfg__node .symbol{font-size:11px;font-weight:bold;stroke:none;fill:white}',
+'.lfg__panel{position:absolute;bottom:18px;left:15px;max-width:300px;padding:12px 14px;border-radius:10px;background:#26332fee;border:1px solid #4a6559;box-shadow:0 8px 20px #0006}',
+'.lfg__panel strong{display:block;font-size:13px}.lfg__panel p{font-size:12px;color:#b7c9bf;margin:4px 0 8px}',
+'.lfg__panel a{font-size:12px;color:#a6eac8;text-decoration:underline}',
+'.lfg__hint{position:absolute;bottom:9px;right:12px;color:#81998f;font-size:10px;pointer-events:none}',
+'@media(max-width:700px){.lfg__heading{top:56px}.lfg__buttons{left:10px;right:auto}.lfg__svg{height:70vh}}'
+].join('\n');
+function ensureCSS(){
+ if(document.getElementById('lifegen-node-graph-style'))return;
+ const style=document.createElement('style');style.id='lifegen-node-graph-style';
+ style.textContent=CSS;document.head.append(style);
 }
-function personNode(m){
- const name=m.full_name || [m.first_name,m.last_name].filter(Boolean).join(' ') || 'Unnamed person';
- const role=m.role === 'assistant'?'Assistant leader':m.role === 'leader'?'Cell leader':statusName(m.status);
- return `<div class="lgt__person"><a href="#/people/${key(m.id)}">${esc(name)}</a><span class="lgt__pill">${esc(role)}</span></div>`;
-}
-function groupNode(g){
- const active=g.is_active === false || g.is_active === 0 ? ' · Inactive' : '';
- return `<details class="lgt__group" data-group="${esc(g.id)}"><summary><span class="lgt__twisty" aria-hidden="true">›</span><span class="lgt__node-main"><span class="lgt__role">Cell / Lifegroup leader</span><span class="lgt__name">${esc(g.leader_name || 'Leader not assigned')}</span><span class="lgt__meta">${esc(g.name)} · ${Number(g.member_count)||0} members${active}</span></span><a class="lgt__action" href="#/lifegroups/${key(g.id)}">Manage →</a></summary><div class="lgt__members" aria-live="polite"><div class="lgt__notice">Expand to see members</div></div></details>`;
-}
-function netNode(n,groups){
- const active=n.is_active === false || n.is_active === 0 ? ' · Inactive' : '';
- return `<details class="lgt__network" data-network="${esc(n.id)}"><summary><span class="lgt__twisty" aria-hidden="true">›</span><span class="lgt__node-main"><span class="lgt__role">Network leader</span><span class="lgt__name">${esc(n.leader_name || 'Leader not assigned')}</span><span class="lgt__meta">${esc(n.name)} · ${groups.length} Lifegroups · ${Number(n.people_count)||0} people${active}</span></span><a class="lgt__action" href="#/networks/${key(n.id)}">Manage →</a></summary><div class="lgt__branches">${groups.length?groups.map(groupNode).join(''):'<div class="lgt__notice">No cell groups assigned to this network.</div>'}</div></details>`;
-}
-/** Render a fully collapsible read-only tree; mutations remain on existing authorized edit screens. */
-export async function renderHierarchy(target,networks,groups,{q='',gender='',status='active'}={}){
- attachCss();
- const needle=String(q).trim().toLowerCase();
- const matchGroup=g=>[g.name,g.leader_name].some(v=>String(v||'').toLowerCase().includes(needle));
- const filteredNetworks=networks.filter(n=>(!gender||n.gender===gender)&&(status!=='inactive'||n.is_active===false||n.is_active===0));
- const linked=new Set();
- const matched=[];
- for(const n of filteredNetworks){
-  const children=groups.filter(g=>String(g.network_id)===String(n.id)&&!g.is_leader_group&&(status!=='active'||g.is_active!==false&&g.is_active!==0));
-  children.forEach(g=>linked.add(String(g.id)));
-  const netMatch=[n.name,n.leader_name].some(v=>String(v||'').toLowerCase().includes(needle));
-  if(!needle||netMatch||children.some(matchGroup))matched.push({n,children:needle&&!netMatch?children.filter(matchGroup):children});
+function build(networks,groups,filters,expanded,members,loading){
+ const query=String(filters.q||'').trim().toLowerCase(), gender=filters.gender||'', status=filters.status||'active';
+ const allowed=o=>status==='all'||(status==='inactive'?o.is_active===false||o.is_active===0:o.is_active!==false&&o.is_active!==0);
+ const match=o=>[o.name,o.leader_name].some(s=>String(s||'').toLowerCase().includes(query));
+ const roots=[],linked=new Set();
+ function cell(g){
+  const key='group:'+g.id,listed=members.get(key)||[];
+  return {key,kind:'group',name:g.leader_name||'Cell leader not assigned',subtitle:g.name||'Lifegroup',record:g,count:Number(g.member_count)||listed.length,
+    children:expanded.has(key)&&!loading.has(key)?listed.map(p=>({key:'person:'+p.id,kind:'member',name:personName(p),subtitle:(p.role||p.status||'Member').replaceAll('_',' '),record:p,count:0,children:[]})):[]};
  }
- const orphan=groups.filter(g=>!g.is_leader_group&&!linked.has(String(g.id))&&(!gender||g.gender===gender)&&(status!=='active'||g.is_active!==false&&g.is_active!==0)&&(!needle||matchGroup(g)));
- const count=matched.reduce((t,r)=>t+r.children.length,0)+orphan.length;
- target.innerHTML=`<div class="lgt"><div class="lgt__heading"><div><h2>Discipleship tree</h2><span class="lgt__meta">${matched.length} networks · ${count} Lifegroups · Select a branch to explore</span></div><div class="lgt__tools"><button type="button" data-tree-action="expand">Expand networks</button><button type="button" data-tree-action="collapse">Collapse all</button></div></div><div class="lgt__forest">${matched.map(x=>netNode(x.n,x.children)).join('')}${orphan.length?netNode({id:'unassigned',name:'Unassigned Lifegroups',leader_name:'No network leader'},orphan):''}${!matched.length&&!orphan.length?'<div class="lgt__empty">No matching networks or Lifegroups found.</div>':''}</div></div>`;
- // Prevent Manage links from also toggling a summary.
- target.querySelectorAll('summary a').forEach(a=>a.addEventListener('click',e=>e.stopPropagation()));
- target.querySelector('[data-tree-action="expand"]')?.addEventListener('click',()=>target.querySelectorAll('.lgt__network').forEach(d=>d.open=true));
- target.querySelector('[data-tree-action="collapse"]')?.addEventListener('click',()=>target.querySelectorAll('.lgt details').forEach(d=>d.open=false));
- target.querySelectorAll('.lgt__group').forEach(d=>d.addEventListener('toggle',async()=>{
-  if(!d.open||d.dataset.loaded==='yes'||d.dataset.loaded==='loading')return;
-  d.dataset.loaded='loading';
-  const box=d.querySelector('.lgt__members');
-  box.innerHTML='<div class="lgt__notice">Loading members…</div>';
-  try{
-   const detail=await api.lifegroup(Number(d.dataset.group));
-   if(!d.isConnected)return;
-   const members=(detail.members||[]).filter(m=>!m.left_at);
-   box.innerHTML=members.length?members.map(personNode).join(''):'<div class="lgt__notice">No members in this Lifegroup yet.</div>';
-   d.dataset.loaded='yes';
-  }catch(error){
-   if(d.isConnected)box.innerHTML='<div class="lgt__notice">Could not load members. Collapse and expand to retry.</div>';
-   delete d.dataset.loaded;
+ for(const network of networks){
+  if((gender&&network.gender!==gender)||!allowed(network))continue;
+  const all=groups.filter(g=>String(g.network_id)===String(network.id)&&!g.is_leader_group);
+  all.forEach(g=>linked.add(String(g.id)));
+  const selected=all.filter(allowed);
+  const visible=!query||match(network)?selected:selected.filter(match);
+  if(query&&!match(network)&&!visible.length)continue;
+  const key='network:'+network.id;
+  roots.push({key,kind:'network',name:network.leader_name||'Network leader not assigned',subtitle:network.name||'Network',record:network,count:visible.length,
+    children:expanded.has(key)||!!query?visible.map(cell):[]});
+ }
+ const orphan=groups.filter(g=>!g.is_leader_group&&!linked.has(String(g.id))&&(!gender||g.gender===gender)&&allowed(g)&&(!query||match(g)));
+ if(orphan.length){
+  const key='network:unassigned';
+  roots.push({key,kind:'network',name:'Unassigned Lifegroups',subtitle:'No network leader',record:null,count:orphan.length,
+    children:expanded.has(key)||!!query?orphan.map(cell):[]});
+ }
+ return roots;
+}
+function arrange(roots){
+ let row=0;const all=[],lines=[];
+ function walk(node,depth,parent){
+  node.x=100+depth*265;
+  for(const child of node.children)walk(child,depth+1,node);
+  node.y=node.children.length?(node.children[0].y+node.children[node.children.length-1].y)/2:70+(row++*46);
+  all.push(node);
+  if(parent)lines.push([parent,node]);
+ }
+ for(const root of roots)walk(root,0,null);
+ return {nodes:all,lines,height:Math.max(320,140+row*46),width:Math.max(420,...all.map(n=>n.x+240))};
+}
+export async function renderHierarchy(target,networks,groups,filters={}){
+ ensureCSS();
+ const old=target.__lifegenTree||{};
+ const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
+ const state={expanded,members,loading,selected:old.selected||null};
+ target.__lifegenTree=state;
+ target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Select a leader to reveal their connections</small></div><div class="lfg__buttons"><button type="button" data-action="fit">Fit</button><button type="button" data-action="collapse">Reset</button><button type="button" data-action="plus">+</button><button type="button" data-action="minus">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
+ const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel');
+ let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
+ const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
+ function fit(){
+  const width=svg.clientWidth||900,height=svg.clientHeight||550;
+  k=Math.max(.22,Math.min(1.25,(width-60)/layout.width,(height-65)/layout.height));
+  panX=(width-layout.width*k)/2;
+  panY=(height-layout.height*k)/2;
+  updateTransform();
+ }
+ function details(node){
+  state.selected=node.key;
+  const link=node.kind==='network'&&node.record?'#/networks/'+encodeURIComponent(node.record.id):
+   node.kind==='group'?'#/lifegroups/'+encodeURIComponent(node.record.id):
+   node.kind==='member'?'#/people/'+encodeURIComponent(node.record.id):'';
+  panel.hidden=false;
+  panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
+   (link?'<a href="'+link+'">Open details →</a>':'');
+ }
+ function draw(shouldFit=false){
+  layout=arrange(build(networks,groups,filters,expanded,members,loading));
+  edgeLayer.innerHTML=layout.lines.map(pair=>{
+   const p=pair[0],c=pair[1],x=(p.x+c.x)/2;
+   return '<path class="lfg__edge" d="M'+(p.x+7)+' '+p.y+' C'+x+' '+p.y+' '+x+' '+c.y+' '+(c.x-7)+' '+c.y+'"/>';
+  }).join('');
+  nodeLayer.innerHTML=layout.nodes.map(n=>{
+   const isOpen=expanded.has(n.key),canExpand=n.kind!=='member'&&n.count>0;
+   return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+n.kind+'" role="button" tabindex="0" aria-label="'+esc(n.name)+'" transform="translate('+n.x+','+n.y+')">'+
+    '<circle r="7.2"/>'+(canExpand?'<text class="symbol" text-anchor="middle" y="3">'+(isOpen?'−':'+')+'</text>':'')+
+    '<text x="15" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="15" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
+  }).join('');
+  if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
+  if(!layout.nodes.length){panel.hidden=false;panel.innerHTML='<strong>No matching leaders</strong><p>Try another search or category.</p>';}
+  if(first||shouldFit){fit();first=false;}else updateTransform();
+  for(const el of nodeLayer.querySelectorAll('[data-key]')){
+   const activateNode=()=>{const node=layout.nodes.find(n=>n.key===el.dataset.key);if(node)activate(node);};
+   el.addEventListener('click',activateNode);
+   el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activateNode();}});
   }
- }));
+ }
+ async function activate(node){
+  details(node);
+  if(node.kind==='member'){draw();return;}
+  if(expanded.has(node.key)){expanded.delete(node.key);draw(true);return;}
+  expanded.add(node.key);
+  if(node.kind==='group'&&!members.has(node.key)&&!loading.has(node.key)){
+   loading.add(node.key);draw();
+   try{
+    const response=await api.lifegroup(node.record.id);
+    if(target.__lifegenTree!==state||!target.isConnected)return;
+    members.set(node.key,(response.members||[]).filter(p=>!p.left_at));
+   }catch(error){
+    if(target.__lifegenTree!==state||!target.isConnected)return;
+    expanded.delete(node.key);
+    panel.hidden=false;panel.innerHTML='<strong>Unable to load members</strong><p>'+esc(error.message||'Please try again.')+'</p>';
+   }finally{loading.delete(node.key);}
+  }
+  if(target.__lifegenTree===state&&target.isConnected)draw(true);
+ }
+ target.querySelector('[data-action="fit"]').onclick=fit;
+ target.querySelector('[data-action="collapse"]').onclick=()=>{expanded.clear();state.selected=null;panel.hidden=true;draw(true);};
+ const zoom=amount=>{k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
+ target.querySelector('[data-action="plus"]').onclick=()=>zoom(1.25);
+ target.querySelector('[data-action="minus"]').onclick=()=>zoom(.8);
+ svg.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=svg.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const next=Math.max(.2,Math.min(3,k*(e.deltaY<0?1.13:.88)));
+  panX=x-(x-panX)*next/k;panY=y-(y-panY)*next/k;k=next;updateTransform();
+ },{passive:false});
+ svg.addEventListener('pointerdown',e=>{
+  if(e.button!==0||e.target.closest('[data-key]'))return;
+  drag={x:e.clientX,y:e.clientY,px:panX,py:panY};svg.setPointerCapture(e.pointerId);svg.classList.add('panning');
+ });
+ svg.addEventListener('pointermove',e=>{if(drag){panX=drag.px+e.clientX-drag.x;panY=drag.py+e.clientY-drag.y;updateTransform();}});
+ const stop=()=>{drag=null;svg.classList.remove('panning');};
+ svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+ draw(true);
 }
