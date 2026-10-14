@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { renderHierarchy } from './hierarchy.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -302,8 +303,23 @@ async function drawGroups(body, filters) {
       <div class="filter-tabs" id="ggender" style="margin:0"><button data-g="" class="${!filters.gender ? 'active' : ''}">Boys &amp; girls</button><button data-g="boys" class="${filters.gender === 'boys' ? 'active' : ''}">Boys</button><button data-g="girls" class="${filters.gender === 'girls' ? 'active' : ''}">Girls</button></div>
       <select id="gstatus" style="width:auto;min-width:120px" aria-label="Status"><option value="active">Active</option><option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactive</option><option value="all" ${filters.status === 'all' ? 'selected' : ''}>All</option></select>
     </div>
+    <div class="filter-tabs mb-2" id="lgViewToggle"><button type="button" data-view="diagram" class="active">Diagram view</button><button type="button" data-view="list">List view</button></div>
+    <div id="gdiagram"></div>
     <div id="glist"><div class="card"><div class="loading">Loading…</div></div></div>`;
   const list = body.querySelector('#glist');
+  const diagram = body.querySelector('#gdiagram');
+  let view = 'diagram';
+  const applyView = () => {
+    diagram.hidden = view !== 'diagram';
+    list.hidden = view !== 'list';
+    body.querySelectorAll('#lgViewToggle [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  };
+  body.querySelector('#lgViewToggle').onclick = e => {
+    const b = e.target.closest('[data-view]'); if (!b) return;
+    view = b.dataset.view;
+    applyView();
+  };
+  applyView();
   let reqId = 0;
   async function load() {
     const id = ++reqId;
@@ -312,6 +328,7 @@ async function drawGroups(body, filters) {
     try { [groups, nets] = await Promise.all([api.lifegroups(filters), api.networks({ status: filters.status === 'active' ? 'active' : 'all' })]); }
     catch (e) { list.innerHTML = html`<div class="alert alert--error" style="margin:16px">${e.message}</div>`; return; }
     if (id !== reqId) return;
+    renderHierarchy(diagram, nets, groups, filters).catch(e => { diagram.innerHTML = `<div class="alert alert--error">Could not load the hierarchy diagram.</div>`; console.error(e); });
     const q = filters.q.toLowerCase();
     if (filters.gender) nets = nets.filter((n) => n.gender === filters.gender);
     if (!groups.length && !nets.length) {
