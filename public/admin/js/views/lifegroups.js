@@ -105,7 +105,7 @@ async function groupForm(g, onSaved, { networkId = null, gender = null } = {}) {
           <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="boys" aria-label="Boys group" ${selectedGender === 'boys' ? 'checked' : ''} /><span title="Boys group">${icon('mars', 22)}</span></label>
           <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="girls" aria-label="Girls group" ${selectedGender === 'girls' ? 'checked' : ''} /><span title="Girls group">${icon('venus', 22)}</span></label>
         </div></div>
-      <div class="field"><label>Network</label><select name="network_id"><option value="" ${!selectedNetworkId ? 'selected' : ''}>No network</option>${(opts.networks || []).map((n) => `<option value="${n.id}" data-gender="${n.gender || ''}" ${Number(selectedNetworkId) === n.id && (!g || g.network_manual) ? 'selected' : ''}>${esc(n.name)}${n.gender ? ' (' + n.gender + ')' : ''}${n.leader_name ? ' · ' + esc(n.leader_name) : ''}</option>`).join('')}</select></div>
+      <div class="field"><label>Network</label><select name="network_id"><option value="" ${!selectedNetworkId ? 'selected' : ''}>No network</option>${(opts.networks || []).map((n) => `<option value="${n.id}" data-gender="${n.gender || ''}" ${Number(selectedNetworkId) === n.id && (!g || g.network_manual) ? 'selected' : ''}>${esc(n.name)}${n.gender ? ' ' + (n.gender === 'boys' ? '♂' : '♀') : ''}${n.leader_name ? ' · ' + esc(n.leader_name) : ''}</option>`).join('')}</select></div>
       <div class="field span-2 gsearch-field"><label>Leader <span class="opt">registered person</span></label>
         <div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="leaderPick" aria-label="Search a registered person to be leader" placeholder="Search a registered person…" autocomplete="off" /><div class="gsearch__results" id="leaderPickResults" hidden></div></div>
         <input type="hidden" id="leaderId" name="leader_person_id" />
@@ -604,11 +604,14 @@ async function networkForm(n, onSaved) {
     const gender = netGenderNow();
     hint.textContent = gender ? 'Choose a matching registered person from the search results.' :
       'Choose the category icon first.';
-    if (clearSelected && (personId.value || legacyName.value)) {
+    if (clearSelected && (personId.value || legacyName.value || personPick.value.trim())) {
       // Never silently keep a leader selected for a category they may not match.
       personId.value = '';
       personPick.value = '';
       legacyName.value = '';
+      const pickerResults = modal.querySelector('#netLeaderPickResults');
+      if (pickerResults) { pickerResults.hidden = true; pickerResults.innerHTML = ''; }
+      personPick.setAttribute('aria-expanded', 'false');
       explicitlyCleared = false; // Re-selection is required when changing categories on an existing Network.
       errorMessage('Network category changed. Choose an eligible leader again, or use Remove leader.');
     }
@@ -624,6 +627,9 @@ async function networkForm(n, onSaved) {
     onSelect: () => {
       legacyName.value = '';
       explicitlyCleared = false;
+      const registration = modal.querySelector('#netRegisterPanel');
+      if (registration) registration.hidden = true;
+      modal.querySelector('#netLeaderRegister')?.setAttribute('aria-expanded', 'false');
       err.hidden = true;
       showLeaderStatus();
     },
