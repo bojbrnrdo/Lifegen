@@ -124,3 +124,25 @@
  .nav,.nav.scrolled{padding:3px 0}
  .nav .nav-burger{width:34px;height:34px}
 }
+
+
+/* Janime testimony: Google Drive includes a black strip beneath the picture.
+   Keep its 16:9 poster and uncropped 16:9 iframe; once playing, shorten
+   only the visible frame to the actual content area (~2.05:1).
+   The embedded full player is still available via the Google Drive link
+   immediately below the video. No other media or testimonial is affected. */
+#stories .vframe[data-trim-bottom="true"].vframe--playing-trimmed {
+  aspect-ratio: 2.05 / 1;
+  background: transparent;
+  overflow: hidden;
+}
+#stories .vframe[data-trim-bottom="true"].vframe--playing-trimmed iframe {
+  position: absolute;
+  inset: 0 auto auto 0;
+  top: 0;
+  width: 100%;
+  height: 115.3125%;
+  border: 0;
+}
+/* This is purely a geometry correction; keep the card and the provider's
+   accessible full-player link, and do not change portrait videos. */
