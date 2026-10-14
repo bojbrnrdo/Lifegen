@@ -120,28 +120,31 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
    await withLoading(f.querySelector('[type=submit]'),async()=>{
     const created=pending?.person||await api.createPerson(person);
     if(!created?.id)throw new Error('Unable to save the person profile.');
-    state.pending[mode]={fingerprint,person:created};
+    state.pending[mode]=pending||{fingerprint,person:created};
     if(mode==='network'){
-     const result=await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
+     const result=state.pending[mode].network||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
+     state.pending[mode].network=result;
      state.networkId=Number(result.id);
-     reset(mode);await loadNetworks();
+     await loadNetworks();reset(mode);
      toast('Network Leader added. Add Cell Leaders when ready.');
      state.busy=false;setTab('cell');
      onSaved({mode,person:created,network:result});
     }else if(mode==='cell'){
-     const result=await api.createLifegroup({name:(first+' '+last+' Cell').slice(0,120),gender,network_id:network.id,network_manual:true,leader_person_id:created.id,capacity:12});
+     const result=state.pending[mode].group||await api.createLifegroup({name:(first+' '+last+' Cell').slice(0,120),gender,network_id:network.id,network_manual:true,leader_person_id:created.id,capacity:12});
+     state.pending[mode].group=result;
      // Link this Cell Leader to the Network Leader team for existing reports.
      const team=await api.ensureNetworkLeaderGroup(network.id);
      await api.assignLifegroup(team.lifegroup_id,created.id,{role:'leader',sex:sexOf[gender]});
      state.networkId=Number(network.id);
-     reset(mode);await loadCells();
+     reset(mode);
      getForm('member').querySelector('[data-field=network]').value=String(state.networkId);
      await loadCells();
      getForm('member').querySelector('[data-field=cell]').value=String(result.id);
      toast('Cell Leader added. Add Members when ready.');
      state.busy=false;setTab('member');onSaved({mode,person:created,group:result});
     }else{
-     const assigned=await api.assignLifegroup(cellId,created.id,{role:'member',sex:sexOf[gender]});
+     const assigned=state.pending[mode].membership||await api.assignLifegroup(cellId,created.id,{role:'member',sex:sexOf[gender]});
+     state.pending[mode].membership=assigned;
      reset(mode);toast('Member added.');onSaved({mode,person:created,membership:assigned});
     }
    });
