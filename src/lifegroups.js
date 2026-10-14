@@ -133,7 +133,7 @@ function shapeGroup(row) {
     solid_count: Number(row.solid_count || 0),
     open_count: Number(row.member_count || 0) - Number(row.solid_count || 0),
     solid_target: SOLID_TARGET,
-    slots: row.capacity == null ? null : Math.max(Number(row.capacity) - Number(row.member_count || 0), 0),
+    slots: Math.max(Math.min(row.capacity == null ? CELL_MEMBER_LIMIT : Number(row.capacity),CELL_MEMBER_LIMIT) - Number(row.member_count || 0), 0),
     max_members: Boolean(row.leads_network) ? NETWORK_CELL_LEADER_LIMIT : CELL_MEMBER_LIMIT,
     is_active: Boolean(row.is_active),
     is_demo: Boolean(row.is_demo),
