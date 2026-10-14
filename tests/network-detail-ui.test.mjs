@@ -8,7 +8,7 @@ const view = readFileSync(new URL('../public/admin/js/views/lifegroups.js', impo
 const css = readFileSync(new URL('../public/admin/styles.css', import.meta.url), 'utf8');
 
 test('Network detail uses a separate compact workspace instead of removing real groups', () => {
-  assert.match(view, /simplifyNetworkDetail\(main, \{ cells, cal, manage \}\)/);
+  assert.match(view, /simplifyNetworkDetail\(main, \{ cells, cal, manage, leaderRegistered: Boolean\(n\.leader_person_id\) \}\)/);
   assert.match(moduleCode, /workspace\.append\(structure\)/);
   assert.match(moduleCode, /structure\.querySelector\('\.tree__node--root'\)/);
   assert.match(moduleCode, /network-detail__stats/);
