@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
+import { createFourFieldNetwork } from './networkFourField.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -534,6 +535,7 @@ export async function renderLifegroup({ main }, id) {
 // report to their Network leader. Networks are flat — every Network has the same shape.
 // ---------------------------------------------------------------------------
 async function networkForm(n, onSaved) {
+  if (!n) return createFourFieldNetwork(onSaved);
   // Existing optional fields are intentionally omitted; server-side update merges them from the record.
   const v = (k) => esc(n?.[k] ?? '');
   const modal = openModal({
