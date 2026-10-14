@@ -108,25 +108,22 @@ test('landing banner and logos use the supplied LIFEGEN artwork, without duplica
 });
 
 
-test('the banner is capped on desktop and never taller than the first screen', () => {
+test('the banner fills the width with no side bars and never taller than the first screen', () => {
   const styles = read('public/lifegen/styles.css');
   const page = read('public/lifegen/index.html');
-  // The 16:9 artwork previously rendered at 100vw, which already filled a
-  // laptop screen before any other content. It is now width-capped, and one
-  // landscape cap keeps the strip under the fold on short screens.
-  assert.match(styles, /\.hero-banner-art\{[^}]*max-width:1120px/);
-  assert.match(styles, /\.hero-banner-art\{max-width:min\(1120px,88vh,calc\(\(100svh - 250px\) \* 16 \/ 9\)\)\}/);
-  // The matte around the smaller banner is the same artwork, built once.
-  assert.match(styles, /\.hero-strip\.hero-strip--artwork\{background-color:#0a2c22;background-image:url\("\/brand\/lifegen-banner-blur\.webp"\)/);
-  const backdrop = imageSize(assets('/brand/lifegen-banner-blur.webp'));
-  assert.equal(backdrop.width, 160);
-  assert.equal(backdrop.height, 90);
-  assert.ok(assets('/brand/lifegen-banner-blur.webp').length < 8192, 'Backdrop stays a few kilobytes');
-  // Phones get the 960 px banner and do not upscale it past its own width.
+  // The 16:9 artwork at 100vw was a whole screen tall on a laptop. It is still
+  // edge to edge — cropped to a band, not letterboxed: no column caps, no matte
+  // behind it, so nothing shows beside the artwork at any width.
+  assert.doesNotMatch(styles, /\.hero-banner-art\{[^}]*max-width/);
+  assert.doesNotMatch(styles, /banner-blur|background-image:url\("\/brand/);
+  assert.match(styles, /\.hero-strip\.hero-strip--artwork\{padding:0;background:#062b19\}/);
+  assert.ok(!fs.existsSync(path.join(root, 'public/brand/lifegen-banner-blur.webp')), 'No matte asset ships');
+  // The band is the artwork's 26.3vw emblem plus clearance for the fixed nav,
+  // capped against viewport height; cover-cropping keeps the emblem whole.
+  assert.match(styles, /\.hero-banner-image\{height:min\(calc\(26\.3vw \+ 120px\),70vh\);object-fit:cover;object-position:center\}/);
+  // Phones keep the uncropped 16:9 artwork and its 960 px source.
+  assert.match(styles, /\.hero-banner-image\{height:auto\}/);
   assert.match(page, /<source media="\(max-width:640px\)" srcset="\/brand\/lifegen-banner-960\.webp"\/>/);
-  assert.match(styles, /\.hero-banner-art\{max-width:min\(460px,92vw\)\}/);
-  // On phones the nav sits above the artwork, so two logos never overlap.
-  assert.match(styles, /\.hero-strip\.hero-strip--artwork\{padding-top:60px\}/);
 });
 
 test('navigation overlays the banner without a colored strip or reserved space', () => {
