@@ -167,7 +167,7 @@ export async function findLifegroup(person, onAssigned) {
   let sex = person.sex || '';
   const modal = openModal({
     title: 'Choose a Cell Leader',
-    subtitle: `${fullName(person)} · ${person.person_code}${person.lifegroup ? ' · currently in ' + 'a Cell Leader' : ' · not yet assigned'}`,
+    subtitle: `${fullName(person)} · ${person.person_code}${person.lifegroup ? ' · assigned to a Cell Leader' : ' · not yet assigned'}`,
     wide: true,
     body: `
       <div class="row mb-2" style="gap:10px;flex-wrap:wrap;align-items:center">
