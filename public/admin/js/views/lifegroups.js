@@ -265,6 +265,7 @@ export async function renderLifegroups({main, query}) {
  <select id="treeGender" aria-label="Network category"><option value="">All networks</option><option value="boys">Boys</option><option value="girls">Girls</option></select>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn" id="treeRefresh" title="Reload current Lifegroup records">Refresh</button></div>
+ <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
  <div style="display:grid;gap:12px;margin-top:16px">
  <details class="card" id="needsPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">People needing a Lifegroup</summary><div style="padding:12px" id="needsBody"></div></details>
@@ -274,7 +275,45 @@ export async function renderLifegroups({main, query}) {
  main.querySelector('#newNetwork')?.addEventListener('click',()=>networkForm(null,n=>location.hash=`#/networks/${n.id}`));
  main.querySelector('#treeGender').value=filters.gender;
  main.querySelector('#treeStatus').value=filters.status;
- const canvas=main.querySelector('#treeCanvas');let cache=null,sequence=0;
+ const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
+ function visibleGroup(g){return (!filters.gender||g.gender===filters.gender) && (filters.status==='all'||(filters.status==='inactive'?!g.is_active:!!g.is_active));}
+ function renderUnassigned(){
+  const validNetworkIds=new Set(cache.nets.map(n=>String(n.id)));
+  const missing=cache.groups.filter(g=>visibleGroup(g)&&(g.network_id==null||!validNetworkIds.has(String(g.network_id))));
+  if(!missing.length){notice.innerHTML='';return;}
+  const canManage=can('lifegroups:manage');
+  notice.innerHTML=html`<section class="card mb-2" style="border:1px solid #eadbb0;background:#fffdf7" aria-label="Unassigned Lifegroups">
+   <div class="card__body" style="padding:16px 18px"><div class="row row--between" style="align-items:start;gap:12px;flex-wrap:wrap">
+   <div><strong style="color:#755b21">${missing.length} Lifegroup${missing.length===1?'':'s'} not connected to a Network</strong>
+   <p class="small muted mt-1">These Lifegroups cannot appear beneath a Network Leader until assigned. Choose the correct Network; no church records will change until you confirm.</p></div></div>
+   <div style="display:grid;gap:9px;margin-top:12px">${missing.map(g=>{
+     const choices=cache.nets.filter(n=>n.is_active&&n.gender===g.gender);
+     return html`<div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;background:#fff;padding:10px 12px;border:1px solid #efe7d2;border-radius:10px">
+       <div class="grow" style="min-width:170px"><b>${esc(g.name)}</b><div class="small muted">${esc(g.leader_name||'No cell leader assigned')} · ${Number(g.member_count)||0} members · <a href="#/lifegroups/${g.id}">Open Lifegroup</a></div></div>
+       ${canManage&&choices.length?html`<select data-network-for="${g.id}" aria-label="Network for ${esc(g.name)}" style="min-width:165px;width:auto"><option value="">Choose Network…</option>${choices.map(n=>html`<option value="${n.id}">${esc(n.name)}</option>`)}</select><button type="button" class="btn btn--sm btn--primary" data-connect="${g.id}" disabled>Connect</button>`:html`<span class="small muted">${choices.length?'Open the Lifegroup to manage':'No compatible active Network'}</span>`}
+     </div>`;})}</div></div></section>`;
+  notice.querySelectorAll('[data-network-for]').forEach(select=>{
+   const button=notice.querySelector(`[data-connect="${select.dataset.networkFor}"]`);
+   select.onchange=()=>{if(button)button.disabled=!select.value;};
+  });
+  notice.querySelectorAll('[data-connect]').forEach(button=>{
+   button.onclick=()=>withLoading(button,async()=>{
+    const group=missing.find(g=>String(g.id)===button.dataset.connect);
+    const select=notice.querySelector(`[data-network-for="${button.dataset.connect}"]`);
+    const network=cache.nets.find(n=>String(n.id)===select?.value);
+    if(!group||!network||network.gender!==group.gender||!network.is_active)return toast('Choose a matching active Network.', 'error');
+    const confirmed=await confirmDialog({title:'Connect Lifegroup to Network?',message:`Assign <b>${esc(group.name)}</b> to <b>${esc(network.name)}</b>? This changes its Network assignment but preserves its members and attendance history.`,confirmText:'Connect'});
+    if(!confirmed)return;
+    try{
+     await api.updateLifegroup(group.id,{network_id:network.id,network_manual:true});
+     toast('Network assignment saved.');
+     canvas.__lifegenTree?.expanded.add('network:'+network.id);
+     await load(true);
+    }catch(error){toast(error.message,'error');}
+   });
+  });
+ }
+
  async function load(force=false){
   const seq=++sequence;
   if(!cache||force){
@@ -290,6 +329,7 @@ export async function renderLifegroups({main, query}) {
   }
   if(seq!==sequence||!main.contains(canvas))return;
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
+  renderUnassigned();
   await renderHierarchy(canvas,cache.nets,cache.groups,filters);
  }
  main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
