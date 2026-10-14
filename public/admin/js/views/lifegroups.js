@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { renderHierarchy } from './hierarchy.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -255,123 +256,53 @@ function bindMemberActions(root, groupsById, refresh) {
   });
 }
 
-export async function renderLifegroups({ main, query }) {
-  const tab = ['needs', 'progress'].includes(query.tab) ? query.tab : 'groups'; // 'groups' = the Network tab (old ?tab=networks lands here too)
-  const filters = { q: query.q || '', status: query.status || 'active', gender: query.gender || '' };
-  let overview = null;
-  try { overview = await api.lifegroupOverview(); } catch (e) { /* non-fatal */ }
-
-  main.innerHTML = html`
-    <div class="page-header">
-      <div class="row" style="gap:12px;align-items:center;flex-wrap:wrap"><h1>Lifegroups</h1>${can('lifegroups:manage') ? html`<button class="btn" id="newNetwork">${icon('plus')} New Network</button>` : ''}</div>
-      <div class="page-actions">${can('lifegroups:manage') ? html`<button class="btn btn--primary" id="newGroup">${icon('plus')} New Lifegroup</button>` : ''}</div>
-    </div>
-    ${overview ? (() => { const st = overview.structure || {}; const zero = { networks: 0, cell_leaders: 0, lifegroups: 0, members: 0, open_cell: 0, closed_cell: 0 };
-      const sec = (label, x, g) => html`<div class="card sexsplit__card">
-        <div class="card__header"><h2>${label}</h2><span class="hint">${x.lifegroups} Lifegroup${x.lifegroups === 1 ? '' : 's'} · ${x.members} member${x.members === 1 ? '' : 's'}</span></div>
-        <div class="card__body"><div class="kpi-row kpi-row--4">
-          <a class="kpi kpi--link" href="#/lifegroups?gender=${g}"><b>${fmtNum(x.networks)}</b><span>Networks</span></a>
-          <a class="kpi kpi--link" href="#/lifegroups?gender=${g}"><b>${fmtNum(x.cell_leaders)}</b><span>Cell leaders</span></a>
-          <a class="kpi kpi--link" href="#/lifegroups?tab=progress"><b>${fmtNum(x.open_cell)}</b><span>Open cell</span></a>
-          <a class="kpi kpi--link kpi--teal" href="#/reports?view=lifegroups"><b>${fmtNum(x.closed_cell)}</b><span>Closed cell</span></a>
-        </div></div></div>`;
-      return html`<div class="sexsplit mb-2">${sec('Boys', st.boys || zero, 'boys')}${sec('Girls', st.girls || zero, 'girls')}</div>`; })() : ''}
-    <div class="filter-tabs mb-2" id="tabs">
-      <button data-t="groups" class="${tab === 'groups' ? 'active' : ''}">Network</button>
-      <button data-t="needs" class="${tab === 'needs' ? 'active' : ''}">Needs Lifegroup ${overview ? html`<span class="count">${overview.without_group}</span>` : ''}</button>
-      <button data-t="progress" class="${tab === 'progress' ? 'active' : ''}">Progress</button>
-    </div>
-    <div id="tabBody"></div>`;
-
-  main.querySelector('#newGroup')?.addEventListener('click', () => groupForm(null, (g) => { location.hash = `#/lifegroups/${g.id}`; }));
-  main.querySelector('#newNetwork')?.addEventListener('click', () => networkForm(null, (n) => { location.hash = `#/networks/${n.id}`; }));
-  main.querySelector('#tabs').onclick = (e) => {
-    const b = e.target.closest('button'); if (!b) return;
-    location.hash = '#/lifegroups' + api.qs({ tab: b.dataset.t === 'groups' ? '' : b.dataset.t });
-  };
-  const body = main.querySelector('#tabBody');
-  if (tab === 'needs') return drawNeeds(body);
-  if (tab === 'progress') return drawProgressTab(body);
-  return drawGroups(body, filters);
-}
-
-async function drawGroups(body, filters) {
-  body.innerHTML = html`
-    <div class="toolbar">
-      <div class="gsearch grow" style="max-width:none">${icon('search', 17)}<input type="search" id="gq" placeholder="Search network, group or leader" value="${filters.q}" autocomplete="off" /></div>
-      <div class="filter-tabs" id="ggender" style="margin:0"><button data-g="" class="${!filters.gender ? 'active' : ''}">Boys &amp; girls</button><button data-g="boys" class="${filters.gender === 'boys' ? 'active' : ''}">Boys</button><button data-g="girls" class="${filters.gender === 'girls' ? 'active' : ''}">Girls</button></div>
-      <select id="gstatus" style="width:auto;min-width:120px" aria-label="Status"><option value="active">Active</option><option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactive</option><option value="all" ${filters.status === 'all' ? 'selected' : ''}>All</option></select>
-    </div>
-    <div id="glist"><div class="card"><div class="loading">Loading…</div></div></div>`;
-  const list = body.querySelector('#glist');
-  let reqId = 0;
-  async function load() {
-    const id = ++reqId;
-    history.replaceState(null, '', '#/lifegroups' + api.qs({ q: filters.q, gender: filters.gender, status: filters.status === 'active' ? '' : filters.status }));
-    let groups, nets;
-    try { [groups, nets] = await Promise.all([api.lifegroups(filters), api.networks({ status: filters.status === 'active' ? 'active' : 'all' })]); }
-    catch (e) { list.innerHTML = html`<div class="alert alert--error" style="margin:16px">${e.message}</div>`; return; }
-    if (id !== reqId) return;
-    const q = filters.q.toLowerCase();
-    if (filters.gender) nets = nets.filter((n) => n.gender === filters.gender);
-    if (!groups.length && !nets.length) {
-      list.innerHTML = html`<div class="card">${emptyState({ icon: 'group', title: filters.q ? 'No network or group matches' : 'No Lifegroups yet', text: filters.q ? 'Try a different search.' : 'Create the first Lifegroup so people can be connected after Sunday.', action: can('lifegroups:manage') && !filters.q ? '<button class="btn btn--primary" id="newGroup2">New Lifegroup</button>' : '' })}</div>`;
-      list.querySelector('#newGroup2')?.addEventListener('click', () => groupForm(null, (g) => { location.hash = `#/lifegroups/${g.id}`; }));
-      return;
-    }
-    const row = (g, isLeaderGroup) => { const closed = g.solid_count || 0, open = g.member_count - closed, t = g.solid_target || 6; return html`<tr class="clickable ${isLeaderGroup ? 'row--lead' : ''}" data-id="${g.id}">
-        <td data-label="" class="nowrap"><b>${g.name}</b>${isLeaderGroup ? raw(' <span class="badge badge--leader badge--nodot">Network leader’s Lifegroup</span>') : ''}${g.is_active ? '' : raw(' <span class="badge badge--nodot">Inactive</span>')}${g.is_demo ? raw(' <span class="badge badge--demo badge--nodot">Demo</span>') : ''}</td>
-        <td data-label="${isLeaderGroup ? 'Network leader' : 'Cell leader'}" class="nowrap">${g.leader_name || raw('<span class="muted">—</span>')}</td>
-        <td data-label="Schedule" class="nowrap">${fmtSchedule(g) || raw('<span class="muted">—</span>')}</td>
-        <td data-label="${isLeaderGroup ? 'Cell leaders' : 'Members'}" class="num nowrap">${g.member_count}${g.max_members != null ? html`<span class="muted small"> / ${g.max_members}</span>` : ''}</td>
-        <td data-label="Closed cell" class="num nowrap">${isLeaderGroup ? raw('<span class="muted">—</span>') : closed >= t ? raw(`<span class="badge badge--present badge--nodot" title="Solid Lifegroup">${closed}</span>`) : html`<span class="nowrap">${closed}<span class="muted small">/${t}</span></span>`}</td>
-        <td data-label="Open cell" class="num">${isLeaderGroup ? raw('<span class="muted">—</span>') : open}</td>
-        <td data-label="Last held" class="nowrap small">${g.last_held ? fmtDate(g.last_held, { short: true }) : raw('<span class="muted">—</span>')}</td>
-      </tr>`; };
-    const table = (rows, leaderGroup) => html`<div class="table-wrap"><table class="table table--stack">
-      <thead><tr><th>Lifegroup</th><th>Leader</th><th>Schedule</th><th class="num">Members</th><th class="num">Closed cell</th><th class="num">Open cell</th><th>Last held</th></tr></thead>
-      <tbody>${leaderGroup ? row(leaderGroup, true) : ''}${rows.map((g) => row(g, false))}</tbody></table></div>`;
-    const used = new Set();
-    const netBlock = (n) => {
-      // each Network is an independent root: the network leader's own Lifegroup first, then the cell leaders' Lifegroups
-      const leaderGroup = n.leader_person_id ? groups.find((g) => g.leader_person_id === n.leader_person_id) || null : null;
-      const rows = groups.filter((g) => g.network_id === n.id && (!leaderGroup || g.id !== leaderGroup.id));
-      if (leaderGroup) used.add(leaderGroup.id);
-      rows.forEach((g) => used.add(g.id));
-      const matches = !q || n.name.toLowerCase().includes(q) || (n.leader_name || '').toLowerCase().includes(q) || rows.length || leaderGroup;
-      if (!matches) return '';
-      return html`<div class="card mb-2 netblock netblock--${n.gender || 'na'}">
-        <div class="card__header netblock__head">
-          <div class="min-w-0">
-            <h2><a href="#/networks/${n.id}">${n.name}</a>${n.is_demo ? raw(' <span class="badge badge--demo badge--nodot">Demo</span>') : ''}${n.is_active ? '' : raw(' <span class="badge badge--nodot">Inactive</span>')}</h2>
-            <div class="small muted">Network leader: <b>${n.leader_name || 'not set'}</b> · Cell leaders <b>${n.cell_leaders || 0}</b> / 6 · ${rows.length} Lifegroup${rows.length === 1 ? '' : 's'} · ${n.people_count || 0} members · Closed cell ${n.closed_cell || 0} · Open cell ${n.open_cell || 0}</div>
-          </div>
-          <a class="btn btn--sm" href="#/networks/${n.id}">${icon('link', 14)} Network page &amp; QR</a>
-        </div>
-        <div class="card__body card__body--flush">${rows.length || leaderGroup ? table(rows, leaderGroup) : raw('<div class="small muted" style="padding:14px 16px">No Lifegroups under this Network yet.</div>')}</div>
-      </div>`;
-    };
-    const section = (key, label) => {
-      const ns = nets.filter((n) => (key === 'na' ? !n.gender : n.gender === key)).sort((a, b) => a.name.localeCompare(b.name));
-      const blocks = ns.map(netBlock);
-      const loose = groups.filter((g) => (key === 'na' ? !g.gender : g.gender === key) && !used.has(g.id));
-      if (!blocks.some(Boolean) && !loose.length) return '';
-      return html`<section class="net-section net-section--${key}">
-        <div class="net-section__head"><h2>${label} ${genderBadge(key)} <span class="net-section__count">${ns.length}</span></h2><span class="small muted">${ns.length} network${ns.length === 1 ? '' : 's'}</span></div>
-        ${blocks}
-        ${loose.length ? html`<div class="card mb-2 netblock netblock--loose">
-          <div class="card__header netblock__head"><div><h2>No Network yet</h2></div></div>
-          <div class="card__body card__body--flush">${table(loose, null)}</div>
-        </div>` : ''}
-      </section>`;
-    };
-    list.innerHTML = html`${section('boys', 'Boys')}${section('girls', 'Girls')}${section('na', 'Boys or girls not set')}`;
-    list.querySelectorAll('tr.clickable').forEach((tr) => { tr.onclick = (e) => { if (e.target.closest('a')) return; location.hash = `#/lifegroups/${tr.dataset.id}`; }; });
+export async function renderLifegroups({main, query}) {
+ const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
+ main.innerHTML=html`
+ <div class="page-header"><div><h1>Discipleship Tree</h1><p class="sub">Network leaders, cell leaders and members in one collapsible hierarchy.</p></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn" id="newNetwork">${icon('plus')} New Network</button><button class="btn btn--primary" id="newGroup">${icon('plus')} New Lifegroup</button>`:''}</div></div>
+ <div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" /></div>
+ <select id="treeGender" aria-label="Network category"><option value="">All networks</option><option value="boys">Boys</option><option value="girls">Girls</option></select>
+ <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
+ <button class="btn" id="treeRefresh">Refresh</button></div>
+ <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
+ <div style="display:grid;gap:12px;margin-top:16px">
+ <details class="card" id="needsPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">People needing a Lifegroup</summary><div style="padding:12px" id="needsBody"></div></details>
+ <details class="card" id="progressPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">Lifegroup progress</summary><div style="padding:12px" id="progressBody"></div></details>
+ </div>`;
+ main.querySelector('#newGroup')?.addEventListener('click',()=>groupForm(null,g=>location.hash=`#/lifegroups/${g.id}`));
+ main.querySelector('#newNetwork')?.addEventListener('click',()=>networkForm(null,n=>location.hash=`#/networks/${n.id}`));
+ main.querySelector('#treeGender').value=filters.gender;
+ main.querySelector('#treeStatus').value=filters.status;
+ const canvas=main.querySelector('#treeCanvas');let cache=null,sequence=0;
+ async function load(force=false){
+  const seq=++sequence;
+  if(!cache||force){
+   canvas.innerHTML='<div class="loading">Loading discipleship tree…</div>';
+   try{
+    const [groups,nets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]);
+    if(seq!==sequence||!main.contains(canvas))return;
+    cache={groups,nets};
+   }catch(e){
+    if(seq===sequence)canvas.innerHTML=html`<div class="alert alert--error">${e.message}</div>`;
+    return;
+   }
   }
-  body.querySelector('#gq').addEventListener('input', debounce((e) => { filters.q = e.target.value.trim(); load(); }, 250));
-  body.querySelector('#ggender').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; filters.gender = b.dataset.g; body.querySelectorAll('#ggender button').forEach((x) => x.classList.toggle('active', x === b)); load(); };
-  body.querySelector('#gstatus').onchange = (e) => { filters.status = e.target.value; load(); };
-  load();
+  if(seq!==sequence||!main.contains(canvas))return;
+  history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
+  await renderHierarchy(canvas,cache.nets,cache.groups,filters);
+ }
+ main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
+ main.querySelector('#treeGender').addEventListener('change',e=>{filters.gender=e.target.value;load();});
+ main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
+ main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
+ const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
+ needs.addEventListener('toggle',()=>{if(needs.open&&!needs.dataset.loaded){needs.dataset.loaded='yes';drawNeeds(main.querySelector('#needsBody'));}});
+ progress.addEventListener('toggle',()=>{if(progress.open&&!progress.dataset.loaded){progress.dataset.loaded='yes';drawProgressTab(main.querySelector('#progressBody'));}});
+ if(query.tab==='needs')needs.open=true;
+ if(query.tab==='progress')progress.open=true;
+ main.__liveReload=()=>load(true);
+ return load();
 }
 
 async function drawNeeds(body) {
