@@ -4,6 +4,7 @@ import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
 import { createFourFieldNetwork } from './networkFourField.js';
 import { createAddNewModal } from './unifiedAddNew.js';
+import { openRemoveFromLifegroups } from './removeFromLifegroups.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -294,7 +295,7 @@ export async function renderLifegroups({main, query}) {
  main.innerHTML=html`
  <section class="lifegroups-page">
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button type="button" class="btn" id="removeFromLifegroups" title="Remove Network, Cell Leader, or Member">${icon('trash',16)} Remove</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
@@ -306,12 +307,21 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
- main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load()}));
+ main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load(true)}));
+ main.querySelector('#removeFromLifegroups')?.addEventListener('click',()=>openRemoveFromLifegroups({onRemoved:afterRemove}));
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
  main.querySelector('#treeStatus').value=filters.status;
  const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
+ function afterRemove(){
+  // Membership caches are reused by the animated SVG tree. Invalidate all
+  // cached members after an archive, including nested Network removals.
+  canvas.__lifegenTree?.members.clear();
+  canvas.__lifegenTree?.loading.clear();
+  if(canvas.__lifegenTree)canvas.__lifegenTree.selected=null;
+  load(true);
+ }
  function renderUnassigned(){
   const missing=findUnassignedGroups(cache.nets,cache.groups,filters);
   if(!missing.length){notice.innerHTML='';return;}
@@ -373,7 +383,10 @@ export async function renderLifegroups({main, query}) {
    (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
   summary.hidden=Boolean(filters.q);
   summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
-  await renderHierarchy(canvas,cache.nets,cache.groups,filters);
+  await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:can('lifegroups:manage')?
+    ({kind,networkId,groupId,personId})=>openRemoveFromLifegroups({
+      initialTab:kind==='group'?'cell':kind,networkId,groupId,personId,onRemoved:afterRemove,
+    }):null});
  }
  main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
@@ -437,7 +450,7 @@ export async function renderLifegroup({ main }, id) {
           </div>
         </div>
       </div>
-      ${manage ? html`<div class="page-actions"><button class="btn btn--primary" id="addMember">${icon('plus')} Add member</button><button class="btn" id="editGroup" title="Edit Cell Leader">${icon('edit')} Edit</button></div>` : ''}
+      ${manage ? html`<div class="page-actions"><button class="btn btn--primary" id="addMember">${icon('plus')} Add member</button><button class="btn" id="editGroup" title="Edit Cell Leader">${icon('edit')} Edit</button>${!g.leads_network && g.is_active ? html`<button class="btn" id="removeCellLeader">${icon('trash',16)} Remove</button>` : ''}</div>` : ''}
     </div>
 
     <div class="lifegroup-detail__stats">
@@ -555,6 +568,9 @@ export async function renderLifegroup({ main }, id) {
     };
   });
   main.querySelector('#editGroup')?.addEventListener('click', () => groupForm(g, () => renderLifegroup({ main }, id)));
+  main.querySelector('#removeCellLeader')?.addEventListener('click', () => openRemoveFromLifegroups({
+    initialTab:'cell',networkId:g.network_id,groupId:g.id,onRemoved:()=>{ location.hash='#/lifegroups'; },
+  }));
   main.querySelector('#delGroup')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `Delete ${g.name}?`, message: 'This group has no membership history, so it can be removed.', confirmText: 'Delete', danger: true });
     if (!ok) return;
@@ -751,7 +767,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
         <h1 class="mt-1">${n.name}</h1>
         <div class="row mt-1">${genderBadge(n.gender, { long: true, noun: 'network' })}<span class="small muted">${n.is_auto ? 'Formed automatically' : 'Set by hand'}</span>${n.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${n.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
       </div>
-      ${manage ? html`<div class="page-actions">${leaderGroup ? html`<button class="btn btn--primary" id="netReport">${icon('plus')} Report a meeting</button>` : ''}<button class="btn" id="editNet">${icon('edit')} Edit</button></div>` : ''}
+      ${manage ? html`<div class="page-actions">${leaderGroup ? html`<button class="btn btn--primary" id="netReport">${icon('plus')} Report a meeting</button>` : ''}<button class="btn" id="editNet">${icon('edit')} Edit</button>${n.is_active?html`<button class="btn" id="removeNetwork">${icon('trash',16)} Remove</button>`:''}</div>` : ''}
     </div>
 
 
@@ -854,6 +870,9 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
     main.querySelector('#netReport').onclick = async () => { try { const p = await api.lifegroupProgress(leaderGroup.id, 12); meetingForm(leaderGroup.id, p, null, () => renderNetwork({ main }, id)); } catch (e) { toast(e.message, 'error'); } };
   }
   main.querySelector('#editNet')?.addEventListener('click', () => networkForm(n, () => renderNetwork({ main }, id)));
+  main.querySelector('#removeNetwork')?.addEventListener('click', () => openRemoveFromLifegroups({
+    initialTab:'network',networkId:n.id,onRemoved:()=>{ location.hash='#/lifegroups'; },
+  }));
   main.querySelector('#editNet2')?.addEventListener('click', () => networkForm(n, () => renderNetwork({ main }, id)));
   // in-place editing: cell leaders, groups, members (keeps the opened groups open after a change)
   const refresh = () => renderNetwork({ main }, id, new Set([...main.querySelectorAll('details[data-gid][open]')].map((d) => Number(d.dataset.gid))));

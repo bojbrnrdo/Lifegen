@@ -70,7 +70,9 @@ const CSS = [
  ".lfg__node text{font:600 13px system-ui,sans-serif;fill:#203d2d;paint-order:stroke;stroke:#fbfdf9;stroke-width:3.5px;stroke-linejoin:round}",
  ".lfg__node .sub{font-weight:400;font-size:11px;fill:#708577}.lfg__node .symbol{font-size:11px;font-weight:700;stroke:none;fill:#2e8054}",
  ".lfg__panel{position:absolute;bottom:20px;left:18px;max-width:310px;padding:15px 17px;border-radius:12px;background:#fff;border:1px solid #d6e4da;box-shadow:0 12px 32px #183b2418}",
- ".lfg__panel strong{display:block;font-size:14px;color:#244430}.lfg__panel p{font-size:12px;color:#6c8575;margin:5px 0 10px}.lfg__panel a{font-size:12px;color:#216b42;text-decoration:underline;font-weight:600}",
+ ".lfg__panel p{font-size:12px;color:#6c8575;margin:5px 0 10px}.lfg__panel a{font-size:12px;color:#216b42;text-decoration:underline;font-weight:600}",
+ ".lfg__panel .lfg__remove{display:inline-flex;align-items:center;gap:6px;border:1px solid #e2b8b5;border-radius:8px;background:#fff;color:#a63636;font-size:12px;font-weight:650;padding:6px 10px;cursor:pointer;margin-top:9px}",
+ ".lfg__panel .lfg__remove:hover,.lfg__panel .lfg__remove:focus-visible{background:#fdf0ed;border-color:#c65c51;outline:2px solid transparent}",
  ".lfg__hint{position:absolute;bottom:12px;right:16px;color:#84988a;font-size:11px;pointer-events:none}",
  ".lfg__blank{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);min-width:min(340px,80%);max-width:470px;padding:25px;text-align:center;background:#ffffffec;border:1px dashed #bdd6c3;border-radius:16px;box-shadow:0 7px 24px #17462b0d}",
  ".lfg__blank b{display:block;font-size:17px;color:#204c33;margin-bottom:7px}.lfg__blank p{font-size:13px;color:#71867a;line-height:1.6;margin:0}",
@@ -110,6 +112,7 @@ const treeControlIcon=(name)=>'<svg width="16" height="16" viewBox="0 0 24 24" f
  reset:'<path d="M4 5v5h5M20 19v-5h-5"/><path d="M5 10a8 8 0 0 1 14-3m0 7a8 8 0 0 1-14 3"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  minus:'<path d="M5 12h14"/>',
+ remove:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
  }[name]||'')+'</svg>';
 function ensureCSS(){
  if(document.getElementById('lifegen-node-graph-style'))return;
@@ -189,7 +192,7 @@ export function hierarchyCurve(parent,child) {
  const bend=(y1+y2)/2;
  return 'M'+x1+' '+y1+' C'+x1+' '+bend+' '+x2+' '+bend+' '+x2+' '+y2;
 }
-export async function renderHierarchy(target,networks,groups,filters={}){
+export async function renderHierarchy(target,networks,groups,filters={},options={}){
  ensureCSS();
  const old=target.__lifegenTree||{};
  old.cleanup?.();
@@ -237,7 +240,22 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
    (socials.length?'<nav class="lfg__socials" aria-label="Social media profiles">'+socials.map(item=>
      '<a href="'+esc(item.url)+'" aria-label="'+esc(item.label)+'" title="'+esc(item.label)+'" target="_blank" rel="noopener noreferrer">'+socialIcon(item.glyph,17)+'</a>').join('')+'</nav>':'')+
-   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add New to connect one.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
+   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add New to connect one.</p>':'')+
+   (link?'<a href="'+link+'">Open details →</a>':'')+
+   (typeof options.onRemove==='function'&&node.record?.is_active!==false?
+      '<div><button class="lfg__remove" type="button" data-remove-node aria-label="Remove '+esc(node.subtitle)+': '+esc(node.name)+'">'+
+      treeControlIcon('remove')+' Remove from Lifegroups</button></div>':'');
+  panel.querySelector('[data-remove-node]')?.addEventListener('click',event=>{
+   event.preventDefault();
+   const parent=layout.nodes.find(n=>n.key===node.parentKey);
+   options.onRemove({
+    kind:node.kind,
+    networkId:node.kind==='network'?node.record.id:
+      node.kind==='group'?node.record.network_id:parent?.record?.network_id,
+    groupId:node.kind==='group'?node.record.id:node.kind==='member'?parent?.record?.id:null,
+    personId:node.kind==='member'?node.record.id:null,
+   });
+  });
  }
  function focusNode(key){
   const n=layout.nodes.find(node=>node.key===key);

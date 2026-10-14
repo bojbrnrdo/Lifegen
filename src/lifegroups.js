@@ -597,6 +597,103 @@ async function leaveMember(groupId, personId, leftAt = today(), actor) {
   return membershipForPerson(personId);
 }
 
+/**
+ * History-preserving removal from the visible Lifegroups tree.
+ * Never delete People, attendance, membership rows, meetings or networks.
+ * Closing memberships and deactivating the structure must be one transaction.
+ */
+async function removeNetworkFromTree(networkId, actor) {
+  return transaction(async (client) => {
+    const net=(await client.query('SELECT id,name,is_active FROM networks WHERE id=$1 FOR UPDATE',[networkId])).rows[0];
+    if (!net) throw httpError(404,'Network not found.');
+    if (!net.is_active) throw httpError(409,'This Network has already been removed from the active tree.');
+    const {rows:groups}=await client.query(
+      'SELECT id FROM lifegroups WHERE network_id=$1 ORDER BY id FOR UPDATE',[networkId]);
+    const groupIds=groups.map(g=>Number(g.id));
+    let membersClosed=0;
+    if (groupIds.length) {
+      const ended=await client.query(
+        'UPDATE lifegroup_memberships SET left_at=GREATEST(joined_at,$2::date) WHERE lifegroup_id=ANY($1::bigint[]) AND left_at IS NULL RETURNING id',
+        [groupIds,today()]);
+      membersClosed=ended.rows.length;
+      await client.query('UPDATE lifegroups SET is_active=false,updated_at=now() WHERE network_id=$1 AND is_active',[networkId]);
+    }
+    await client.query('UPDATE networks SET is_active=false,updated_at=now() WHERE id=$1',[networkId]);
+    await logAction(client,actor,'networks',networkId,'remove_from_tree',{
+      name:net.name,group_count:groupIds.length,ended_memberships:membersClosed,retained_history:true,
+    });
+    return {network_id:networkId,archived_groups:groupIds.length,ended_memberships:membersClosed,removed:true};
+  });
+}
+
+async function removeCellLeaderFromTree(groupId, actor) {
+  return transaction(async (client) => {
+    const g=(await client.query(
+      'SELECT id,name,network_id,leader_person_id,is_active FROM lifegroups WHERE id=$1 FOR UPDATE',[groupId])).rows[0];
+    if (!g) throw httpError(404,'Cell Leader not found.');
+    if (!g.is_active) throw httpError(409,'This Cell Leader has already been removed from the active tree.');
+    const net=g.network_id?(await client.query(
+      'SELECT id,leader_person_id FROM networks WHERE id=$1',[g.network_id])).rows[0]:null;
+    if (net?.leader_person_id && Number(net.leader_person_id)===Number(g.leader_person_id)) {
+      throw httpError(409,'This is the Network Leader’s own Cell. Remove the Network instead.');
+    }
+    const when=today();
+    const ended=await client.query(
+      'UPDATE lifegroup_memberships SET left_at=GREATEST(joined_at,$2::date) WHERE lifegroup_id=$1 AND left_at IS NULL RETURNING id',
+      [groupId,when]);
+    let leaderLinksClosed=0;
+    if (net?.leader_person_id && g.leader_person_id) {
+      // Only detach the leader-team membership if this person has no other
+      // active Cell in the Network. Keep their Person record and history.
+      const endedLeader=await client.query(`UPDATE lifegroup_memberships m
+        SET left_at=GREATEST(m.joined_at,$4::date)
+        FROM lifegroups parent
+        WHERE m.lifegroup_id=parent.id
+          AND parent.network_id=$1 AND parent.leader_person_id=$2
+          AND m.person_id=$3 AND m.left_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM lifegroups other
+            WHERE other.network_id=$1 AND other.leader_person_id=$3
+              AND other.id<>$5 AND other.is_active)
+        RETURNING m.id`,
+        [g.network_id,net.leader_person_id,g.leader_person_id,when,groupId]);
+      leaderLinksClosed=endedLeader.rows.length;
+    }
+    await client.query('UPDATE lifegroups SET is_active=false,updated_at=now() WHERE id=$1',[groupId]);
+    await logAction(client,actor,'lifegroups',groupId,'remove_from_tree',{
+      name:g.name,network_id:g.network_id,leader_person_id:g.leader_person_id,
+      ended_memberships:ended.rows.length,ended_leader_links:leaderLinksClosed,retained_history:true,
+    });
+    return {group_id:groupId,ended_memberships:ended.rows.length,
+      ended_leader_links:leaderLinksClosed,removed:true};
+  });
+}
+
+async function removeMemberFromTree(groupId,personId,actor) {
+  return transaction(async (client) => {
+    const group=(await client.query(
+      'SELECT g.id,g.name,g.leader_person_id,g.is_active,g.network_id FROM lifegroups g WHERE g.id=$1 FOR UPDATE',[groupId])).rows[0];
+    if (!group) throw httpError(404,'Cell not found.');
+    if (!group.is_active) throw httpError(409,'This Cell is inactive.');
+    const net=group.network_id?(await client.query(
+      'SELECT leader_person_id FROM networks WHERE id=$1',[group.network_id])).rows[0]:null;
+    if (Number(group.leader_person_id)===personId ||
+        (net?.leader_person_id && Number(net.leader_person_id)===Number(group.leader_person_id))) {
+      throw httpError(409,'Remove a Cell Leader or Network Leader using the corresponding tab.');
+    }
+    const current=(await client.query(`SELECT m.id,m.joined_at
+      FROM lifegroup_memberships m
+      WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`,
+      [groupId,personId])).rows[0];
+    if (!current) throw httpError(404,'Member is not assigned to this Cell.');
+    const when=today();
+    await client.query('UPDATE lifegroup_memberships SET left_at=GREATEST(joined_at,$2::date) WHERE id=$1',[current.id,when]);
+    await logAction(client,actor,'lifegroup_memberships',current.id,'leave',{
+      person_id:personId,lifegroup_id:groupId,removed_from_tree:true,left_at:when,retained_history:true,
+    });
+    return {group_id:groupId,person_id:personId,removed:true};
+  });
+}
+
 async function meetingRows(groupId, limit = 30) {
   const { rows } = await query(`SELECT mt.*,mt.meeting_date::text AS meeting_date, u.display_name AS submitted_by_user_name
     FROM lifegroup_meetings mt LEFT JOIN staff_users u ON u.id=mt.submitted_by_user
@@ -847,6 +944,8 @@ async function lifegroupMethod(name, args, actor) {
       return {};
     });
   }
+  if (name === 'removeCellLeaderFromTree') return removeCellLeaderFromTree(asId(args[0],'group ID'),actor);
+  if (name === 'removeMemberFromTree') return removeMemberFromTree(asId(args[0],'group ID'),asId(args[1],'person ID'),actor);
   if (name === 'assignLifegroup') return assignMember(asId(args[0],'group ID'),asId(args[1],'person ID'),args[2] || {},actor);
   if (name === 'leaveLifegroup') return leaveMember(asId(args[0],'group ID'),asId(args[1],'person ID'),clean(args[2]) || today(),actor);
   if (name === 'setTier') {
@@ -869,6 +968,7 @@ async function lifegroupMethod(name, args, actor) {
   if (name === 'createNetworkStructure') return networkDetail(await createNetworkStructure(args[0] || {},actor));
   if (name === 'createNetwork') return networkDetail(await saveNetwork(args[0] || {},actor));
   if (name === 'updateNetwork') return networkDetail(await saveNetwork(args[1] || {},actor,asId(args[0],'network ID')));
+  if (name === 'removeNetworkFromTree') return removeNetworkFromTree(asId(args[0],'network ID'),actor);
   if (name === 'deleteNetwork') {
     const id = asId(args[0],'network ID');
     return transaction(async (client) => {
