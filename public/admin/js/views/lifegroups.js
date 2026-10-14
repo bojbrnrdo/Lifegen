@@ -29,8 +29,14 @@ export function ratioBar(boys, girls, total, { compact = false } = {}) {
     <div class="ratio__legend"><span><i class="dot dot--boys"></i>${boys} boys <span class="muted">${pct(boys)}%</span></span><span><i class="dot dot--girls"></i>${girls} girls <span class="muted">${pct(girls)}%</span></span>${unknown ? html`<span class="muted">${unknown} not set</span>` : ''}</div>
   </div>`;
 }
-export const genderBadge = (g, { long = false, noun = 'group' } = {}) => (g === 'boys' ? raw(`<span class="gbadge gbadge--boys">${long ? 'Boys ' + noun : 'Boys'}</span>`) : g === 'girls' ? raw(`<span class="gbadge gbadge--girls">${long ? 'Girls ' + noun : 'Girls'}</span>`) : raw('<span class="gbadge gbadge--na" title="Boys or girls not set yet">Not set</span>'));
-const sexBadge = (sex) => (sex === 'male' ? raw('<span class="sex sex--boy">Boy</span>') : sex === 'female' ? raw('<span class="sex sex--girl">Girl</span>') : raw('<span class="sex sex--na">—</span>'));
+/** Sex-specific network indicators, kept accessible even when the visible label is icon-only. */
+export const genderBadge = (g, { long = false, noun = 'group' } = {}) => {
+  const title = g === 'boys' ? 'Boys' : g === 'girls' ? 'Girls' : 'Category not set';
+  if (g !== 'boys' && g !== 'girls') return raw('<span class="gbadge gbadge--na" role="img" aria-label="Category not set" title="Category not set">?</span>');
+  const text = title + (long ? ' ' + noun : '');
+  return raw(`<span class="gbadge gbadge--icon gbadge--${g}" role="img" aria-label="${text}" title="${text}">${icon(g === 'boys' ? 'mars' : 'venus', 16).value}</span>`);
+};
+const sexBadge = (sex) => sex === 'male' ? genderBadge('boys') : sex === 'female' ? genderBadge('girls') : genderBadge(null);
 
 // ---------------------------------------------------------------------------
 // Person picker (search registered people) — used for leader + add member
@@ -95,8 +101,8 @@ async function groupForm(g, onSaved, { networkId = null, gender = null } = {}) {
       <div class="field"><label>Group name <span class="req">*</span></label><input name="name" value="${v('name')}" required autocomplete="off" placeholder="e.g. Joshua Group" /></div>
       <div class="field"><label>Boys or girls <span class="req">*</span></label>
         <div class="choice">
-          <label class="choice__opt"><input type="radio" name="gender" value="boys" ${selectedGender === 'boys' ? 'checked' : ''} /><span>Boys group</span></label>
-          <label class="choice__opt"><input type="radio" name="gender" value="girls" ${selectedGender === 'girls' ? 'checked' : ''} /><span>Girls group</span></label>
+          <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="boys" aria-label="Boys group" ${selectedGender === 'boys' ? 'checked' : ''} /><span title="Boys group">${icon('mars', 22)}</span></label>
+          <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="girls" aria-label="Girls group" ${selectedGender === 'girls' ? 'checked' : ''} /><span title="Girls group">${icon('venus', 22)}</span></label>
         </div></div>
       <div class="field"><label>Network</label><select name="network_id"><option value="" ${!selectedNetworkId ? 'selected' : ''}>No network</option>${(opts.networks || []).map((n) => `<option value="${n.id}" data-gender="${n.gender || ''}" ${Number(selectedNetworkId) === n.id && (!g || g.network_manual) ? 'selected' : ''}>${esc(n.name)}${n.gender ? ' (' + n.gender + ')' : ''}${n.leader_name ? ' · ' + esc(n.leader_name) : ''}</option>`).join('')}</select></div>
       <div class="field span-2 gsearch-field"><label>Leader <span class="opt">registered person</span></label>
@@ -287,7 +293,7 @@ export async function renderLifegroups({main, query}) {
  <div class="page-header"><div><h1>Discipleship Tree</h1><p class="sub">Network leaders, cell leaders and members in one collapsible hierarchy.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn" id="newNetwork">${icon('plus')} New Network</button><button class="btn btn--primary" id="newGroup">${icon('plus')} New Lifegroup</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" aria-label="Search network, group, or leader" /></div>
- <select id="treeGender" aria-label="Network category"><option value="">All networks</option><option value="boys">Boys</option><option value="girls">Girls</option></select>
+ <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn" id="treeRefresh" title="Reload current Lifegroup records">Refresh</button></div>
  <div id="treeNotice" aria-live="polite"></div>
@@ -298,7 +304,9 @@ export async function renderLifegroups({main, query}) {
  </div>`;
  main.querySelector('#newGroup')?.addEventListener('click',()=>groupForm(null,g=>location.hash=`#/lifegroups/${g.id}`));
  main.querySelector('#newNetwork')?.addEventListener('click',()=>networkForm(null,n=>location.hash=`#/networks/${n.id}`));
- main.querySelector('#treeGender').value=filters.gender;
+ const genderButtons=main.querySelectorAll('[data-gender-filter]');
+ const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
+ syncGender();
  main.querySelector('#treeStatus').value=filters.status;
  const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
  function renderUnassigned(){
@@ -356,7 +364,7 @@ export async function renderLifegroups({main, query}) {
   await renderHierarchy(canvas,cache.nets,cache.groups,filters);
  }
  main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
- main.querySelector('#treeGender').addEventListener('change',e=>{filters.gender=e.target.value;load();});
+ genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
  main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
  const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
@@ -642,8 +650,8 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
             <summary>
               <div class="row row--between" style="gap:10px;flex-wrap:wrap">
                 <div class="min-w-0">
-                  <span class="tree__tag">Lifegroup leader · ${g.gender === 'boys' ? 'boys group' : g.gender === 'girls' ? 'girls group' : 'boys/girls not set'}</span>
-                  <div class="tree__who"><b>${g.leader_name || raw('<span class="muted">No leader</span>')}</b> <span class="muted">· ${g.name}</span> ${genderBadge(g.gender)}${g.is_active ? '' : raw(' <span class="badge badge--nodot">Inactive</span>')}</div>
+                  <span class="tree__tag tree__tag--with-icon">Lifegroup leader ${genderBadge(g.gender)}</span>
+                  <div class="tree__who"><b>${g.leader_name || raw('<span class="muted">No leader</span>')}</b> <span class="muted">· ${g.name}</span>${g.is_active ? '' : raw(' <span class="badge badge--nodot">Inactive</span>')}</div>
                   <div class="small muted">${g.member_count} member${g.member_count === 1 ? '' : 's'}${fmtSchedule(g) ? html` · ${fmtSchedule(g)}` : ''}</div>
                 </div>
                 <div class="small muted nowrap">${solidBadge(g.members.filter((m) => m.tier === 'solid').length, netTarget, g.members.filter((m) => m.tier === 'solid').length >= netTarget)}</div>
