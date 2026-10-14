@@ -6,6 +6,10 @@ const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
 const page=read('../public/lifegen/index.html');
 const player=read('../public/lifegen/videos.js');
 const assetVersion=JSON.parse(read('../asset-versions.json'));
+// styles.css must be AT LEAST the version that shipped the native-video CSS
+// (2.4.18). Later public-CSS changes legitimately bump it further, so an exact
+// pin would force a stale-cache version to be reused.
+const atLeast=(v,min)=>{const a=v.split('.').map(Number),b=min.split('.').map(Number);for(let i=0;i<3;i++){if(a[i]!==b[i])return a[i]>b[i];}return true;};
 const media=new URL('../public/brand/videos/janime-rivera-testimony-720p.mp4',import.meta.url);
 
 test('Janime uses a first-party MP4, with no Google iframe or crop',()=>{
@@ -42,6 +46,7 @@ test('native HTML5 playback uses built-in controls and preserves original fallba
 });
 
 test('CSS cache version is updated for native video player',()=>{
- assert.match(page,/\/lifegen\/styles\.css\?v=2\.4\.18/);
- assert.equal(assetVersion['/lifegen/styles.css'].version,'2.4.18');
+ const pageVersion=page.match(/\/lifegen\/styles\.css\?v=(\d+\.\d+\.\d+)/)?.[1];
+ assert.ok(pageVersion&&atLeast(pageVersion,'2.4.18'),`styles.css?v=${pageVersion} must be >= 2.4.18`);
+ assert.equal(assetVersion['/lifegen/styles.css'].version,pageVersion);
 });

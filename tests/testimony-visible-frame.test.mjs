@@ -6,6 +6,10 @@ const page=read('../public/lifegen/index.html');
 const css=read('../public/lifegen/styles.css');
 const player=read('../public/lifegen/videos.js');
 const versions=JSON.parse(read('../asset-versions.json'));
+// styles.css must be AT LEAST the version that shipped the native-video CSS
+// (2.4.18). Later public-CSS changes legitimately bump it further, so an exact
+// pin would force a stale-cache version to be reused.
+const atLeast=(v,min)=>{const a=v.split('.').map(Number),b=min.split('.').map(Number);for(let i=0;i<3;i++){if(a[i]!==b[i])return a[i]>b[i];}return true;};
 
 test('Janime has an unboxed video while only the descriptive text uses a card',()=>{
  const match=page.match(/<div class="story-grid">\s*<article class="vcard reveal"([^>]*)>(.*?)<\/article>/s);
@@ -30,6 +34,7 @@ test('first-party video uses 16:9 without iframe offset or frame cropping',()=>{
 
 test('original Google Vids link remains available and native CSS is cache-busted',()=>{
  assert.match(page,/Open original in Google Vids/);
- assert.match(page,/\/lifegen\/styles\.css\?v=2\.4\.18/);
- assert.equal(versions['/lifegen/styles.css'].version,'2.4.18');
+ const pageVersion=page.match(/\/lifegen\/styles\.css\?v=(\d+\.\d+\.\d+)/)?.[1];
+ assert.ok(pageVersion&&atLeast(pageVersion,'2.4.18'),`styles.css?v=${pageVersion} must be >= 2.4.18`);
+ assert.equal(versions['/lifegen/styles.css'].version,pageVersion);
 });

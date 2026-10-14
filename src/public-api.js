@@ -1,11 +1,63 @@
 import { Router } from 'express';
 import expressRateLimit from 'express-rate-limit';
-import { query, transaction, withState, stateId, allocateId, logAction } from './db.js';
+import { query, transaction, withState, stateId, allocateId, logAction, upsertRows } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
 import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
+// ---------------------------------------------------------------------------
+// Public registration (VIP first-timer + regular attendee)
+// ---------------------------------------------------------------------------
+// The four gender choices the public forms offer. 'other' and
+// 'prefer_not_to_say' are stored as-is and have no matching Lifegroup gender,
+// so those attendees see the manual leader entry instead of a dropdown.
+const PUBLIC_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
+const GENDER_TO_GROUP = { male: 'boys', female: 'girls' };
+const PUBLIC_MINISTRIES = ['Worship Team','Ushering','Media / Tech','Kids Ministry','Dance / Creative','Prayer','Production','Not yet in a ministry'];
+
+const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00Z'));
+function ageFromBirthdate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const [ty, tm, td] = today().split('-').map(Number);
+  let age = ty - y;
+  if (tm < m || (tm === m && td < d)) age -= 1;
+  return age;
+}
+const normalizeName = (v) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+// Same acceptance as /^[^\s@]+@[^\s@]+\.[^\s@]+$/ (one @, no whitespace, a dot
+// inside the domain), but linear-time: that regex backtracks quadratically on
+// crafted input such as 'a@!.!.!.…', which would stall this public endpoint.
+const isEmailShape = (v) => { const at = v.indexOf('@'); return at > 0 && v.indexOf('@', at + 1) === -1 && !/\s/.test(v) && v.slice(at + 1).slice(1, -1).includes('.'); };
+
+// Cell leaders the public registration can offer for one Lifegroup gender:
+// active Lifegroups with a live leader person and the right gender, skipping the
+// structural "<Network Leader> Leaders" team groups (their leader leads a
+// network, so they are not a cell). Never hardcoded, never guessed.
+const PUBLIC_LEADERS_SQL = `SELECT g.id AS lifegroup_id,g.name AS lifegroup_name,g.gender AS group_gender,
+   p.id AS leader_person_id,coalesce(nullif(btrim(concat_ws(' ',p.first_name,p.last_name)),''),g.leader_name) AS leader_name,
+   n.id AS network_id,n.name AS network_name,
+   nlp.id AS network_leader_person_id,coalesce(nullif(btrim(concat_ws(' ',nlp.first_name,nlp.last_name)),''),n.leader_name) AS network_leader_name
+  FROM lifegroups g
+  JOIN people p ON p.id=g.leader_person_id AND p.archived_at IS NULL
+  LEFT JOIN networks n ON n.id=g.network_id AND n.is_active
+  LEFT JOIN people nlp ON nlp.id=n.leader_person_id AND nlp.archived_at IS NULL
+ WHERE g.is_active AND g.gender=$1
+   AND NOT EXISTS (SELECT 1 FROM networks xn WHERE xn.leader_person_id=g.leader_person_id AND xn.is_active)
+ ORDER BY g.name ASC`;
+async function publicLeaders(groupGender, client = null) {
+  const runner = client || { query };
+  const { rows } = await runner.query(PUBLIC_LEADERS_SQL, [groupGender]);
+  return rows.map((r) => ({
+    leader_person_id: String(r.leader_person_id),
+    leader_name: r.leader_name || 'Lifegroup leader',
+    lifegroup_id: String(r.lifegroup_id),
+    lifegroup_name: r.lifegroup_name,
+    network_leader_name: r.network_leader_name || null,
+    network_name: r.network_name || null,
+  }));
+}
+
 export const publicRouter=Router();
 export function siteUrls(req) {
  const host=(req.app.get('trust proxy')?req.get('x-forwarded-host')||req.get('host'):req.get('host'))?.split(',')[0].trim()||'';
@@ -109,8 +161,15 @@ publicRouter.post('/registrations',async(req,res)=>{
  const b=req.body||{};
  if(b.website)throw httpError(400,'Please leave the website field empty.');
  if(b.privacy_consent!==true)throw httpError(400,'Please read and agree to the privacy notice.');
- const name=String(b.full_name||'').trim().replace(/\s+/g,' '),age=Number(b.age),school=String(b.school||'').trim(),inviter=String(b.inviter||'').trim(),contact=String(b.contact||'').trim()||null;
- if(name.length<2||name.length>200||!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Enter a valid name, age, school/institution and inviter.');
+ // The form now collects gender and birthday. age is still stored because the
+ // VIP portal, the prize rules and the admin registrations list all read it,
+ // and an older cached page that still posts age keeps working.
+ const gender=String(b.gender||'').trim()||null,birthdate=String(b.birthdate||'').trim()||null;
+ if(gender&&!PUBLIC_GENDERS.includes(gender))throw httpError(400,'Choose a valid gender.');
+ if(birthdate&&!isIsoDate(birthdate))throw httpError(400,'Enter a valid birthday.');
+ const birthdayAge=birthdate?ageFromBirthdate(birthdate):null;
+ const name=String(b.full_name||'').trim().replace(/\s+/g,' '),age=Number.isInteger(birthdayAge)?birthdayAge:Number(b.age),school=String(b.school||'').trim(),inviter=String(b.inviter||'').trim(),contact=String(b.contact||'').trim()||null;
+ if(name.length<2||name.length>200||!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Enter a valid name, birthday, school/institution and inviter.');
  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
  const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');const key=hashToken(rawKey);
  const existing=await readVip(req);
@@ -118,7 +177,7 @@ publicRouter.post('/registrations',async(req,res)=>{
  const result=await withState(async({data,client})=>{
   const duplicate=(await client.query('SELECT * FROM vip_registrations WHERE idempotency_key=$1',[key])).rows[0];
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}
-  const parts=name.split(' ');const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age,school,inviter,contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true});
+  const parts=name.split(' ');const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age,...(birthdate?{birthdate}:{}),...(gender?{sex:gender}:{}),school,inviter,contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true});
   const id=stateId(data,'vip_registrations');const recovery='LG-'+randomToken();
   // Attribute this registration to the Sunday service the fullscreen
   // announcement is showing. Safe to check-then-insert: every write runs inside
@@ -182,3 +241,104 @@ publicRouter.post('/posts/:id/pray',async(req,res)=>{
  });res.json({prayer_count:count,prayed:true});
 });
 
+// The leader dropdown asks for the attendee's gender and gets only the leaders
+// whose Lifegroup matches it. Everything is read from the Lifegroups data the
+// admin already maintains; nothing is hardcoded.
+publicRouter.get('/leaders',async(req,res)=>{
+ await rateLimit(req,'public-leaders',60,15);
+ const gender=String(req.query.gender||'').trim();
+ if(!PUBLIC_GENDERS.includes(gender))throw httpError(400,'Choose your gender first.');
+ const groupGender=GENDER_TO_GROUP[gender]||null;
+ if(!groupGender)return res.json({gender,group_gender:null,leaders:[]});
+ res.json({gender,group_gender:groupGender,leaders:await publicLeaders(groupGender)});
+});
+
+// Regular attendee registration: three-step form on the public site. The server
+// re-checks every leader against the live Lifegroups data, reuses an existing
+// person with the same email instead of creating a duplicate, and only ever
+// assigns the Open cell (tier 'new'). Anything it cannot verify is flagged for
+// admin review instead of being guessed.
+publicRouter.post('/registrations/regular',async(req,res)=>{
+ checkOrigin(req);await rateLimit(req,'registration',15);
+ const b=req.body||{};
+ if(b.website)throw httpError(400,'Please leave the website field empty.');
+ if(b.privacy_consent!==true)throw httpError(400,'Please read and agree to the privacy notice.');
+ const name=String(b.full_name||'').trim().replace(/\s+/g,' '),email=String(b.email||'').trim().toLowerCase(),birthdate=String(b.birthdate||'').trim(),gender=String(b.gender||'').trim(),school=String(b.school||'').trim();
+ const ministry=String(b.ministry||'').trim(),invitedBy=String(b.invited_by||'').trim()||null,manualName=String(b.leader_name_manual||'').trim()||null;
+ const rawLeader=b.leader_person_id==null||b.leader_person_id===''?null:Number(b.leader_person_id);
+ if(rawLeader!==null&&(!Number.isSafeInteger(rawLeader)||rawLeader<1))throw httpError(400,'Choose a leader from the list.');
+ if(name.length<2||name.length>200)throw httpError(400,'Please enter your full name.');
+ if(email.length>200||!isEmailShape(email))throw httpError(400,'Please enter a valid email address.');
+ if(!isIsoDate(birthdate))throw httpError(400,'Please enter your birthday.');
+ const age=ageFromBirthdate(birthdate);
+ if(!Number.isInteger(age)||age<1||age>120)throw httpError(400,'Please enter a valid birthday.');
+ if(!PUBLIC_GENDERS.includes(gender))throw httpError(400,'Please choose your gender.');
+ if(school.length<1||school.length>300)throw httpError(400,'Please enter your school.');
+ if(!PUBLIC_MINISTRIES.includes(ministry))throw httpError(400,'Please choose a ministry.');
+ if(invitedBy&&invitedBy.length>200)throw httpError(400,'That invited-by name is too long.');
+ if(manualName&&(manualName.length<2||manualName.length>120))throw httpError(400,'Please type your leader\'s name.');
+ const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');
+
+ const result=await withState(async({data,client})=>{
+  // ---- resolve the leader against the live data (never trust the browser) ----
+  let leader=null,review=null;
+  if(rawLeader!==null){
+   const groupGender=GENDER_TO_GROUP[gender]||null;
+   const candidates=groupGender?await publicLeaders(groupGender,client):[];
+   leader=candidates.find((c)=>c.leader_person_id===String(rawLeader))||null;
+   if(!leader)throw httpError(400,'That leader is no longer available. Please choose again.');
+  } else if(manualName){
+   const groupGender=GENDER_TO_GROUP[gender]||null;
+   const candidates=groupGender?await publicLeaders(groupGender,client):[];
+   leader=candidates.find((c)=>normalizeName(c.leader_name)===normalizeName(manualName))||null;
+   if(!leader)review={needed:true,reason:'manual_leader_unmatched',manual_leader_name:manualName};
+  } else {
+   review={needed:true,reason:'no_leader_selected'};
+  }
+
+  // ---- the person: reuse the same email, otherwise create one ----
+  const existing=data.people.find((p)=>!p.archived_at&&normalizeName(p.email)===email);
+  let person,created=false;
+  if(existing){
+   person=existing;
+   if(!person.sex&&gender)person.sex=gender;
+   if(!person.birthdate&&birthdate)person.birthdate=birthdate;
+   if(!person.age&&age)person.age=age;
+   if(!person.school&&school)person.school=school;
+   if(!person.inviter&&invitedBy)person.inviter=invitedBy;
+   if(!person.ministry&&ministry)person.ministry=ministry;
+   if(!person.privacy_consent_at)person.privacy_consent_at=today();
+  } else {
+   const parts=name.split(' ');
+   person=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,birthdate,sex:gender,age,email,school,inviter:invitedBy||null,ministry,contact_number:null,status:'first_timer',registration_source:'public',privacy_consent:true});
+   created=true;
+   // domain.createPerson only queues the row until the transaction flushes, but
+   // lifegroup_memberships.person_id is a plain (non-deferrable) foreign key, so the
+   // people row has to exist before the membership below can reference it. Writing
+   // the same queued row here is idempotent — the final flush upserts it again and
+   // still records a single audit entry.
+   const queued=data.people.find((p)=>p.id===person.id);
+   if(queued)await upsertRows(client,'people',[queued]);
+  }
+
+  // ---- the Open cell: tier 'new' in the leader's own Lifegroup ----
+  let membership={created:false,tier:null,lifegroup_id:null,lifegroup_name:null};
+  if(leader){
+   const current=(await client.query('SELECT m.id,m.tier,g.id AS group_id,g.name AS group_name FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id WHERE m.person_id=$1 AND m.left_at IS NULL',[person.id])).rows[0];
+   if(current){
+    membership={created:false,tier:current.tier,lifegroup_id:String(current.group_id),lifegroup_name:current.group_name};
+    if(!review)review={needed:true,reason:'already_in_a_lifegroup'};
+   } else {
+    const membershipId=await allocateId(client,'lifegroup_memberships');
+    await client.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at) VALUES($1,$2,$3,'member','new',$4)",[membershipId,person.id,leader.lifegroup_id,today()]);
+    membership={created:true,tier:'new',lifegroup_id:leader.lifegroup_id,lifegroup_name:leader.lifegroup_name};
+    await logAction(client,null,'lifegroup_memberships',membershipId,'public_registration',{person_id:person.id,lifegroup_id:leader.lifegroup_id,tier:'new'});
+   }
+  }
+
+  await logAction(client,null,'people',person.id,'public_registration',{person_created:created,ministry,leader_person_id:leader?leader.leader_person_id:null,lifegroup_id:membership.lifegroup_id,review:review?review.reason:null});
+  if(review)await logAction(client,null,'people',person.id,'public_registration_review',{reason:review.reason,manual_leader_name:review.manual_leader_name||null});
+  return {ok:true,person_created:created,person:{id:String(person.id),name:person.full_name||[person.first_name,person.last_name].filter(Boolean).join(' '),person_code:person.person_code||null},membership,review,leader};
+ },{write:true});
+ res.status(result.person_created?201:200).json(result);
+});
