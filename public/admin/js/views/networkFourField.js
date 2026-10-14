@@ -50,7 +50,7 @@ function picker(host, {gender, used, initial=null, label, select}) {
   return {input,set};
 }
 
-export function createFourFieldNetwork(onSaved){
+export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
   const radio=(gender,kind,name)=>'<label class="choice__opt choice__opt--gender">'+
     '<input type="radio" name="gender" value="'+gender+'" aria-label="'+name+'"/>'+
     '<span title="'+name+'">'+icon(kind,23).value+'</span></label>';
@@ -60,14 +60,14 @@ export function createFourFieldNetwork(onSaved){
       '<div class="alert alert--error" id="netFourError" role="alert" hidden></div>'+
       '<section class="network-four__section"><label class="network-four__label">Network Leader</label>'+
         '<div id="netFourLeader"></div>'+
-        '<button type="button" class="btn btn--sm network-four__register" id="netLeaderRegister" aria-expanded="false">'+icon('plus',14).value+' Register new leader</button></section>'+
+        (allowRegistration?'<button type="button" class="btn btn--sm network-four__register" id="netLeaderRegister" aria-expanded="false">'+icon('plus',14).value+' Register new leader</button>':'')+'</section>'+
       '<section class="network-four__section"><label class="network-four__label">Gender</label>'+
         '<div class="choice choice--gender" role="group" aria-label="Gender">'+radio('boys','mars','Male')+radio('girls','venus','Female')+'</div></section>'+
       '<section class="network-four__section"><div class="network-four__heading"><label class="network-four__label">Cell Leader</label>'+
         '<span id="netCellCount" class="network-four__count">0 / 12</span></div>'+
         '<div id="netCells"></div><button class="btn btn--sm" type="button" id="netAddCell">'+icon('plus',14).value+' Add Cell Leader</button></section>'+
       '<section class="network-four__section"><label class="network-four__label">Member</label>'+
-        '<div id="netMembers"></div></section></div>'+networkLeaderRegistrationHtml(),
+        '<div id="netMembers"></div></section></div>'+(allowRegistration?networkLeaderRegistrationHtml():''),
     footer:'<button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn--primary" id="saveNetFour">Create Network</button>'
   });
   modal.querySelector('[data-close]').onclick=closeModal;
@@ -92,7 +92,7 @@ export function createFourFieldNetwork(onSaved){
       clear();
     }
   });
-  bindNetworkLeaderRegistration(modal,{
+  if(allowRegistration)bindNetworkLeaderRegistration(modal,{
     genderNow:()=>state.gender,onError:fail,
     onRegistered:p=>{
       const person={id:Number(p.id),name:p.name};
