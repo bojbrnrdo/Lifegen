@@ -126,11 +126,13 @@
 }
 
 
-/* Janime's testimony: the video itself is unboxed. Only the descriptive
+/* Unboxed video framing — Janime's testimony and the Grand Campus Hangout
+   highlight share it: the video itself is unboxed. Only the descriptive
    content below is presented in a card; the 16:9 embed remains entirely
    visible with no forced cropping or artificial black backdrop.
    The .vframe node is a technical mount point for click-to-play media, not
-   a visual card/container. Other testimonies retain their existing cards. */
+   a visual card/container. Cards without data-unboxed-video="true" (the
+   "coming soon" testimony slot) retain their existing cards. */
 #stories .vcard[data-unboxed-video="true"],
 #stories .vcard[data-unboxed-video="true"]:hover {
   align-self:start;
@@ -178,6 +180,28 @@
 #stories .vframe--native video:focus-visible {
   outline: 3px solid #d9af5a;
   outline-offset: -4px;
+}
+
+/* Grand Campus Hangout highlight: the identical unboxed framing the testimony
+   videos get. The widescreen 16:9 video is not wrapped in a container — no
+   border, radius, card background or shadow — and it keeps its centred
+   highlight width. Only the descriptive text below it sits in a card, exactly
+   as in the Stories of Grace block above. */
+#stories .vcard-feature[data-unboxed-video="true"] {
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+  gap: 16px;
+}
+#stories .vcard-feature[data-unboxed-video="true"] .vframe {
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+#stories .vcard-feature[data-unboxed-video="true"] .vmeta--text-card {
+  padding: 20px 24px 22px;
 }
 /* ============================================================================
    Public registration update — choice screen, VIP fields, 3-step regular flow.

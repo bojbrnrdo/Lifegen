@@ -18,7 +18,9 @@ test('Janime has an unboxed video while only the descriptive text uses a card',(
  assert.match(match[2],/class="vmeta vmeta--text-card"/);
  assert.match(css,/#stories \.vcard\[data-unboxed-video="true"\],[\s\S]*?border:0/);
  assert.match(css,/#stories \.vcard\[data-unboxed-video="true"\] \.vmeta--text-card \{[\s\S]*?border:1px solid var\(--line\)/);
- assert.equal((page.match(/data-unboxed-video="true"/g)||[]).length,1);
+ // Exactly two cards on the page use the unboxed framing: Janime's testimony
+ // and the Grand Campus Hangout highlight. Nothing else may be unboxed.
+ assert.equal((page.match(/data-unboxed-video="true"/g)||[]).length,2);
  assert.match(page,/Testimony coming soon/);
 });
 

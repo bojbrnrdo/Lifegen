@@ -11,6 +11,21 @@ Source: [LIFEGEN Drive folder](https://drive.google.com/drive/folders/1U5ipH3vXo
 - **JANIME RIVERA TESTIMONYY** fills the first testimony frame under Stories of Grace (`1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ`, 7 min 19 sec). The frame retains the 16:9 ratio and click-to-load embed with an always-visible fallback link. Its thumbnail is the supplied in-video title card featuring the LCF Lifegiver Church of Faith logo lockup on a black background, rendered as the 1280 × 720 `janime-rivera-testimony-cover.webp`. The second testimony slot remains as a "coming soon" placeholder.
 - `PHOTOS / CAMPUS MINISTRY` returned no files. No unrelated media or invented testimonies were inserted.
 
+## Highlight framing
+
+The Grand Campus Hangout highlight uses the same unboxed framing as the
+testimony videos: the 16:9 video is **not** wrapped in a card container — no
+border, radius, card background or shadow — and it keeps the site's standard
+Drive presentation, so the provider player fills the frame instead of sitting
+inside a box. Only the descriptive text below the video is presented in a card
+(`vmeta--text-card`). The block keeps its centred 960 px highlight width.
+
+Both cards carry `data-unboxed-video="true"` and are styled by
+`#stories .vcard[data-unboxed-video="true"]` plus a
+`#stories .vcard-feature[data-unboxed-video="true"]` variant in
+`public/lifegen/styles.css`. `tests/campus-hangout-unboxed-frame.test.mjs`
+locks the highlight framing in place; the testimonies' own markup is untouched.
+
 ## Quality and loading
 
 - Full-size JPEGs are **byte-identical** to the downloaded originals. SHA-256 checksums and source filenames are recorded in `public/brand/gallery/drive/manifest.json`.
