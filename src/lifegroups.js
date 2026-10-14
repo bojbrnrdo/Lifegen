@@ -3,7 +3,9 @@ import { httpError, today } from './domain.js';
 
 const SEX_OF = { boys: 'male', girls: 'female' };
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
-const SOLID_TARGET = 6;
+const SOLID_TARGET = 6; // Attendance target, not a membership capacity.
+export const NETWORK_CELL_LEADER_LIMIT = 12;
+export const CELL_MEMBER_LIMIT = 12;
 const clean = (value) => value == null ? null : String(value).trim() || null;
 const asId = (value, label = 'ID') => {
   const id = Number(value);
@@ -131,8 +133,8 @@ function shapeGroup(row) {
     solid_count: Number(row.solid_count || 0),
     open_count: Number(row.member_count || 0) - Number(row.solid_count || 0),
     solid_target: SOLID_TARGET,
-    slots: row.capacity == null ? null : Math.max(Number(row.capacity) - Number(row.member_count || 0), 0),
-    max_members: Boolean(row.leads_network) ? 6 : (row.capacity == null ? null : Number(row.capacity)),
+    slots: Math.max(Math.min(row.capacity == null ? CELL_MEMBER_LIMIT : Number(row.capacity),CELL_MEMBER_LIMIT) - Number(row.member_count || 0), 0),
+    max_members: Boolean(row.leads_network) ? NETWORK_CELL_LEADER_LIMIT : CELL_MEMBER_LIMIT,
     is_active: Boolean(row.is_active),
     is_demo: Boolean(row.is_demo),
     leads_network: Boolean(row.leads_network),
@@ -234,7 +236,7 @@ async function getGroup(id) {
     const memberIds = new Set(members.map((m) => m.id));
     led_groups = children.filter((g) => g.id !== group.id && memberIds.has(g.leader_person_id));
   }
-  return { ...group, members, former, led_groups, max_members: group.leads_network ? 6 : group.max_members, solid_target: SOLID_TARGET };
+  return { ...group, members, former, led_groups, max_members: group.leads_network ? NETWORK_CELL_LEADER_LIMIT : group.max_members, solid_target: SOLID_TARGET };
 }
 
 async function membershipForPerson(personId) {
@@ -345,6 +347,20 @@ async function saveGroup(body, actor, id = null) {
     if (id && !existing) throw httpError(404, 'Lifegroup not found.');
     const data = validateGroupInput(body, existing);
     await validateGroupReferences(client, data, id);
+    if (data.network_id && data.leader_person_id && data.is_active) {
+      const network = (await client.query('SELECT leader_person_id FROM networks WHERE id=$1', [data.network_id])).rows[0];
+      if (network && Number(network.leader_person_id) !== Number(data.leader_person_id)) {
+        const used = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups
+          WHERE network_id=$1 AND is_active AND id<>coalesce($2,0)
+            AND (leader_person_id IS DISTINCT FROM $3)`,
+          [data.network_id,id,network.leader_person_id])).rows[0].n);
+        if (used >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409,'Network has reached its 12 Cell Leader limit.');
+        const duplicate = (await client.query(`SELECT id FROM lifegroups WHERE network_id=$1 AND is_active
+          AND leader_person_id=$2 AND id<>coalesce($3,0) LIMIT 1`,
+          [data.network_id,data.leader_person_id,id])).rows[0];
+        if (duplicate) throw httpError(409,'This Cell Leader already leads a Cell in the Network.');
+      }
+    }
     if (id) {
       const { rows } = await client.query(`UPDATE lifegroups SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,network_id=$5,
         network_manual=$6,network=$7,area=$8,schedule_day=$9,schedule_time=$10,category=$11,capacity=$12,venue=$13,notes=$14,
@@ -362,6 +378,109 @@ async function saveGroup(body, actor, id = null) {
       data.capacity,data.venue,data.notes,data.is_active,data.is_demo,actor?.id || null]);
     await logAction(client, actor, 'lifegroups', newId, 'create', { name: data.name, gender: data.gender });
     return newId;
+  });
+}
+
+
+/**
+ * New Network editor: one registered Network Leader, one category, up to 12
+ * Cell Leaders, each with up to 12 Members. No user-entered Network name or
+ * separate Lifegroup step. Validate before writing any data.
+ */
+export function validateNetworkStructureInput(body = {}) {
+  const gender = clean(body.gender);
+  if (!['boys','girls'].includes(gender)) throw httpError(400, 'Select a gender.');
+  const leader_person_id = asId(body.leader_person_id, 'Network Leader');
+  const cells = body.cell_leaders == null ? [] : body.cell_leaders;
+  if (!Array.isArray(cells) || cells.length > NETWORK_CELL_LEADER_LIMIT) {
+    throw httpError(400, 'A Network can have up to 12 Cell Leaders.');
+  }
+  const selected = new Set([leader_person_id]);
+  const normalized = cells.map((cell, i) => {
+    const leaderId = asId(cell?.person_id, 'Cell Leader');
+    if (selected.has(leaderId)) throw httpError(400, 'A person can be selected only once in the Network.');
+    selected.add(leaderId);
+    const members = cell?.members == null ? [] : cell.members;
+    if (!Array.isArray(members) || members.length > CELL_MEMBER_LIMIT) {
+      throw httpError(400, 'Each Cell Leader can have up to 12 Members.');
+    }
+    const ids = members.map(value => asId(value,'Member'));
+    for (const id of ids) {
+      if (selected.has(id)) throw httpError(400, 'A person can be selected only once in the Network.');
+      selected.add(id);
+    }
+    return { person_id: leaderId, members: ids };
+  });
+  return {gender, leader_person_id, cell_leaders: normalized, person_ids: [...selected]};
+}
+
+async function createNetworkStructure(body, actor) {
+  const input = validateNetworkStructureInput(body);
+  return transaction(async client => {
+    const { rows } = await client.query(
+      'SELECT id,first_name,last_name,sex,archived_at FROM people WHERE id=ANY($1::int[]) ORDER BY id FOR UPDATE',
+      [input.person_ids]);
+    const found = new Map(rows.map(p => [Number(p.id),p]));
+    for (const id of input.person_ids) {
+      const person = found.get(id);
+      if (!person || person.archived_at) throw httpError(400,'Select an active registered person for every role.');
+      if (person.sex && person.sex !== SEX_OF[input.gender]) {
+        throw httpError(409, 'The selected people must match the Network gender.');
+      }
+    }
+    const existingNetwork = (await client.query(
+      'SELECT id FROM networks WHERE leader_person_id=ANY($1::int[]) AND is_active LIMIT 1',
+      [input.person_ids])).rows[0];
+    if (existingNetwork) throw httpError(409,'One of the selected people already leads an active Network.');
+    const currentMemberships = (await client.query(
+      'SELECT person_id FROM lifegroup_memberships WHERE person_id=ANY($1::int[]) AND left_at IS NULL LIMIT 1',
+      [input.person_ids])).rows;
+    if (currentMemberships.length) throw httpError(409,
+      'One of the selected people is already assigned to a Cell. Move them separately before creating this Network.');
+    const otherLeaders = (await client.query(
+      'SELECT leader_person_id FROM lifegroups WHERE leader_person_id=ANY($1::int[]) AND is_active LIMIT 1',
+      [input.person_ids])).rows;
+    if (otherLeaders.length) throw httpError(409,'One of the selected people already leads a Cell.');
+    for (const person of rows) {
+      if (!person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2',
+        [SEX_OF[input.gender],person.id]);
+    }
+    const nameOf = id => {
+      const p=found.get(id);
+      return [p.first_name,p.last_name].filter(Boolean).join(' ').trim()||'Leader';
+    };
+    const networkName = (nameOf(input.leader_person_id)+' Network').slice(0,120);
+    const networkId = await allocateId(client,'networks');
+    await client.query(
+      'INSERT INTO networks(id,name,gender,leader_person_id,is_active,created_by) VALUES($1,$2,$3,$4,true,$5)',
+      [networkId,networkName,input.gender,input.leader_person_id,actor?.id||null]);
+    await logAction(client,actor,'networks',networkId,'create',{name:networkName,cell_leaders:input.cell_leaders.length});
+    // Keep the existing relational reporting model: a hidden leader-team group
+    // links the Network Leader to Cell Leaders, and separate cell-team groups
+    // connect each Cell Leader to their Members.
+    const teamId=await allocateId(client,'lifegroups');
+    await client.query(
+      'INSERT INTO lifegroups(id,name,gender,leader_person_id,network_id,network_manual,capacity,created_by) VALUES($1,$2,$3,$4,$5,false,$6,$7)',
+      [teamId,(networkName+' Leaders').slice(0,120),input.gender,input.leader_person_id,networkId,NETWORK_CELL_LEADER_LIMIT,actor?.id||null]);
+    await logAction(client,actor,'lifegroups',teamId,'create',{network_leader_group:true});
+    const createMembership=async (personId,groupId,role) => {
+      const memberId=await allocateId(client,'lifegroup_memberships');
+      await client.query(
+        "INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at,assigned_by) VALUES($1,$2,$3,$4,'new',$5,$6)",
+        [memberId,personId,groupId,role,today(),actor?.id||null]);
+      await logAction(client,actor,'lifegroup_memberships',memberId,'assign',{person_id:personId,lifegroup_id:groupId,role});
+    };
+    for (const cell of input.cell_leaders) {
+      await createMembership(cell.person_id,teamId,'leader');
+      const groupId=await allocateId(client,'lifegroups');
+      const groupName=(nameOf(cell.person_id)+' Cell').slice(0,120);
+      await client.query(
+        'INSERT INTO lifegroups(id,name,gender,leader_person_id,network_id,network_manual,capacity,created_by) VALUES($1,$2,$3,$4,$5,true,$6,$7)',
+        [groupId,groupName,input.gender,cell.person_id,networkId,CELL_MEMBER_LIMIT,actor?.id||null]);
+      await logAction(client,actor,'lifegroups',groupId,'create',{name:groupName,network_id:networkId,leader_person_id:cell.person_id});
+      for (const personId of cell.members) await createMembership(personId,groupId,'member');
+    }
+    return networkId;
   });
 }
 
@@ -433,7 +552,11 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const leaderGroup = group.leader_person_id && (await client.query('SELECT id FROM networks WHERE id=$1 AND leader_person_id=$2 AND is_active', [group.network_id,group.leader_person_id])).rows[0];
     if (leaderGroup) {
       const leaders = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (leaders >= 6) throw httpError(409, 'This Network leader group is full (maximum 6 cell leaders).');
+      if (leaders >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409, 'Network has reached its 12 Cell Leader limit.');
+    }
+    if (!leaderGroup) {
+      const members = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
+      if (members >= CELL_MEMBER_LIMIT) throw httpError(409, 'Cell Leader has reached the 12-member limit.');
     }
     if (tier === 'solid') {
       const solid = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
@@ -736,6 +859,7 @@ async function lifegroupMethod(name, args, actor) {
   }
   if (name === 'networks') return listNetworks(args[0] || {});
   if (name === 'network') return networkDetail(asId(args[0],'network ID'));
+  if (name === 'createNetworkStructure') return networkDetail(await createNetworkStructure(args[0] || {},actor));
   if (name === 'createNetwork') return networkDetail(await saveNetwork(args[0] || {},actor));
   if (name === 'updateNetwork') return networkDetail(await saveNetwork(args[1] || {},actor,asId(args[0],'network ID')));
   if (name === 'deleteNetwork') {

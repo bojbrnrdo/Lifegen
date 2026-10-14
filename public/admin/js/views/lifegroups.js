@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
+import { createFourFieldNetwork } from './networkFourField.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -429,7 +430,7 @@ export async function renderLifegroup({ main }, id) {
       <div class="card stat"><span class="stat__label">Leaders with members</span><span class="stat__value">${g.led_groups.length}</span><span class="small muted">${g.led_groups.filter((x) => x.solid_count >= g.solid_target).length} solid</span></div>` : html`
       <div class="card stat"><span class="stat__label">Members</span><span class="stat__value">${g.member_count}</span></div>
       <div class="card stat ${closedCount(g) >= g.solid_target ? 'stat--ok' : ''}"><span class="stat__label">Closed cell</span><span class="stat__value">${closedCount(g)}<small> / ${g.solid_target}</small></span><span class="small muted">${closedCount(g) >= g.solid_target ? 'Solid Cell' : 'max ' + g.solid_target + ' · ' + g.solid_target + ' = solid'}</span></div>
-      <div class="card stat"><span class="stat__label">Open cell</span><span class="stat__value">${g.member_count - closedCount(g)}</span><span class="small muted">no limit</span></div>`}
+      <div class="card stat"><span class="stat__label">Open cell</span><span class="stat__value">${g.member_count - closedCount(g)}</span><span class="small muted">up to 12 members</span></div>`}
     </div>
 
     <div class="stack">
@@ -455,7 +456,7 @@ export async function renderLifegroup({ main }, id) {
               <td data-label="Open cell" class="num">${lg ? lg.member_count - lg.solid_count : '—'}</td>
               ${manage ? html`<td data-label="" class="actions nowrap">${memberActions(m, g)}</td>` : ''}
             </tr>`; })}</tbody></table></div>
-            <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No cell leaders yet.${manage ? raw(' Use <b>Add member</b> to add up to 6 cell leaders.') : ''}</p></div>`}
+            <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No cell leaders yet.${manage ? raw(' Use <b>Add member</b> to add up to 12 cell leaders.') : ''}</p></div>`}
         </div>
       </div>` : html`<div class="card">
         <div class="card__header"><h2>Members</h2><span class="hint">${g.members.filter((m) => m.tier !== 'solid').length} open cell · ${closedCount(g)} / ${g.solid_target} closed cell</span></div>
@@ -534,6 +535,7 @@ export async function renderLifegroup({ main }, id) {
 // report to their Network leader. Networks are flat — every Network has the same shape.
 // ---------------------------------------------------------------------------
 async function networkForm(n, onSaved) {
+  if (!n) return createFourFieldNetwork(onSaved,{allowRegistration:can('people:write')});
   // Existing optional fields are intentionally omitted; server-side update merges them from the record.
   const v = (k) => esc(n?.[k] ?? '');
   const modal = openModal({
@@ -721,7 +723,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
 
     ${!n.gender ? html`<div class="alert alert--warn mb-2">${icon('warn', 16)} This Network is not yet marked as boys or girls. ${manage ? 'Press Edit and choose one — networks are never combined.' : 'Ask an Admin to set it.'}${boys && girls ? html` It currently holds ${boys} boys and ${girls} girls; move one side to another Network first.` : ''}</div>` : ''}
     <div class="grid grid--stats mb-2" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-      <div class="card stat"><span class="stat__label">Cell leaders</span><span class="stat__value">${n.cell_leaders || 0}<small> / 6</small></span><span class="small muted">${leaderGroup ? 'in ' + leaderGroup.name : 'network leader has no Cell yet'}</span></div>
+      <div class="card stat"><span class="stat__label">Cell leaders</span><span class="stat__value">${n.cell_leaders || 0}<small> / 12</small></span><span class="small muted">${leaderGroup ? 'in ' + leaderGroup.name : 'network leader has no Cell yet'}</span></div>
       <div class="card stat"><span class="stat__label">Cell Leaders</span><span class="stat__value">${n.group_count}</span><span class="small muted">led by the cell leaders</span></div>
       <div class="card stat"><span class="stat__label">${n.gender === 'boys' ? 'Boys' : n.gender === 'girls' ? 'Girls' : 'Members'}</span><span class="stat__value">${members}</span>${n.gender ? '' : html`<span class="small muted">${boys} boys · ${girls} girls</span>`}</div>
       <div class="card stat ${n.group_count && cells.filter((g) => g.is_active).every((g) => g.members.filter((m) => m.tier === 'solid').length >= netTarget) ? 'stat--ok' : ''}"><span class="stat__label">Closed cell</span><span class="stat__value">${n.closed_cell || 0}</span><span class="small muted">${netTarget} per Cell = solid</span></div>
