@@ -110,12 +110,19 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a network leader to explore its Lifegroups</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
  const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
+ let previousPositions=new Map(),previousEdges=new Set(),animationFrame=0,cameraFrame=0;
+ const reducedMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
- function fit(){
+ function fit(fitAll=false){
   const width=svg.clientWidth||900,height=svg.clientHeight||550;
-  k=Math.max(.22,Math.min(1.25,(width-60)/layout.width,(height-65)/layout.height));
-  panX=(width-layout.width*k)/2;
-  panY=(height-layout.height*k)/2;
+  if(width<700&&!fitAll&&layout.nodes.length){
+   k=.94;const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
+   panX=27-root.x*k;
+   panY=(layout.nodes.length<=6?height*.43:125)-root.y*k;
+  }else{
+   k=Math.max(.22,Math.min(1.15,(width-60)/layout.width,(height-65)/layout.height));
+   panX=(width-layout.width*k)/2;panY=(height-layout.height*k)/2;
+  }
   updateTransform();
  }
  function details(node){
@@ -127,34 +134,107 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
    (node.kind==='network'&&node.count===0?'<p>No cell leaders are connected yet. Assign a Lifegroup to this Network using its Edit screen.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
- function draw(shouldFit=false){
+ function focusNode(key){
+  const n=layout.nodes.find(node=>node.key===key);
+  if(!n)return;
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
+  const width=svg.clientWidth||900,height=svg.clientHeight||550,mobile=width<700;
+  const targetK=mobile?Math.max(.86,Math.min(k,1)):Math.max(.8,Math.min(k,1.15));
+  const goalX=(mobile?31:Math.min(width*.23,225))-n.x*targetK;
+  const goalY=height*.45-n.y*targetK;
+  if(reducedMotion){k=targetK;panX=goalX;panY=goalY;updateTransform();return;}
+  const old={k,panX,panY},started=performance.now();
+  function frame(now){
+   if(!svg.isConnected)return;
+   const t=hierarchyEasing((now-started)/470);
+   k=old.k+(targetK-old.k)*t;panX=old.panX+(goalX-old.panX)*t;panY=old.panY+(goalY-old.panY)*t;
+   updateTransform();
+   if(t<1)cameraFrame=requestAnimationFrame(frame);else cameraFrame=0;
+  }
+  cameraFrame=requestAnimationFrame(frame);
+ }
+ function draw(shouldFit=false,focusKey=null){
+  if(animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;}
+  const oldPos=new Map(previousPositions);
+  const oldEdges=new Set(previousEdges);
   layout=arrangeLifegroupTree(buildLifegroupTree(networks,groups,filters,expanded,members,loading));
-  edgeLayer.innerHTML=layout.lines.map(pair=>{
-   const p=pair[0],c=pair[1],x=(p.x+c.x)/2;
-   return '<path class="lfg__edge" d="M'+(p.x+7)+' '+p.y+' C'+x+' '+p.y+' '+x+' '+c.y+' '+(c.x-7)+' '+c.y+'"/>';
-  }).join('');
+  const parents=new Map(layout.lines.map(([parent,child])=>[child.key,parent]));
+  const edgePairs=layout.lines.map(([parent,child])=>({parent:parent.key,child:child.key,key:parent.key+'>'+child.key}));
+  const newEdges=new Set(edgePairs.map(edge=>edge.key));
+  edgeLayer.innerHTML=edgePairs.map(edge=>'<path class="lfg__edge" data-edge="'+esc(edge.key)+'"/>').join('');
   nodeLayer.innerHTML=layout.nodes.map(n=>{
-   const isOpen=expanded.has(n.key),canExpand=n.kind!=='member'&&n.count>0;
-   return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+n.kind+'" role="button" tabindex="0" aria-label="'+esc(n.name)+'" transform="translate('+n.x+','+n.y+')">'+
-    '<circle r="7.2"/>'+(canExpand?'<text class="symbol" text-anchor="middle" y="3">'+(isOpen?'−':'+')+'</text>':'')+
-    '<text x="15" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="15" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
+   const opened=expanded.has(n.key),canExpand=n.kind!=='member'&&n.count>0;
+   const action=n.kind==='member'?'Open profile':opened?'Collapse branch':'Expand branch';
+   return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+esc(n.kind)+'" role="button" tabindex="0" aria-label="'+esc(action+': '+n.name)+'"'+
+    (n.kind==='member'?'':' aria-expanded="'+(opened?'true':'false')+'"')+'>'+
+    '<circle class="touch-hit" r="22"/><circle r="8.5"/>'+
+    (canExpand?'<text class="symbol" text-anchor="middle" y="4">'+(opened?'−':'+')+'</text>':'')+
+    '<text x="19" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="19" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
   }).join('');
+  const elements=new Map([...nodeLayer.querySelectorAll('[data-key]')].map(el=>[el.dataset.key,el]));
+  const paths=new Map([...edgeLayer.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,el]));
+  const origins=new Map();
+  for(const n of layout.nodes){
+   let origin=oldPos.get(n.key);
+   if(!origin){
+    const parent=parents.get(n.key);
+    origin=parent&&(oldPos.get(parent.key)||{x:parent.x,y:parent.y});
+   }
+   origins.set(n.key,origin||{x:n.x,y:n.y});
+  }
+  function paint(progress){
+   const ease=hierarchyEasing(progress);
+   const current=new Map();
+   for(const n of layout.nodes){
+    const from=origins.get(n.key),exists=oldPos.has(n.key);
+    const p={x:from.x+(n.x-from.x)*ease,y:from.y+(n.y-from.y)*ease};
+    current.set(n.key,p);
+    const el=elements.get(n.key);
+    el.setAttribute('transform','translate('+p.x+','+p.y+')');
+    el.setAttribute('opacity',String(exists?1:ease));
+   }
+   for(const edge of edgePairs){
+    const from=current.get(edge.parent),to=current.get(edge.child);
+    const isNew=!oldEdges.has(edge.key);
+    const endPos=isNew?{x:from.x+(to.x-from.x)*ease,y:from.y+(to.y-from.y)*ease}:to;
+    const path=paths.get(edge.key);
+    path.setAttribute('d',hierarchyCurve(from,endPos));
+    path.setAttribute('opacity',String(isNew?ease:1));
+   }
+   previousPositions=current;
+  }
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
-  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Lifegroups without a network are shown separately for assignment.</p>';}else{blank.hidden=true;}
-  if(first||shouldFit){fit();first=false;}else updateTransform();
-  for(const el of nodeLayer.querySelectorAll('[data-key]')){
-   const activateNode=()=>{const node=layout.nodes.find(n=>n.key===el.dataset.key);if(node)activate(node);};
+  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Lifegroups are listed separately for assignment.</p>';}else blank.hidden=true;
+  if(first||shouldFit){fit();first=false;}
+  const animate=oldPos.size>0&&!reducedMotion;
+  if(!animate)paint(1);
+  else{
+   paint(0);
+   const start=performance.now();
+   const frame=now=>{
+    if(!svg.isConnected)return;
+    const t=Math.min(1,(now-start)/540);
+    paint(t);
+    if(t<1)animationFrame=requestAnimationFrame(frame);else animationFrame=0;
+   };
+   animationFrame=requestAnimationFrame(frame);
+  }
+  previousEdges=newEdges;
+  for(const [key,el] of elements){
+   const activateNode=()=>{const node=layout.nodes.find(n=>n.key===key);if(node)activate(node);};
    el.addEventListener('click',activateNode);
    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activateNode();}});
   }
+  if(focusKey)focusNode(focusKey);
  }
  async function activate(node){
   details(node);
   if(node.kind==='member'){draw();return;}
-  if(expanded.has(node.key)){expanded.delete(node.key);draw(true);return;}
+  if(expanded.has(node.key)){expanded.delete(node.key);draw(false,node.key);return;}
   expanded.add(node.key);
+  draw(false,node.key);
   if(node.kind==='group'&&!members.has(node.key)&&!loading.has(node.key)){
-   loading.add(node.key);draw();
+   loading.add(node.key);draw(false,node.key);
    try{
     const response=await api.lifegroup(node.record.id);
     if(target.__lifegenTree!==state||!target.isConnected)return;
@@ -165,21 +245,23 @@ export async function renderHierarchy(target,networks,groups,filters={}){
     panel.hidden=false;panel.innerHTML='<strong>Unable to load members</strong><p>'+esc(error.message||'Please try again.')+'</p>';
    }finally{loading.delete(node.key);}
   }
-  if(target.__lifegenTree===state&&target.isConnected)draw(true);
+  if(target.__lifegenTree===state&&target.isConnected)draw(false,node.key);
  }
- target.querySelector('[data-action="fit"]').onclick=fit;
+ target.querySelector('[data-action="fit"]').onclick=()=>fit(true);
  target.querySelector('[data-action="collapse"]').onclick=()=>{expanded.clear();state.selected=null;panel.hidden=true;draw(true);};
- const zoom=amount=>{k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
+ const zoom=amount=>{if(cameraFrame)cancelAnimationFrame(cameraFrame);k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
  target.querySelector('[data-action="plus"]').onclick=()=>zoom(1.25);
  target.querySelector('[data-action="minus"]').onclick=()=>zoom(.8);
  svg.addEventListener('wheel',e=>{
   e.preventDefault();
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
   const rect=svg.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
   const next=Math.max(.2,Math.min(3,k*(e.deltaY<0?1.13:.88)));
   panX=x-(x-panX)*next/k;panY=y-(y-panY)*next/k;k=next;updateTransform();
  },{passive:false});
  svg.addEventListener('pointerdown',e=>{
   if(e.button!==0||e.target.closest('[data-key]'))return;
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
   drag={x:e.clientX,y:e.clientY,px:panX,py:panY};svg.setPointerCapture(e.pointerId);svg.classList.add('panning');
  });
  svg.addEventListener('pointermove',e=>{if(drag){panX=drag.px+e.clientX-drag.x;panY=drag.py+e.clientY-drag.y;updateTransform();}});
