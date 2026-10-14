@@ -1068,7 +1068,7 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .network-detail .network-detail__header { margin-bottom: 21px; }
 .network-detail .network-detail__header h1 { font-size: clamp(1.6rem, 2.6vw, 2.15rem); letter-spacing: -.035em; }
 .network-detail .network-detail__stats {
-  display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:13px;
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px;
   margin-bottom:18px;
 }
 .network-detail__stats .stat {
