@@ -56,9 +56,9 @@ export function bindNetworkLeaderRegistration(modal, { genderNow, onRegistered, 
     const category = genderNow();
     const indicator = panel.querySelector('#netRegCategory');
     indicator.innerHTML = category === 'boys' ?
-      '<span class="network-leader-register__sex">♂ <span>Network category selected</span></span>' :
+      '<span class="network-leader-register__sex" role="img" aria-label="Boys network">'+icon('mars', 19).value+'</span>' :
       category === 'girls' ?
-      '<span class="network-leader-register__sex">♀ <span>Network category selected</span></span>' :
+      '<span class="network-leader-register__sex" role="img" aria-label="Girls network">'+icon('venus', 19).value+'</span>' :
       '<span class="network-leader-register__sex">Choose a Network category first</span>';
   }
   function close() {
