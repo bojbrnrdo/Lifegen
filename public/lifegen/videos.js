@@ -55,8 +55,9 @@
         frame.classList.add("is-empty");
         frame.innerHTML =
             '<div class="vph" aria-hidden="true">' +
-            '<span class="vph-play"><i data-lucide="play"></i></span>' +
-            '<span class="vph-text">Video coming soon</span></div>';
+            '<span class="vph-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>' +
+            '<span class="vph-tag">Coming soon</span>' +
+            '<p class="vph-text">New testimony in preparation</p></div>';
     }
 
     function mount(frame) {
@@ -71,42 +72,58 @@
             const v = document.createElement("video");
             Object.assign(v, { src: embed.src, controls: true, preload: "metadata", playsInline: true });
             v.setAttribute("aria-label", label);
+            if (frame.dataset.poster) v.poster = frame.dataset.poster;
             frame.replaceChildren(v);
             return;
         }
-        // Click-to-load: the third-party player only connects after a tap, so no
-        // viewing data goes to the provider until the visitor chooses to play.
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "vcover";
-        btn.setAttribute("aria-label", "Play video: " + label);
-        btn.innerHTML =
-            '<span class="vph-play" aria-hidden="true"><i data-lucide="play"></i></span>' +
-            '<span class="vph-text">Tap to play</span>';
-        if (frame.dataset.poster) {
-            const poster = document.createElement("img");
-            Object.assign(poster, { src: frame.dataset.poster, alt: "", loading: "lazy", decoding: "async", className: "vcover-poster" });
-            btn.classList.add("has-poster");
-            btn.prepend(poster);
-        }
-        btn.addEventListener("click", () => {
+
+        function play() {
             const f = document.createElement("iframe");
-            // Keep Facebook's iframe query identical to its official embed code;
-            // the Facebook player handles its own play control after loading.
-            f.src = embed.src + (["Google Drive", "Facebook"].includes(embed.provider) ? "" : "&autoplay=1");
+            const sep = embed.src.includes("?") ? "&" : "?";
+            f.src = embed.src + (embed.provider === "Facebook" ? "" : sep + "autoplay=1");
             f.title = label;
+            f.loading = "lazy";
+            f.setAttribute("allowfullscreen", "");
+            f.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen");
+            f.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
             if (embed.provider === "Facebook") {
                 f.width = "560"; f.height = "314";
                 f.setAttribute("scrolling", "no");
                 f.setAttribute("frameborder", "0");
             }
-            f.setAttribute("allowfullscreen", "");
-            f.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen");
-            // YouTube refuses to play embeds when no referrer is sent (the site default is no-referrer).
-            f.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+            if (embed.provider === "Google Drive") {
+                frame.classList.add("vframe-gdrive");
+            }
             frame.replaceChildren(f);
-        });
-        frame.replaceChildren(btn);
+        }
+
+        if (frame.dataset.poster) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "vcover";
+            btn.setAttribute("aria-label", "Play video: " + label);
+
+            const poster = document.createElement("img");
+            Object.assign(poster, {
+                src: frame.dataset.poster,
+                alt: label,
+                loading: "lazy",
+                decoding: "async",
+                className: "vcover-poster"
+            });
+
+            const playBtn = document.createElement("span");
+            playBtn.className = "vplay-btn";
+            playBtn.setAttribute("aria-hidden", "true");
+            playBtn.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+
+            btn.appendChild(poster);
+            btn.appendChild(playBtn);
+            btn.addEventListener("click", play);
+            frame.replaceChildren(btn);
+        } else {
+            play();
+        }
     }
 
     // ---- Photo & poster deck (horizontal spread under the highlight) ----
