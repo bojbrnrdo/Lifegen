@@ -3,7 +3,7 @@
  * Compact Network detail layout. Reuses the existing, permission-gated action
  * handlers and group/member DOM instead of duplicating backend operations.
  */
-export function simplifyNetworkDetail(main, { cells, cal, manage }) {
+export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegistered = true }) {
   main.classList.add('network-detail');
   const header = main.querySelector('.page-header');
   const stats = main.querySelector('.grid--stats');
@@ -69,6 +69,7 @@ export function simplifyNetworkDetail(main, { cells, cal, manage }) {
     return button;
   };
   if (manage) {
+    if (!leaderRegistered) quickButton('netLinkLeader', 'Link / register leader', '↗');
     quickButton('netCreateGroup', 'Add Lifegroup', '+');
     quickButton('netQuickAddMember', 'Add member', '+', !cells.length);
     if (leaderChips) {
