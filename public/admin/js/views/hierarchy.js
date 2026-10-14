@@ -36,7 +36,17 @@ function ensureCSS(){
  const style=document.createElement('style');style.id='lifegen-node-graph-style';
  style.textContent=CSS;document.head.append(style);
 }
-function build(networks,groups,filters,expanded,members,loading){
+/** Lifegroups with missing/invalid network assignment, never misrepresented as Network Leaders. */
+export function findUnassignedGroups(networks,groups,filters={}){
+ const ids=new Set(networks.map(n=>String(n.id)));
+ const status=filters.status||'active';
+ return groups.filter(g=>
+  (!filters.gender||g.gender===filters.gender) &&
+  (status==='all'||(status==='inactive'?(g.is_active===false||g.is_active===0):(g.is_active!==false&&g.is_active!==0))) &&
+  (g.network_id==null||!ids.has(String(g.network_id)))
+ );
+}
+export function buildLifegroupTree(networks,groups,filters,expanded,members,loading){
  const query=String(filters.q||'').trim().toLowerCase(), gender=filters.gender||'', status=filters.status||'active';
  const allowed=o=>status==='all'||(status==='inactive'?o.is_active===false||o.is_active===0:o.is_active!==false&&o.is_active!==0);
  const match=o=>[o.name,o.leader_name].some(s=>String(s||'').toLowerCase().includes(query));
@@ -44,28 +54,23 @@ function build(networks,groups,filters,expanded,members,loading){
  function cell(g){
   const key='group:'+g.id,listed=members.get(key)||[];
   return {key,kind:'group',name:g.leader_name||'Cell leader not assigned',subtitle:g.name||'Lifegroup',record:g,count:Number(g.member_count)||listed.length,
-    children:expanded.has(key)&&!loading.has(key)?listed.map(p=>({key:'person:'+p.id,kind:'member',name:personName(p),subtitle:(p.role||p.status||'Member').replaceAll('_',' '),record:p,count:0,children:[]})):[]};
+    children:expanded.has(key)&&!loading.has(key)?listed.map(p=>({key:'person:'+p.id,kind:'member',name:personName(p),subtitle:(p.role==='assistant'?'Assistant leader':p.role==='leader'?'Leader':p.status||'Member').replaceAll('_',' '),record:p,count:0,children:[]})):[]};
  }
  for(const network of networks){
   if((gender&&network.gender!==gender)||!allowed(network))continue;
   const all=groups.filter(g=>String(g.network_id)===String(network.id)&&!g.is_leader_group);
   all.forEach(g=>linked.add(String(g.id)));
-  const selected=all.filter(allowed);
+  const selected=all.filter(g=>allowed(g)&&!(network.leader_person_id&&g.leader_person_id&&String(g.leader_person_id)===String(network.leader_person_id)));
   const visible=!query||match(network)?selected:selected.filter(match);
   if(query&&!match(network)&&!visible.length)continue;
   const key='network:'+network.id;
   roots.push({key,kind:'network',name:network.leader_name||'Network leader not assigned',subtitle:network.name||'Network',record:network,count:visible.length,
     children:expanded.has(key)||!!query?visible.map(cell):[]});
  }
- const orphan=groups.filter(g=>!g.is_leader_group&&!linked.has(String(g.id))&&(!gender||g.gender===gender)&&allowed(g)&&(!query||match(g)));
- if(orphan.length){
-  const key='network:unassigned';
-  roots.push({key,kind:'network',name:'Unassigned Lifegroups',subtitle:'No network leader',record:null,count:orphan.length,
-    children:expanded.has(key)||!!query?orphan.map(cell):[]});
- }
+
  return roots;
 }
-function arrange(roots){
+export function arrangeLifegroupTree(roots){
  let row=0;const all=[],lines=[];
  function walk(node,depth,parent){
   node.x=100+depth*265;
@@ -101,10 +106,10 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    node.kind==='member'?'#/people/'+encodeURIComponent(node.record.id):'';
   panel.hidden=false;
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
-   (link?'<a href="'+link+'">Open details →</a>':'');
+   (node.kind==='network'&&node.count===0?'<p>No cell leaders are connected yet. Assign a Lifegroup to this Network using its Edit screen.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
  function draw(shouldFit=false){
-  layout=arrange(build(networks,groups,filters,expanded,members,loading));
+  layout=arrangeLifegroupTree(buildLifegroupTree(networks,groups,filters,expanded,members,loading));
   edgeLayer.innerHTML=layout.lines.map(pair=>{
    const p=pair[0],c=pair[1],x=(p.x+c.x)/2;
    return '<path class="lfg__edge" d="M'+(p.x+7)+' '+p.y+' C'+x+' '+p.y+' '+x+' '+c.y+' '+(c.x-7)+' '+c.y+'"/>';
@@ -116,7 +121,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
     '<text x="15" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="15" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
   }).join('');
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
-  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No network leaders to display</b><p>There are no matching networks for the current filters. Check All networks, change Active to All, or create a Network using the button above.</p>';}else{blank.hidden=true;}
+  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Lifegroups without a network are shown separately for assignment.</p>';}else{blank.hidden=true;}
   if(first||shouldFit){fit();first=false;}else updateTransform();
   for(const el of nodeLayer.querySelectorAll('[data-key]')){
    const activateNode=()=>{const node=layout.nodes.find(n=>n.key===el.dataset.key);if(node)activate(node);};
