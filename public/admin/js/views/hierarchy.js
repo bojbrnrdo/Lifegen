@@ -32,7 +32,7 @@ const CSS = [
  "@media(prefers-reduced-motion:reduce){.lfg__buttons button{transition:none}}"
 ,
 '.lfg__node .touch-hit{fill:transparent!important;stroke:none!important;pointer-events:all}',
-'.lfg__node text:not(.symbol){pointer-events:none}',
+'.lfg__node text{cursor:pointer}',
 '.lfg__node[aria-expanded="true"] circle:not(.touch-hit){fill:#dbf1e2;stroke:#187447}',
 '.lfg__node:focus-visible{outline:none}',
 '.lfg__node:focus-visible circle:not(.touch-hit){stroke:#165f3b;stroke-width:3.5}',
@@ -105,13 +105,15 @@ export function hierarchyCurve(parent,child) {
 export async function renderHierarchy(target,networks,groups,filters={}){
  ensureCSS();
  const old=target.__lifegenTree||{};
+ old.cleanup?.();
  const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
- const state={expanded,members,loading,selected:old.selected||null};
+ const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
  target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a network leader to explore its Lifegroups</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
  const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
+ let observer=null;
  const reducedMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
  function fit(fitAll=false){
@@ -297,5 +299,22 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  svg.addEventListener('pointermove',e=>{if(drag){panX=drag.px+e.clientX-drag.x;panY=drag.py+e.clientY-drag.y;updateTransform();}});
  const stop=()=>{drag=null;svg.classList.remove('panning');};
  svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+ state.cleanup=()=>{
+  if(animationFrame)cancelAnimationFrame(animationFrame);
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
+  observer?.disconnect();
+ };
  draw(true);
+ if(typeof ResizeObserver!=='undefined'){
+  let width=svg.clientWidth;
+  observer=new ResizeObserver(()=>{
+   if(!svg.isConnected)return;
+   const next=svg.clientWidth;
+   if(Math.abs(next-width)<20)return;
+   width=next;
+   if(cameraFrame)cancelAnimationFrame(cameraFrame);
+   fit();
+  });
+  observer.observe(svg);
+ }
 }
