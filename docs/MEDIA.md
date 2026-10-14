@@ -59,14 +59,39 @@ banner sits behind the navigation, there is one accessible primary heading, and
 there is no horizontal page overflow. Grand Campus Hangout stays in its highlight
 frame; this branding update does not change the video.
 
-The landing header now overlays the actual banner with a fully transparent
-background at the top of the page. No separate header strip, top spacer or side
-letterboxing is reserved; the uncropped artwork spans the viewport. Mobile
-controls are compact enough to sit above the lettering. After scrolling, the
-fixed navigation gets a translucent dark background for readability.
+The landing header overlays the actual banner with a fully transparent
+background at the top of the page. No separate header strip or side letterboxing
+is reserved. After scrolling, the fixed navigation gets a translucent dark
+background for readability.
+
+### Keeping the first screen a landing page
+
+The artwork is 16:9. Painted at `100vw` it was already a full screen tall on a
+1440 × 900 laptop, so visitors saw nothing but the poster until they scrolled.
+The artwork is still uncropped and is still the hero, but it is now sized so the
+page reads as a page:
+
+- Desktop/tablet (≥ 641 px): the banner is capped at `min(1120px, 88vh, (100svh − 250px) × 16/9)`.
+  On a 1440 × 900 screen that is 792 × 445, and the strip now ends about halfway
+  down the first screen, leaving the tagline, welcome copy, calls to action and
+  the service countdown visible without scrolling. The `100svh` term keeps the
+  banner under the fold on short landscape screens.
+- Phones (≤ 640 px): the banner is `min(460px, 92vw)` and the strip takes 60 px
+  of top padding, so the fixed navigation sits above the artwork instead of on
+  top of the logo printed inside it. The header logo is 32–34 px.
+
+The space the capped banner no longer fills is matted with the same artwork:
+`lifegen-banner-blur.webp` is the imported artwork scaled down, blurred and
+darkened once by `scripts/prepare-brand.py`, then stretched across the strip
+(`background-size:100% 100%`), so the blur lines up exactly with the banner
+pixels beside it. Nothing was redrawn, and the matte costs 546 bytes rather than
+a GPU `backdrop-filter` on a full-width element.
 
 Preview and database-warning notices remain visible below the artwork instead
-of creating a gap above it. Browser checks at 320, 390, 768, 962 and 1440 px verify
-the banner starts at the top edge and fills the width, its aspect ratio is
-preserved, the mobile menu works, the scrolled navigation is readable and there
-is no horizontal overflow.
+of creating a gap above it. Checks at 320, 390, 768, 962 and 1440 px cover the
+capped banner (its aspect ratio is preserved at every width, the artwork starts
+at the top edge, the mobile menu works, the scrolled navigation is readable and
+there is no horizontal overflow); `npm test` locks the caps and the matte in
+place. Because the sandbox has no browser, those checks combine the served CSS
+with a pixel-accurate render of the same rules — re-run them in a real browser
+before launch.
