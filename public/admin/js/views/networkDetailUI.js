@@ -28,7 +28,7 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   }
   if (statCards[4]) statCards[4].remove();
 
-  // Reuse each existing Lifegroup detail: only leader and member count are
+  // Reuse existing cell-team records: only the leader and member count are
   // visible until the person opens that group.
   structure.classList.add('network-detail__structure');
   const title = structure.querySelector('.card__header h2');
@@ -70,18 +70,18 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   };
   if (manage) {
     if (!leaderRegistered) quickButton('netLinkLeader', 'Link / register leader', '↗');
-    quickButton('netCreateGroup', 'Add Lifegroup', '+');
+    quickButton('netCreateGroup', 'Add Cell Leader', '+');
     quickButton('netQuickAddMember', 'Add member', '+', !cells.length);
     if (leaderChips) {
       const leaderButton = leaderChips.querySelector('#addCellLeader');
       if (leaderButton) {
         leaderButton.classList.add('network-detail__action');
-        leaderButton.textContent = '＋ Add Cell Leader';
+        leaderButton.textContent = '＋ Add to leader team';
         actions.append(leaderButton);
       }
       const leaders = document.createElement('details');
       leaders.className = 'network-detail__extra';
-      leaders.innerHTML = '<summary>Cell leader assignments</summary>';
+      leaders.innerHTML = '<summary>Leader team assignments</summary>';
       leaders.append(leaderChips);
       aside.querySelector('#netExtras').append(leaders);
     }
@@ -94,11 +94,11 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   }
   if (!manage) {
     aside.querySelector('h2').textContent = 'Explore';
-    aside.querySelector('.network-detail__secondary').textContent = 'Select a Lifegroup to explore its members and activity.';
+    aside.querySelector('.network-detail__secondary').textContent = 'Select a Cell Leader to explore connected members.';
     const link = document.createElement('a');
     link.href = '#/lifegroups';
     link.className = 'network-detail__action';
-    link.textContent = 'Browse Lifegroups →';
+    link.textContent = 'Browse Cell Leaders →';
     actions.append(link);
   }
   if (notes?.textContent?.trim()) {
@@ -122,7 +122,7 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   if (!cells.length && manage) {
     const note = document.createElement('p');
     note.className = 'network-detail__secondary';
-    note.textContent = 'Create a Lifegroup first to add members.';
+    note.textContent = 'Add a Cell Leader first to assign members.';
     actions.append(note);
   }
   return { history, chooser: aside.querySelector('#netMemberChooser') };
