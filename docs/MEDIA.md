@@ -34,18 +34,26 @@ The highlight slot names the church's own copy of the video in
 ```html
 <div class="vframe"
      data-video="https://drive.google.com/file/d/FILE_ID/view"
-     data-native-src="/brand/videos/grand-campus-hangout-720p.mp4"
+     data-native-src="/brand/videos/grand-campus-hangout.mp4"
      data-ratio="16/9" data-label="Grand Campus Hangout"
      data-poster="/brand/gallery/drive/grand-campus-hangout-cover.webp"></div>
 ```
 
-Putting the file there is one command — it checks the file really is an MP4,
+`public/brand/videos/grand-campus-hangout.mp4` is that copy: 62 MB, 3840 ×
+2160, H.264 High @ 5.1 with AAC stereo, faststart (the `moov` box precedes
+`mdat`, so it starts playing while it downloads). Its 2 min 13 sec running time
+is the same one the caption on the page shows.
+
+Putting a new video there is one command — it checks the file really is an MP4,
 reads its true duration and picture size straight out of the MP4, refuses
 anything GitHub would reject, and copies it into place:
 
 ```bash
-npm run video:add -- ~/Downloads/GRAND-CAMPUS-HANGOUT.mp4 --as grand-campus-hangout-720p.mp4
+npm run video:add -- ~/Downloads/GRAND-CAMPUS-HANGOUT.mp4 --as grand-campus-hangout.mp4
 ```
+
+If that command reports a different running time than the caption, update the
+caption: the numbers a visitor reads have to describe the file that plays.
 
 `public/lifegen/videos.js` then probes that file once with a same-origin `HEAD`
 request when the visitor taps the cover. If the file is on the site, the video
@@ -64,9 +72,11 @@ wrong player. The testimony cards carry no such note and are not touched.
 inside whatever frame it is given, and that cannot be styled from this page.**
 That is why the highlight uses the site's own file: the black bar and the
 second play button under the video are the provider's presentation, not a card
-left over from `styles.css`. The fallback stays in place until
-`public/brand/videos/grand-campus-hangout-720p.mp4` is committed;
-`tests/highlight-first-party-video.test.mjs` locks both paths in.
+left over from `styles.css`. Drive stays wired up as the fallback for any slot
+whose file is missing, and
+`tests/highlight-first-party-video.test.mjs` locks both paths in — including
+that the committed file is decodable (H.264 + AAC) and that its running time
+still equals the caption.
 
 ## Quality and loading
 
