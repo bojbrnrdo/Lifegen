@@ -1,4 +1,4 @@
-/** OSINT-style tree: only network leaders initially visible; click to reveal descendants. */
+/** Three-level vertical hierarchy: Network Leader → Cell Leader → Member. */
 import { api } from '../api.js';
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const personName = p => p.full_name || [p.first_name,p.last_name].filter(Boolean).join(' ') || 'Unnamed';
@@ -49,7 +49,7 @@ function ensureCSS(){
  const style=document.createElement('style');style.id='lifegen-node-graph-style';
  style.textContent=CSS;document.head.append(style);
 }
-/** Lifegroups with missing/invalid network assignment, never misrepresented as Network Leaders. */
+/** Cell teams with no valid Network assignment cannot be displayed under a Network Leader. */
 export function findUnassignedGroups(networks,groups,filters={}){
  const ids=new Set(networks.map(n=>String(n.id)));
  const status=filters.status||'active';
@@ -66,7 +66,7 @@ export function buildLifegroupTree(networks,groups,filters,expanded,members,load
  const roots=[],linked=new Set();
  function cell(g){
   const key='group:'+g.id,listed=members.get(key)||[];
-  return {key,kind:'group',name:g.leader_name||'Cell leader not assigned',subtitle:g.name||'Lifegroup',record:g,count:Number(g.member_count)||listed.length,
+  return {key,kind:'group',name:g.leader_name||'Cell leader not assigned',subtitle:'Cell Leader',record:g,count:Number(g.member_count)||listed.length,
     children:expanded.has(key)&&!loading.has(key)?listed.map(p=>({key:'person:'+p.id,kind:'member',name:personName(p),subtitle:(p.role==='assistant'?'Assistant leader':p.role==='leader'?'Leader':p.status||'Member').replaceAll('_',' '),record:p,count:0,children:[]})):[]};
  }
  for(const network of networks){
@@ -77,7 +77,7 @@ export function buildLifegroupTree(networks,groups,filters,expanded,members,load
   const visible=!query||match(network)?selected:selected.filter(match);
   if(query&&!match(network)&&!visible.length)continue;
   const key='network:'+network.id;
-  roots.push({key,kind:'network',name:network.leader_name||'Network leader not assigned',subtitle:network.name||'Network',record:network,count:visible.length,
+  roots.push({key,kind:'network',name:network.leader_name||'Network leader not assigned',subtitle:'Network Leader',record:network,count:visible.length,
     children:expanded.has(key)||!!query?visible.map(cell):[]});
  }
 
@@ -129,7 +129,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
  const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
- target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a Network Leader to reveal Cell Leaders below</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
+ target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Network Leader → Cell Leader → Member</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
  const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
@@ -157,7 +157,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    node.kind==='member'?'#/people/'+encodeURIComponent(node.record.id):'';
   panel.hidden=false;
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
-   (node.kind==='network'&&node.count===0?'<p>No cell leaders are connected yet. Assign a Lifegroup to this Network using its Edit screen.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
+   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add Cell Leader to connect one.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
  function focusNode(key){
   const n=layout.nodes.find(node=>node.key===key);
@@ -256,7 +256,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    previousPositions=current;
   }
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
-  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Lifegroups are listed separately for assignment.</p>';}else blank.hidden=true;
+  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Cell Leaders are listed separately for assignment.</p>';}else blank.hidden=true;
   if(first||shouldFit){fit();first=false;}
   const animate=oldPos.size>0&&!reducedMotion;
   if(!animate){
