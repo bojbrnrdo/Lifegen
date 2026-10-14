@@ -140,7 +140,7 @@ function renderShell() {
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${navLink('#/people', 'people', 'People', 'people')}
         ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check') : ''}
-        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Discipleship Tree', 'group') : ''}
+        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group') : ''}
         ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}

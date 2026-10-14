@@ -45,7 +45,7 @@ test('Member assignment has only person and role; server supplies joined date au
 });
 
 test('Group overview focuses on people and leadership, without optional logistics', () => {
-  assert.match(groupPage, /<h2>Leadership<\/h2>/);
+  assert.match(groupPage, /<h2>Network & leadership<\/h2>/);
   assert.doesNotMatch(groupPage, /<span class="stat__label">Schedule<\/span>/);
   for (const key of ['Day','Time','Venue','Notes']) {
     assert.doesNotMatch(groupPage, new RegExp('<dt>' + key + '</dt>'));

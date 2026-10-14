@@ -60,7 +60,7 @@ test('new Cell Leader creation links a registered person to the Network',()=>{
 });
 
 test('navigation and actions show Cell Leaders and Members without a separate group step',()=>{
- assert.match(nav,/'Discipleship Tree'/);
+ assert.match(nav,/'Lifegroups'/);
  assert.match(view,/id="addNew"[^\n]+Add New/);
  assert.match(detail,/quickButton\('netCreateGroup', 'Add Cell Leader'/);
  assert.match(detail,/Add member/);

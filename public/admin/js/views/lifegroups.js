@@ -292,18 +292,20 @@ function bindMemberActions(root, groupsById, refresh) {
 export async function renderLifegroups({main, query}) {
  const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
  main.innerHTML=html`
- <div class="page-header"><div><h1>Discipleship Tree</h1><p class="sub">Network leaders, cell leaders and members in one collapsible hierarchy.</p></div>
+ <section class="lifegroups-page">
+ <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
- <div class="toolbar lg-tree-toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" aria-label="Search network, group, or leader" /></div>
+ <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
- <button class="btn" id="treeRefresh" title="Reload current Cell records">Refresh</button></div>
+ <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
+ <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
- <div style="display:grid;gap:12px;margin-top:16px">
- <details class="card" id="needsPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">People needing a Cell</summary><div style="padding:12px" id="needsBody"></div></details>
- <details class="card" id="progressPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">Cell progress</summary><div style="padding:12px" id="progressBody"></div></details>
- </div>`;
+ <div class="lifegroups-page__extras">
+ <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
+ <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
+ </div></section>`;
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load()}));
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
@@ -362,6 +364,15 @@ export async function renderLifegroups({main, query}) {
   if(seq!==sequence||!main.contains(canvas))return;
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
+  const summary=main.querySelector('#treeSummary');
+  const visibleNetworks=cache.nets.filter(n =>
+   (!filters.gender||n.gender===filters.gender) &&
+   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:Boolean(n.is_active))));
+  const networkIds=new Set(visibleNetworks.map(n=>String(n.id)));
+  const visibleCells=cache.groups.filter(g=>networkIds.has(String(g.network_id))&&!g.leads_network&&
+   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
+  summary.hidden=Boolean(filters.q);
+  summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
   await renderHierarchy(canvas,cache.nets,cache.groups,filters);
  }
  main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
@@ -415,33 +426,31 @@ export async function renderLifegroup({ main }, id) {
 
 
   main.innerHTML = html`
-    <div class="page-header">
+  <section class="lifegroup-detail">
+    <div class="page-header lifegroup-detail__header">
       <div>
-        <a class="small" href="#/lifegroups">${icon('back', 14)} Cell Leaders</a>
-        <h1 class="mt-1">${g.leader_name || 'Cell Leader not assigned'}</h1>
-        <div class="row mt-1">${genderBadge(g.gender, { long: true })}${g.network ? html`<span class="small muted">${g.network}${g.network_leader_name ? html` · Network leader: ${g.network_leader_name}` : ''}</span>` : ''}${g.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${g.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
+        <a class="small lifegroup-detail__back" href="#/lifegroups">${icon('back', 14)} Lifegroups</a>
+        <div class="lifegroup-detail__identity">
+          ${raw(avatar({first_name:(g.leader_name||'Cell').split(' ')[0],last_name:(g.leader_name||'Leader').split(' ').slice(1).join(' '),photo:g.leader_photo}))}
+          <div><h1>${g.leader_name || 'Cell Leader not assigned'}</h1>
+            <div class="lifegroup-detail__meta"><span class="lifegroup-detail__role">${icon('user',13)} Cell Leader</span>${genderBadge(g.gender)}${g.network_id ? html`<a href="#/networks/${g.network_id}">${icon('group',13)} ${g.network || 'Network'}</a>` : ''}${g.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${g.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo</span>') : ''}</div>
+          </div>
+        </div>
       </div>
-      ${manage ? html`<div class="page-actions"><button class="btn" id="addMember">${icon('plus')} Add member</button><button class="btn btn--primary" id="editGroup">${icon('edit')} Edit</button></div>` : ''}
+      ${manage ? html`<div class="page-actions"><button class="btn btn--primary" id="addMember">${icon('plus')} Add member</button><button class="btn" id="editGroup" title="Edit Cell Leader">${icon('edit')} Edit</button></div>` : ''}
     </div>
 
-    <div class="grid grid--stats mb-2" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="lifegroup-detail__stats">
       ${g.leads_network ? html`
-      <div class="card stat"><span class="stat__label">Cell leaders</span><span class="stat__value">${g.member_count}<small> / ${g.max_members}</small></span><span class="small muted">Network leader — max ${g.max_members}</span></div>
-      <div class="card stat"><span class="stat__label">Leaders with members</span><span class="stat__value">${g.led_groups.length}</span><span class="small muted">${g.led_groups.filter((x) => x.solid_count >= g.solid_target).length} solid</span></div>` : html`
-      <div class="card stat"><span class="stat__label">Members</span><span class="stat__value">${g.member_count}</span></div>
-      <div class="card stat ${closedCount(g) >= g.solid_target ? 'stat--ok' : ''}"><span class="stat__label">Closed cell</span><span class="stat__value">${closedCount(g)}<small> / ${g.solid_target}</small></span><span class="small muted">${closedCount(g) >= g.solid_target ? 'Solid Cell' : 'max ' + g.solid_target + ' · ' + g.solid_target + ' = solid'}</span></div>
-      <div class="card stat"><span class="stat__label">Open cell</span><span class="stat__value">${g.member_count - closedCount(g)}</span><span class="small muted">up to 12 members</span></div>`}
+        <div class="lifegroup-detail__stat">${icon('user',18)} <div><small>Cell Leaders</small><strong>${g.member_count}<span> / ${g.max_members}</span></strong></div></div>
+        <div class="lifegroup-detail__stat">${icon('group',18)} <div><small>Leading a Cell</small><strong>${g.led_groups.length}</strong></div></div>
+      ` : html`
+        <div class="lifegroup-detail__stat">${icon('people',18)} <div><small>Members</small><strong>${g.member_count}<span> / 12</span></strong></div></div>
+        <div class="lifegroup-detail__stat">${icon('check',18)} <div><small>Consistent</small><strong>${closedCount(g)}<span> / ${g.solid_target}</span></strong></div></div>
+      `}
     </div>
 
     <div class="stack">
-      <div class="card">
-        <div class="card__header"><h2>Leadership</h2></div>
-        <div class="card__body"><dl class="dl">
-          <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a>${g.leader_contact ? html` <span class="small muted">· ${g.leader_contact}</span>` : ''}</dd>` : g.leader_name ? html`<dd>${g.leader_name} <span class="small muted">(not registered)</span></dd>` : raw('<dd class="none">—</dd>')}</div>
-          <div><dt>Network</dt>${g.network_id ? html`<dd><a href="#/networks/${g.network_id}">${g.network}</a> <span class="small muted">${g.network_manual ? '· set by hand' : '· automatic'}</span></dd>` : g.network ? html`<dd>${g.network}</dd>` : html`<dd class="none">—</dd>`}</div>
-          <div><dt>Network leader</dt>${g.network_leader_name ? html`<dd>${g.network_leader_person_id ? html`<a href="#/people/${g.network_leader_person_id}">${g.network_leader_name}</a>` : g.network_leader_name}<span class="small muted"> · leader reports here</span></dd>` : raw('<dd class="none">—</dd>')}</div>
-        </dl></div>
-      </div>
       ${g.leads_network ? html`<div class="card">
         <div class="card__header"><h2>Cell leaders</h2><span class="hint">${g.member_count} / ${g.max_members}</span></div>
         <div class="card__body card__body--flush" id="membersCard">
@@ -458,21 +467,45 @@ export async function renderLifegroup({ main }, id) {
             </tr>`; })}</tbody></table></div>
             <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No cell leaders yet.${manage ? raw(' Use <b>Add member</b> to add up to 12 cell leaders.') : ''}</p></div>`}
         </div>
-      </div>` : html`<div class="card">
-        <div class="card__header"><h2>Members</h2><span class="hint">${g.members.filter((m) => m.tier !== 'solid').length} open cell · ${closedCount(g)} / ${g.solid_target} closed cell</span></div>
+      </div>` : html`<div class="card lifegroup-detail__members">
+        <div class="card__header"><h2>${icon('people',18)} Members</h2><span class="hint">${g.member_count} / 12</span></div>
         <div class="card__body card__body--flush" id="membersCard">
-          ${g.members.length ? html`${memberSections(g.members.map((m) => ({ ...m, name: fullName(m), sub: raw(statusBadge(m.status)) })), { manage,
-              actions: (m) => memberActions(m, g) })}
-            <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No members yet.${manage ? raw(' Use <b>Add member</b> or assign from a person’s profile.') : ''}</p></div>`}
+          ${g.members.length ? html`<div class="lifegroup-detail__people">${g.members.map(m=>html`
+            <div class="lifegroup-detail__person">
+              <a class="lifegroup-detail__person-photo" href="#/people/${m.id}" aria-label="Open ${fullName(m)} profile">${raw(avatar(m,'sm'))}</a>
+              <div class="lifegroup-detail__person-info">
+                <a href="#/people/${m.id}"><strong>${fullName(m)}</strong></a>
+                <span>${m.tier==='solid' ? html`${icon('check',13)} Consistent` : 'New member'}${m.role&&m.role!=='member' ? ' · '+m.role : ''}</span>
+              </div>
+              ${manage ? html`<details class="lifegroup-detail__member-actions">
+                <summary title="Manage ${fullName(m)}" aria-label="Manage ${fullName(m)}">${icon('menu',16)}</summary>
+                <div class="lifegroup-detail__member-menu">${memberActions(m,g)}
+                  <button class="btn btn--sm" data-tier="${m.id}" data-to="${m.tier==='solid'?'new':'solid'}">${m.tier==='solid'?'Mark new':'Mark consistent'}</button>
+                </div>
+              </details>` : ''}
+            </div>`)}</div>` : html`<div class="lifegroup-detail__empty">${icon('people',25)}<p>No members yet.</p>${manage ? raw('<p class="small muted">Select Add member to get started.</p>') : ''}</div>`}
         </div>
       </div>`}
+      <details class="card lifegroup-detail__info">
+        <summary class="card__header">${icon('link',18)} <h2>Network & leadership</h2>${icon('chevR',16)}</summary>
+        <div class="card__body"><dl class="dl">
+          <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a>${g.leader_contact ? html` <span class="small muted">· ${g.leader_contact}</span>` : ''}</dd>` : g.leader_name ? html`<dd>${g.leader_name} <span class="small muted">(not registered)</span></dd>` : raw('<dd class="none">—</dd>')}</div>
+          <div><dt>Network</dt>${g.network_id ? html`<dd><a href="#/networks/${g.network_id}">${g.network}</a></dd>` : g.network ? html`<dd>${g.network}</dd>` : html`<dd class="none">—</dd>`}</div>
+          <div><dt>Network leader</dt>${g.network_leader_name ? html`<dd>${g.network_leader_person_id ? html`<a href="#/people/${g.network_leader_person_id}">${g.network_leader_name}</a>` : g.network_leader_name}</dd>` : raw('<dd class="none">—</dd>')}</div>
+        </dl></div>
+      </details>
     </div>
-    <div class="card mt-2" id="progressCard"></div>
+    <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>Attendance &amp; progress</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
     ${g.former.length ? html`<details class="card mt-2"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
       <div class="card__body"><ul class="small" style="margin:0 0 0 18px;columns:2;column-gap:24px">${g.former.map((f) => html`<li><a href="#/people/${f.id}">${fullName(f)}</a> <span class="muted">· ${fmtDate(f.joined_at, { short: true })} → ${fmtDate(f.left_at, { short: true })}</span></li>`)}</ul></div></details>` : ''}
-    ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}`;
+    ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}
+  </section>`;
 
-  renderProgressCard(main.querySelector('#progressCard'), g.id, { onChange: () => {}, onLoaded: (p) => {
+  const progressDisclosure=main.querySelector('#progressDisclosure');
+  progressDisclosure.addEventListener('toggle',()=>{
+    if(!progressDisclosure.open||progressDisclosure.dataset.loaded)return;
+    progressDisclosure.dataset.loaded='true';
+    renderProgressCard(main.querySelector('#progressCard'), g.id, { onChange: () => {}, onLoaded: (p) => {
     // fill in the last-4-weeks cells now that progress data is here
     const by = new Map(p.members.map((m) => [m.id, m.last4]));
     main.querySelectorAll('#membersCard tr[data-pid] .l4slot').forEach((el) => { const l4 = by.get(Number(el.closest('tr').dataset.pid)); if (l4) el.outerHTML = memberDots(l4).value + (l4.consistency_pct != null ? ` <span class="small muted">${l4.consistency_pct}%</span>` : ''); else el.textContent = '—'; });
@@ -481,6 +514,7 @@ export async function renderLifegroup({ main }, id) {
       if (cell && l4) cell.innerHTML = memberDots(l4).value + (l4.consistency_pct != null ? ` <span class="small muted">${l4.consistency_pct}%</span>` : '');
     });
   } });
+  });
   main.querySelectorAll('#membersCard [data-tier]').forEach((b) => {
     b.onclick = () => withLoading(b, async () => {
       try { await api.setTier(g.id, Number(b.dataset.tier), b.dataset.to); toast(b.dataset.to === 'solid' ? 'Moved to the closed cell.' : 'Moved to the open cell.'); renderLifegroup({ main }, id); }

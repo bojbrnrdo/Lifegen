@@ -61,7 +61,7 @@ const CSS = [
  ".lfg__buttons{position:absolute;top:15px;right:16px;z-index:3;display:flex;align-items:center;gap:6px}",
  ".lfg__buttons button{background:#fff;color:#315643;border:1px solid #d5e3d9;border-radius:9px;min-width:34px;min-height:34px;padding:7px 11px;font-weight:650;font-size:12px;box-shadow:0 1px 3px #183c2110;cursor:pointer;transition:background .15s,border-color .15s}",
  ".lfg__buttons button:hover,.lfg__buttons button:focus-visible{background:#eaf4ec;border-color:#75a58a;outline:2px solid transparent}.lfg__buttons button:focus-visible{outline:2px solid #3b8a62;outline-offset:2px}",
- ".lfg__svg{display:block;width:100%;height:min(72vh,690px);min-height:450px;touch-action:none;cursor:grab;background-image:radial-gradient(#d4e4d9 .8px,transparent .8px);background-size:22px 22px}",
+ ".lfg__svg{display:block;width:100%;height:min(65vh,620px);min-height:420px;touch-action:none;cursor:grab;background-image:radial-gradient(#d4e4d9 .8px,transparent .8px);background-size:22px 22px}",
  ".lfg__svg.panning{cursor:grabbing}.lfg__edge{stroke:#96bc9f;stroke-width:1.8;opacity:.92;fill:none}",
  ".lfg__node{cursor:pointer;outline:none}",
  ".lfg__node[data-kind=\"group\"] .lfg__avatar-background{fill:#eef7f2}",
@@ -94,11 +94,23 @@ const CSS = [
 '.lfg__node[data-kind="member"] .lfg__avatar-ring{stroke:#b59e66}',
 '.lfg__node .lfg__avatar-fallback{pointer-events:none}',
 '.lfg__node:hover .lfg__avatar-ring,.lfg__node:focus-visible .lfg__avatar-ring{stroke:#155f3f;stroke-width:3.5}',
+'.lfg__heading b{display:flex!important;align-items:center;gap:8px}',
+'.lfg__heading b svg{color:#287b4c;flex:none}',
+'.lfg__buttons button{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;min-width:35px}',
+'.lfg__buttons .lfg__button--focus{background:#e6f5ea;border-color:#b2d7bc;color:#17683e}',
+'@media(max-width:520px){.lfg__buttons button span{display:none}.lfg__buttons button{padding:7px}}',
 '.lfg__socials{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 12px}',
 '.lfg__socials a{display:inline-flex!important;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d8e9dc;border-radius:9px;text-decoration:none!important;background:#f6faf6;color:#256747}',
 '.lfg__socials a:hover,.lfg__socials a:focus-visible{background:#e7f4ea;border-color:#66a481}',
 '@media(max-width:700px){.lfg__node .name-label{font-size:13.5px}}'
 ].join('\n');
+const treeControlIcon=(name)=>'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+({
+ focus:'<circle cx="12" cy="12" r="4"/><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5"/>',
+ fit:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+ reset:'<path d="M4 5v5h5M20 19v-5h-5"/><path d="M5 10a8 8 0 0 1 14-3m0 7a8 8 0 0 1-14 3"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ minus:'<path d="M5 12h14"/>',
+ }[name]||'')+'</svg>';
 function ensureCSS(){
  if(document.getElementById('lifegen-node-graph-style'))return;
  const style=document.createElement('style');style.id='lifegen-node-graph-style';
@@ -184,8 +196,18 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
  const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
- target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Network Leader → Cell Leader → Member</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
- const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
+ target.innerHTML='<section class="lfg">'+
+  '<div class="lfg__heading"><b>' + treeControlIcon('focus') + ' Network map</b><small>Click a leader to reveal their connections</small></div>'+
+  '<div class="lfg__buttons">'+
+   '<button type="button" class="lfg__button--focus" data-action="focus" aria-label="Focus on a Network Leader" title="Focus on a Network Leader">' + treeControlIcon('focus') + ' <span>Focus</span></button>'+
+   '<button type="button" data-action="fit" aria-label="Fit all people in the diagram" title="Fit all people">' + treeControlIcon('fit') + ' <span>Fit all</span></button>'+
+   '<button type="button" data-action="collapse" aria-label="Collapse all branches" title="Collapse all">' + treeControlIcon('reset') + '</button>'+
+   '<button type="button" data-action="plus" aria-label="Zoom in" title="Zoom in">' + treeControlIcon('plus') + '</button>'+
+   '<button type="button" data-action="minus" aria-label="Zoom out" title="Zoom out">' + treeControlIcon('minus') + '</button>'+
+  '</div><svg class="lfg__svg" aria-label="Interactive Lifegroup network: Network Leaders, Cell Leaders and Members"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg>'+
+  '<div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div>'+
+  '<span class="lfg__hint">Click profile to expand · Drag to move · Scroll to zoom</span></section>';
+ const svg=target.querySelector('.lfg__svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
  let observer=null;
@@ -199,7 +221,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    panY=(height-layout.height*k)/2;
   }else{
    const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
-   k=width<700?.82:width<1024?1:1.08;
+   k=width<700?.95:width<1024?1.12:1.3;
    panX=width/2-(root?.x||0)*k;
    panY=(width<700?170:192)-(root?.y||0)*k;
   }
@@ -215,7 +237,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
    (socials.length?'<nav class="lfg__socials" aria-label="Social media profiles">'+socials.map(item=>
      '<a href="'+esc(item.url)+'" aria-label="'+esc(item.label)+'" title="'+esc(item.label)+'" target="_blank" rel="noopener noreferrer">'+socialIcon(item.glyph,17)+'</a>').join('')+'</nav>':'')+
-   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add Cell Leader to connect one.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
+   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add New to connect one.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
  function focusNode(key){
   const n=layout.nodes.find(node=>node.key===key);
@@ -314,7 +336,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    previousPositions=current;
   }
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
-  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Cell Leaders are listed separately for assignment.</p>';}else blank.hidden=true;
+  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders found</b><p>Try another filter or select Add New to create a Network.</p>';}else blank.hidden=true;
   if(first||shouldFit){fit();first=false;}
   const animate=oldPos.size>0&&!reducedMotion;
   if(!animate){
@@ -370,6 +392,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   }
   if(target.__lifegenTree===state&&target.isConnected)draw(false,node.key);
  }
+ target.querySelector('[data-action="focus"]').onclick=()=>fit(false);
  target.querySelector('[data-action="fit"]').onclick=()=>fit(true);
  target.querySelector('[data-action="collapse"]').onclick=()=>{
   expanded.clear();state.selected=null;panel.hidden=true;
