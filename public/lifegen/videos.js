@@ -3,7 +3,7 @@
 // To add a video, put its link in the slot's data-video attribute, e.g.
 //   <div class="vframe" data-video="https://youtu.be/abc123" data-ratio="16/9" ...>
 // Supported: YouTube (watch, youtu.be, Shorts, live), Facebook videos/reels, Vimeo,
-// Google Drive (file must be shared "Anyone with the link"), or a direct .mp4/.webm file.
+// Google Drive / Google Docs video (file must be shared "Anyone with the link"), or a direct .mp4/.webm file.
 // Use data-ratio="9/16" for vertical phone videos (Reels / Shorts).
 // Empty slots show a "coming soon" placeholder.
 //
@@ -41,9 +41,9 @@
         if (host === "facebook.com" || host === "fb.watch" || host === "web.facebook.com") {
             return { type: "iframe", provider: "Facebook", src: `https://www.facebook.com/plugins/video.php?height=314&href=${encodeURIComponent(link)}&show_text=false&width=560&t=0` };
         }
-        // Google Drive
-        if (host === "drive.google.com") {
-            const id = (path.match(/\/file\/d\/([\w-]+)/) || [])[1] || u.searchParams.get("id");
+        // Google Drive / Google Docs video
+        if (host === "drive.google.com" || host === "docs.google.com") {
+            const id = (path.match(/\/(?:file|videos)\/d\/([\w-]+)/) || [])[1] || u.searchParams.get("id");
             if (id) return { type: "iframe", provider: "Google Drive", src: `https://drive.google.com/file/d/${id}/preview` };
         }
         // Direct video file
