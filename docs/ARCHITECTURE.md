@@ -52,6 +52,24 @@ The dedicated one-month VIP outcome/export flow and its migration side effects a
 - `003`, `004`, and `005` have been converted to non-destructive no-op migration markers so they cannot drop the tracker or recreate the one-month outcome export.
 - `database/001_init.sql` also limits its access revocation to LIFEGEN tables.
 
+## Public asset caching
+
+Public CSS/JS is referenced from the HTML with a per-file version
+(`/lifegen/styles.css?v=2.4.10`). When that version is present, `src/app.js`
+serves the file with `Cache-Control: public, max-age=31536000, immutable`, so the
+version string is the cache key: a file whose bytes change without its version
+changing stays stale in every browser that already loaded it, and in any CDN in
+front of it. That is exactly how a banner fix once failed to appear.
+
+- After editing anything under `public/**` that the HTML versions, run
+  `npm run assets:version`. It records each asset's SHA-256 in
+  `asset-versions.json`, raises the patch version of any file whose bytes differ,
+  and rewrites the HTML.
+- `tests/asset-versions.test.mjs` fails when a recorded hash no longer matches
+  the file, with the instruction above, so a forgotten bump cannot ship.
+- `/admin` assets are not versioned: they are served `no-store`, and the page
+  rewrite embeds `ADMIN_ASSET_VERSION` for the entry points instead.
+
 ## Verification boundaries
 
 Automated checks and a local HTTP/database integration test exercise a disposable local PostgreSQL database. They do not connect to or verify a live Supabase project. A successful build is not evidence of a Vercel deployment. See [`VERIFICATION.md`](VERIFICATION.md) for the checks run for this revision and the required limits.

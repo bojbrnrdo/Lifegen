@@ -1,0 +1,34 @@
+{
+  "/lifegen/app.js": {
+    "version": "2.4.0",
+    "sha256": "d2bcfd9f8bfc84f18b95f353ee9c296e07f8effdecb59f7c0cf8c18bce83c50f"
+  },
+  "/lifegen/backend.js": {
+    "version": "2.4.8",
+    "sha256": "08f351ff3ae3346950250c046bcfc9f889309cd624794a203437dca5bd2646fd"
+  },
+  "/lifegen/calendar.js": {
+    "version": "2.3.11",
+    "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
+  },
+  "/lifegen/styles.css": {
+    "version": "2.4.10",
+    "sha256": "b7361b82687226819d4332c3c6d125de1c8b8d94e4fa7b9fcd69e9f936b0e81d"
+  },
+  "/lifegen/videos.js": {
+    "version": "2.4.1",
+    "sha256": "a04c80b94d8d74b53d0503b80189710ebfe90ef13708c73a5e5a27b212ebe331"
+  },
+  "/vendor/lucide-subset.min.js": {
+    "version": "2.3.0",
+    "sha256": "a584f1bc0e463315d3a34004b4cc54194051e484dcab0b936646d65bf365f868"
+  },
+  "/vip-announce/app.js": {
+    "version": "2.5.1",
+    "sha256": "042cafda3f48d45e554ae6540af0a0a244fad87d3cbf1b5595aafd7963fab700"
+  },
+  "/vip-announce/styles.css": {
+    "version": "2.5.0",
+    "sha256": "809d3b70a5c99ba5e9e038e7090a0f8fe5a7fde73f3b02988bae01d34edb267a"
+  }
+}
