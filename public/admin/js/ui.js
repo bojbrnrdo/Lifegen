@@ -137,6 +137,11 @@ export function personCell(p, { link = true } = {}) {
 // Icons (inline SVG paths)
 // ---------------------------------------------------------------------------
 const ICONS = {
+  facebook: '<path d="M15 21v-8h3l.5-4H15V7c0-1 .4-1.5 1.6-1.5H19V2h-3.6C11.8 2 11 4.5 11 7v2H8v4h3v8"/>',
+  instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/>',
+  tiktok: '<path d="M13 3v12a4 4 0 1 1-4-4h1M13 3c1.2 3.2 3.2 5 6.5 5.5"/>',
+  xsocial: '<path d="m4 3 16 18M20 3 4 21M4 3h4l12 18h-4"/>',
+  youtube: '<rect x="2" y="5" width="20" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
   mars: '<circle cx="10" cy="14" r="6"/><path d="M14.5 9.5 21 3M15 3h6v6"/>',
   venus: '<circle cx="12" cy="9" r="6"/><path d="M12 15v7m-4-4h8"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5A5 5 0 0 1 21.5 20"/>',

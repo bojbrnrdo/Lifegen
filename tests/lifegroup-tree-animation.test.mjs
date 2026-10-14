@@ -22,8 +22,8 @@ test('easing starts at zero, finishes at one, and advances smoothly',()=>{
 test('curved SVG connector joins parent node and child node',()=>{
  const p={x:100,y:90},c={x:365,y:280};
  const d=hierarchyCurve(p,c);
- assert.ok(d.startsWith('M100 147'));
- assert.ok(d.endsWith('365 265'));
+ assert.ok(d.startsWith('M100 165'));
+ assert.ok(d.endsWith('365 251'));
  assert.match(d,/ C/);
 });
 

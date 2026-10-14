@@ -1334,3 +1334,29 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .network-four .choice__opt--gender>span{min-width:55px;min-height:50px;}
 .network-four #netMembers:empty::after{content:'Add a Cell Leader to assign Members.';color:#7b897e;font-size:.85rem;}
 @media(max-width:620px){.network-four__section{padding:14px 0 16px;}.network-four__cell,.network-four__member-block{padding:11px;}.network-four__chip{font-size:.76rem;}}
+
+/* Animated progressive Network registration and vector-led navigation. */
+.network-four__steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:0 0 15px;padding:0;}
+.network-four__steps button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;
+ border:1px solid #dce8dd;background:#f9fcf9;color:#708778;border-radius:11px;font:650 .8rem inherit;
+ font-family:inherit;font-weight:650;cursor:pointer;white-space:normal;text-align:center;padding:9px 5px;}
+.network-four__steps button svg{flex:none;}
+.network-four__steps button[aria-current=step]{background:#e4f4e8;color:#195c38;border-color:#85b69b;box-shadow:inset 0 0 0 1px #85b69b;}
+.network-four__steps button.is-complete{color:#26754b;background:#f2faf4;}
+.network-four__steps button:disabled{cursor:not-allowed;opacity:.62;}
+.network-four__steps button:focus-visible{outline:2px solid #2d8054;outline-offset:2px;}
+.network-four__section[hidden]{display:none!important;}
+.network-four__section.is-revealed{animation:network-four-reveal .38s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes network-four-reveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.network-four__search .network-four__picker-avatar,.network-four__result-avatar{
+ border-radius:50%;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;
+ overflow:hidden;flex:none;background:#e4f2e8;color:#28714a;border:1px solid #c6dfd0;
+}
+.network-four__search{display:flex;align-items:center;gap:9px;}
+.network-four__search .network-four__picker-avatar img,.network-four__result-avatar img{
+ width:100%;height:100%;object-fit:cover;border-radius:50%;
+}
+.network-four__person-result{display:flex!important;align-items:center;gap:9px;}
+.network-four__search .gsearch__results{top:calc(100% + 5px);}
+@media(max-width:500px){.network-four__steps button{gap:4px;font-size:.73rem;flex-direction:column;}}
+@media(prefers-reduced-motion:reduce){.network-four__section.is-revealed{animation:none;}}

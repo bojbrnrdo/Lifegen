@@ -11,16 +11,19 @@ function picker(host, {gender, used, initial=null, label, select}) {
   wrap.className='gsearch network-four__search';
   const symbol=document.createElement('span');symbol.innerHTML=icon('search',16).value;
   const input=document.createElement('input');
+  const avatar=document.createElement('span');avatar.className='network-four__picker-avatar';
+  const setAvatar=person=>{avatar.innerHTML='';const img=person?.photo;if(typeof img==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(img)&&img.length<400000){const image=document.createElement('img');image.src=img;image.alt='';avatar.append(image);}else avatar.innerHTML=icon('user',17).value;};
+  setAvatar(initial);
   input.type='search';input.autocomplete='off';input.placeholder='Find registered person…';
   input.setAttribute('aria-label',label);
   input.value=initial?.name||'';
   const results=document.createElement('div');results.className='gsearch__results';results.hidden=true;
-  wrap.append(symbol,input,results);host.append(wrap);
+  wrap.append(avatar,input,results);host.append(wrap);
   let timer,version=0,selection=initial;
   const hide=()=>{results.hidden=true;results.replaceChildren();};
-  const set=person=>{selection=person;input.value=person?.name||'';hide();};
+  const set=person=>{selection=person;input.value=person?.name||'';setAvatar(person);hide();};
   input.addEventListener('input',()=>{
-    version++;clearTimeout(timer);selection=null;select(null);hide();
+    version++;clearTimeout(timer);selection=null;setAvatar(null);select(null);hide();
     const seq=version,q=input.value.trim();
     if(q.length<2)return;
     timer=setTimeout(async()=>{
@@ -36,8 +39,11 @@ function picker(host, {gender, used, initial=null, label, select}) {
         for(const p of matches){
           const name=p.full_name||[p.first_name,p.last_name].filter(Boolean).join(' ')||p.person_code;
           const b=document.createElement('button');b.type='button';b.className='gsearch__item';
-          b.textContent=name+(p.person_code?' · '+p.person_code:'');
-          const choose=()=>{const person={id:Number(p.id),name,sex:p.sex||null};set(person);select(person);};
+          b.classList.add('network-four__person-result');
+          const preview=document.createElement('span');preview.className='network-four__result-avatar';
+          if(p.photo&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(p.photo)&&p.photo.length<400000){const image=document.createElement('img');image.src=p.photo;image.alt='';preview.append(image);}else preview.innerHTML=icon('user',16).value;
+          const text=document.createElement('span');text.textContent=name+(p.person_code?' · '+p.person_code:'');b.append(preview,text);
+          const choose=()=>{const person={id:Number(p.id),name,sex:p.sex||null,photo:p.photo||null};set(person);select(person);};
           b.addEventListener('pointerdown',e=>{e.preventDefault();choose();});
           b.addEventListener('click',choose);
           results.append(b);
@@ -57,6 +63,10 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
   const modal=openModal({
     title:'New Network',wide:true,
     body:'<div class="network-four">'+
+      '<nav class="network-four__steps" aria-label="Registration progress">'+
+        '<button type="button" data-step="1" aria-label="Network Leader and Gender">'+icon('user',17).value+'<span>Leader</span></button>'+
+        '<button type="button" data-step="2" aria-label="Cell Leaders">'+icon('group',17).value+'<span>Cell Leaders</span></button>'+
+        '<button type="button" data-step="3" aria-label="Members">'+icon('people',17).value+'<span>Members</span></button></nav>'+
       '<div class="alert alert--error" id="netFourError" role="alert" hidden></div>'+
       '<section class="network-four__section"><label class="network-four__label">Network Leader</label>'+
         '<div id="netFourLeader"></div>'+
@@ -72,6 +82,16 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
   });
   modal.querySelector('[data-close]').onclick=closeModal;
   const state={gender:null,leader:null,cells:[]};let serial=0;
+  const sections=[...modal.querySelectorAll('.network-four__section')];
+  const progress=[...modal.querySelectorAll('[data-step]')];
+  let activeStep=1;
+  function showStep(wanted){
+    const max=state.leader&&state.gender?(state.cells.some(c=>c.person)?3:2):1;
+    activeStep=Math.min(Math.max(1,wanted),max);
+    sections.forEach((section,index)=>{section.hidden=activeStep===1?index>=2:activeStep===2?index!==2:index!==3;section.classList.toggle('is-revealed',!section.hidden);});
+    progress.forEach(button=>{const step=Number(button.dataset.step);button.disabled=step>max;button.setAttribute('aria-current',step===activeStep?'step':'false');button.classList.toggle('is-complete',step<activeStep);});
+  }
+  progress.forEach(button=>button.addEventListener('click',()=>showStep(Number(button.dataset.step))));
   const error=modal.querySelector('#netFourError');
   const fail=message=>{error.textContent=message;error.hidden=false;};
   const clear=()=>{error.hidden=true;};
@@ -90,6 +110,7 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
         modal.querySelector('input[name=gender][value='+state.gender+']').checked=true;
       }
       clear();
+      if(p&&state.gender)showStep(2);
     }
   });
   if(allowRegistration)bindNetworkLeaderRegistration(modal,{
@@ -98,6 +119,7 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
       const person={id:Number(p.id),name:p.name};
       if(ids().has(person.id))return fail('Person already selected.');
       state.leader=person;leaderPicker.set(person);clear();
+      if(state.gender)showStep(2);
     }
   });
   function render(){
@@ -120,7 +142,7 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
           const different=cell.person?.id!==p?.id;
           cell.person=p;
           if(different)cell.members=[];
-          if(p)render();
+          if(p){render();showStep(3);}else showStep(2);
           clear();
         }
       });
@@ -146,16 +168,26 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
       });
       members.append(box);
     });
+    showStep(activeStep);
   }
   modal.querySelectorAll('input[name=gender]').forEach(radio=>radio.addEventListener('change',()=>{
     const had=Boolean(state.leader||state.cells.length);
-    state.gender=radio.value;state.leader=null;state.cells=[];leaderPicker.set(null);render();
-    if(had)fail('Gender changed. Select the people again.');else clear();
+    const next=radio.value;
+    const incompatible=state.leader?.sex&&state.leader.sex!==sexOf[next];
+    state.gender=next;
+    if(incompatible){state.leader=null;leaderPicker.set(null);}
+    const hadCells=state.cells.length>0;
+    if(hadCells){state.cells=[];}
+    render();
+    showStep(state.leader?2:1);
+    if(incompatible)fail('That leader does not match the selected Gender. Choose a matching person.');
+    else if(hadCells)fail('Gender changed. Select the Cell Leaders again.');
+    else clear();
   }));
   modal.querySelector('#netAddCell').onclick=()=>{
     if(!state.gender)return fail('Select Gender first.');
     if(state.cells.length===LIMIT)return fail('Maximum of 12 Cell Leaders.');
-    state.cells.push({key:++serial,person:null,members:[]});render();clear();
+    state.cells.push({key:++serial,person:null,members:[]});render();showStep(2);clear();
     modal.querySelector('#netCells .network-four__cell:last-child input')?.focus();
   };
   modal.querySelector('#saveNetFour').onclick=()=>{
@@ -172,6 +204,6 @@ export function createFourFieldNetwork(onSaved,{allowRegistration=false}={}){
       }catch(e){fail(e.message||'Could not create Network.');}
     });
   };
-  render();
+  render();showStep(1);
   return modal;
 }
