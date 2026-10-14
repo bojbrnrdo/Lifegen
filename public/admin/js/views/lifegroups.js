@@ -27,7 +27,7 @@ export function ratioBar(boys, girls, total, { compact = false } = {}) {
   if (!total) return html`<div class="ratio ${compact ? 'ratio--compact' : ''}"><div class="ratio__bar"><span class="ratio__none"></span></div>${compact ? '' : raw('<div class="ratio__legend muted">No members yet</div>')}</div>`;
   return html`<div class="ratio ${compact ? 'ratio--compact' : ''}" title="${boys} boys · ${girls} girls${unknown ? ' · ' + unknown + ' not set' : ''}">
     <div class="ratio__bar"><span class="ratio__boys" style="width:${pct(boys)}%"></span><span class="ratio__girls" style="width:${pct(girls)}%"></span>${unknown ? html`<span class="ratio__unknown" style="width:${pct(unknown)}%"></span>` : ''}</div>
-    <div class="ratio__legend"><span><i class="dot dot--boys"></i>${boys} boys <span class="muted">${pct(boys)}%</span></span><span><i class="dot dot--girls"></i>${girls} girls <span class="muted">${pct(girls)}%</span></span>${unknown ? html`<span class="muted">${unknown} not set</span>` : ''}</div>
+    <div class="ratio__legend"><span title="Boys" aria-label="Boys: ${boys}">${icon('mars',14)} ${boys} <span class="muted">${pct(boys)}%</span></span><span title="Girls" aria-label="Girls: ${girls}">${icon('venus',14)} ${girls} <span class="muted">${pct(girls)}%</span></span>${unknown ? html`<span class="muted">${unknown} not set</span>` : ''}</div>
   </div>`;
 }
 /** Sex-specific network indicators, kept accessible even when the visible label is icon-only. */
@@ -100,7 +100,7 @@ async function groupForm(g, onSaved, { networkId = null, gender = null } = {}) {
     body: `<form id="groupForm" class="form-grid" novalidate>
       <div id="groupErr" class="alert alert--error span-2" hidden></div>
       <div class="field"><label>Group name <span class="req">*</span></label><input name="name" value="${v('name')}" required autocomplete="off" placeholder="e.g. Joshua Group" /></div>
-      <div class="field"><label>Boys or girls <span class="req">*</span></label>
+      <div class="field"><label>Group category <span class="req">*</span></label>
         <div class="choice">
           <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="boys" aria-label="Boys group" ${selectedGender === 'boys' ? 'checked' : ''} /><span title="Boys group">${icon('mars', 22)}</span></label>
           <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="girls" aria-label="Girls group" ${selectedGender === 'girls' ? 'checked' : ''} /><span title="Girls group">${icon('venus', 22)}</span></label>
@@ -737,7 +737,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
           <div class="tree__root">
             <div class="tree__node tree__node--root">
               <span class="tree__tag">Network leader</span>
-              <div class="tree__who">${n.leader_person_id ? html`<a href="#/people/${n.leader_person_id}"><b>${n.leader_name}</b></a>` : n.leader_name ? html`<b>${n.leader_name}</b> <span class="small muted">(not registered)</span>` : raw('<span class="muted">No leader set yet</span>')}${n.leader_contact ? html`<span class="small muted"> · ${n.leader_contact}</span>` : ''}</div>
+              <div class="tree__who">${n.leader_person_id ? html`<a href="#/people/${n.leader_person_id}"><b>${n.leader_name}</b></a>` : n.leader_name ? html`<b>${n.leader_name}</b> <span class="small muted">(profile not linked)</span>` : raw('<span class="muted">No leader set yet</span>')}${n.leader_contact ? html`<span class="small muted"> · ${n.leader_contact}</span>` : ''}</div>
               <div class="small muted">Independent network · ${n.cell_leaders || 0} cell leader${n.cell_leaders === 1 ? '' : 's'} report here${leaderGroup ? html` · <a href="#/lifegroups/${leaderGroup.id}" style="color:inherit;text-decoration:underline">${leaderGroup.name}</a>` : ''}</div>
               ${own ? html`<div class="small mt-1 row" style="gap:6px;flex-wrap:wrap;align-items:center">Cell leaders:${own.members.length ? own.members.map((m) => html`<span class="chip-sm"><a href="#/people/${m.id}">${fullName(m)}</a>${manage ? html`<button type="button" class="chip-sm__x" data-leave="${m.id}" data-gid="${own.id}" data-name="${fullName(m)}" data-gname="${own.name}" title="Remove ${fullName(m)} as cell leader" aria-label="Remove ${fullName(m)}">×</button>` : ''}</span>`) : raw('<span class="muted">none yet</span>')}${manage ? html`<button type="button" class="btn btn--ghost btn--sm" id="addCellLeader">${icon('plus', 14)} Add cell leader</button>` : ''}</div>` : ''}
               ${manage ? html`<div class="row mt-1" style="gap:6px;flex-wrap:wrap"><button type="button" class="btn btn--sm" id="editNet2">${icon('edit', 14)} Edit network / change leader</button></div>` : ''}
@@ -770,7 +770,11 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
 
     <div class="card mb-2" id="netCalendar"></div>
     ${can('lifegroups:manage') && !n.groups.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delNet" style="color:var(--muted)">Delete this empty network</button></div>` : ''}`;
-  const compact = simplifyNetworkDetail(main, { cells, cal, manage });
+  const compact = simplifyNetworkDetail(main, { cells, cal, manage, leaderRegistered: Boolean(n.leader_person_id) });
+  main.querySelector('#netLinkLeader')?.addEventListener('click', () => {
+    networkForm(n, () => renderNetwork({ main }, id));
+    document.querySelector('#netLeaderPick')?.focus();
+  });
   // Load the eight-week table only when explicitly requested.
   compact?.history.addEventListener('toggle', () => {
     if (!compact.history.open || compact.history.dataset.loaded) return;
