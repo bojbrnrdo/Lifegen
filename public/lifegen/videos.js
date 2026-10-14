@@ -7,6 +7,13 @@
 // Use data-ratio="9/16" for vertical phone videos (Reels / Shorts).
 // Empty slots show a "coming soon" placeholder.
 //
+// data-native-src names the church's own copy of the video, e.g.
+//   data-video="https://drive.google.com/file/d/ID/view"
+//   data-native-src="/brand/videos/name-720p.mp4"
+// When that file is on the site, the slot plays it here, in the first-party
+// player the testimony videos use; data-video stays the fallback while the
+// file is missing or unplayable.
+//
 // Privacy / legal: third-party players (YouTube, Facebook, Vimeo, Google Drive)
 // are click-to-load. Nothing connects to the provider until a visitor taps the
 // cover, so no viewing data is transferred without the visitor's action. Only
@@ -60,21 +67,59 @@
             '<p class="vph-text">New testimony in preparation</p></div>';
     }
 
+    // A slot that names the church's own copy of the video (data-native-src) plays
+    // it here, in the same first-party player as the testimony videos: clean 16:9,
+    // no provider chrome, no black surround and no second play button. Google's
+    // Drive player draws its own black surround and its own play button inside
+    // whatever frame it is given, and none of that can be styled from this page,
+    // so the site's own file always wins and the provider link is the fallback.
+    const nativeProbe = new WeakMap();
+
+    function nativeSource(frame) {
+        return (frame.dataset.nativeSrc || "").trim();
+    }
+
+    function nativeAvailable(frame) {
+        const src = nativeSource(frame);
+        if (!src) return Promise.resolve(false);
+        let probe = nativeProbe.get(frame);
+        if (!probe) {
+            // Same-origin HEAD: cheap, and a 404 here is an answer, not an error.
+            probe = fetch(src, { method: "HEAD", cache: "no-store" })
+                .then((res) => res.ok)
+                .catch(() => false);
+            nativeProbe.set(frame, probe);
+        }
+        return probe;
+    }
+
     function mount(frame) {
         const ratio = /^\d+\/\d+$/.test(frame.dataset.ratio || "") ? frame.dataset.ratio : "16/9";
         frame.style.setProperty("--ratio", ratio.replace("/", " / "));
         if (ratio === "9/16") frame.classList.add("is-vertical");
         const embed = embedFor(frame.dataset.video);
         const label = frame.dataset.label || "LIFEGEN video";
-        if (!embed) return placeholder(frame);
+        if (!embed && !nativeSource(frame)) return placeholder(frame);
         frame.classList.remove("is-empty");
-        if (embed.type === "video") {
+
+        // First-party playback — the frame the testimony videos get. onFail is
+        // used when the file turns out to be missing or unplayable.
+        function playNative(src, onFail) {
+            frame.classList.add("vframe--native");
+            // The card says which player the video is playing through; the
+            // site's own file means the note must stop claiming the provider.
+            const note = frame.closest(".vcard")?.querySelector("[data-play-note]");
+            if (note && note.dataset.playNote) note.textContent = note.dataset.playNote;
             const v = document.createElement("video");
-            Object.assign(v, { src: embed.src, controls: true, preload: "metadata", playsInline: true });
+            Object.assign(v, { src, controls: true, preload: "metadata", playsInline: true, autoplay: true });
             v.setAttribute("aria-label", label);
             if (frame.dataset.poster) v.poster = frame.dataset.poster;
+            if (onFail) v.addEventListener("error", onFail, { once: true });
             frame.replaceChildren(v);
-            return;
+            // The visitor just tapped the cover, so playback may start straight
+            // away. A rejected promise (codec, policy) leaves the controls up.
+            const starting = v.play();
+            if (starting && typeof starting.catch === "function") starting.catch(() => {});
         }
 
         function play() {
@@ -101,6 +146,18 @@
             frame.replaceChildren(f);
         }
 
+        function provider() {
+            if (!embed) return placeholder(frame);
+            if (embed.type === "video") return playNative(embed.src);
+            return play();
+        }
+
+        function start() {
+            const own = nativeSource(frame);
+            if (!own) return provider();
+            nativeAvailable(frame).then((ok) => (ok ? playNative(own, provider) : provider()));
+        }
+
         if (frame.dataset.poster) {
             const btn = document.createElement("button");
             btn.type = "button";
@@ -123,10 +180,10 @@
 
             btn.appendChild(poster);
             btn.appendChild(playBtn);
-            btn.addEventListener("click", play);
+            btn.addEventListener("click", start);
             frame.replaceChildren(btn);
         } else {
-            play();
+            start();
         }
     }
 

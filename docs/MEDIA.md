@@ -26,6 +26,40 @@ Both cards carry `data-unboxed-video="true"` and are styled by
 `public/lifegen/styles.css`. `tests/campus-hangout-unboxed-frame.test.mjs`
 locks the highlight framing in place; the testimonies' own markup is untouched.
 
+## First-party playback
+
+The highlight slot names the church's own copy of the video in
+`data-native-src`, e.g.
+
+```html
+<div class="vframe"
+     data-video="https://drive.google.com/file/d/FILE_ID/view"
+     data-native-src="/brand/videos/grand-campus-hangout-720p.mp4"
+     data-ratio="16/9" data-label="Grand Campus Hangout"
+     data-poster="/brand/gallery/drive/grand-campus-hangout-cover.webp"></div>
+```
+
+`public/lifegen/videos.js` probes that file once with a same-origin `HEAD`
+request when the visitor taps the cover. If the file is on the site, the video
+is played in the same first-party player the testimony videos use (real
+`<video controls>`, 16:9, transparent surround, no provider chrome and no
+second play button); if it is not deployed yet, or the file turns out to be
+unplayable, the slot falls back to `data-video` and the provider player, and
+the "Open video in a new tab" link stays available either way.
+
+While the provider is the one playing, the card says so (`Plays on Google
+Drive.`). The moment the site's own file plays, that note is rewritten from its
+`data-play-note` value (`Plays on LIFEGEN.`), so the caption never claims the
+wrong player. The testimony cards carry no such note and are not touched.
+
+**Google Drive's player draws its own black surround and its own play button
+inside whatever frame it is given, and that cannot be styled from this page.**
+That is why the highlight uses the site's own file: the black bar and the
+second play button under the video are the provider's presentation, not a card
+left over from `styles.css`. The fallback stays in place until
+`public/brand/videos/grand-campus-hangout-720p.mp4` is committed;
+`tests/highlight-first-party-video.test.mjs` locks both paths in.
+
 ## Quality and loading
 
 - Full-size JPEGs are **byte-identical** to the downloaded originals. SHA-256 checksums and source filenames are recorded in `public/brand/gallery/drive/manifest.json`.
