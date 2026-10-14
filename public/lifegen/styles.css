@@ -126,23 +126,42 @@
 }
 
 
-/* Janime testimony: Google Drive includes a black strip beneath the picture.
-   Keep its 16:9 poster and uncropped 16:9 iframe; once playing, shorten
-   only the visible frame to the actual content area (~2.05:1).
-   The embedded full player is still available via the Google Drive link
-   immediately below the video. No other media or testimonial is affected. */
-#stories .vframe[data-trim-bottom="true"].vframe--playing-trimmed {
-  aspect-ratio: 2.05 / 1;
-  background: transparent;
-  overflow: hidden;
+/* Janime's testimony: the video itself is unboxed. Only the descriptive
+   content below is presented in a card; the 16:9 embed remains entirely
+   visible with no forced cropping or artificial black backdrop.
+   The .vframe node is a technical mount point for click-to-play media, not
+   a visual card/container. Other testimonies retain their existing cards. */
+#stories .vcard[data-unboxed-video="true"],
+#stories .vcard[data-unboxed-video="true"]:hover {
+  align-self:start;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  overflow:visible;
 }
-#stories .vframe[data-trim-bottom="true"].vframe--playing-trimmed iframe {
-  position: absolute;
-  inset: 0 auto auto 0;
-  top: 0;
-  width: 100%;
-  height: 115.3125%;
-  border: 0;
+#stories .vcard[data-unboxed-video="true"] .vframe {
+  width:100%;
+  aspect-ratio:16 / 9;
+  border:0;
+  border-radius:0;
+  overflow:hidden;
+  background:transparent;
 }
-/* This is purely a geometry correction; keep the card and the provider's
-   accessible full-player link, and do not change portrait videos. */
+#stories .vcard[data-unboxed-video="true"] .vframe iframe,
+#stories .vcard[data-unboxed-video="true"] .vframe video {
+  background:transparent;
+}
+#stories .vcard[data-unboxed-video="true"] .vmeta--text-card {
+  flex:initial;
+  width:100%;
+  box-sizing:border-box;
+  padding:18px 20px 20px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--card);
+  box-shadow:0 1px 2px rgba(15,61,28,.05);
+}
