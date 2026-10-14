@@ -46,7 +46,7 @@ export function findUnassignedGroups(networks,groups,filters={}){
   (g.network_id==null||!ids.has(String(g.network_id)))
  );
 }
-function build(networks,groups,filters,expanded,members,loading){
+export function buildLifegroupTree(networks,groups,filters,expanded,members,loading){
  const query=String(filters.q||'').trim().toLowerCase(), gender=filters.gender||'', status=filters.status||'active';
  const allowed=o=>status==='all'||(status==='inactive'?o.is_active===false||o.is_active===0:o.is_active!==false&&o.is_active!==0);
  const match=o=>[o.name,o.leader_name].some(s=>String(s||'').toLowerCase().includes(query));
@@ -70,7 +70,7 @@ function build(networks,groups,filters,expanded,members,loading){
 
  return roots;
 }
-function arrange(roots){
+export function arrangeLifegroupTree(roots){
  let row=0;const all=[],lines=[];
  function walk(node,depth,parent){
   node.x=100+depth*265;
@@ -109,7 +109,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    (node.kind==='network'&&node.count===0?'<p>No cell leaders are connected yet. Assign a Lifegroup to this Network using its Edit screen.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
  function draw(shouldFit=false){
-  layout=arrange(build(networks,groups,filters,expanded,members,loading));
+  layout=arrangeLifegroupTree(buildLifegroupTree(networks,groups,filters,expanded,members,loading));
   edgeLayer.innerHTML=layout.lines.map(pair=>{
    const p=pair[0],c=pair[1],x=(p.x+c.x)/2;
    return '<path class="lfg__edge" d="M'+(p.x+7)+' '+p.y+' C'+x+' '+p.y+' '+x+' '+c.y+' '+(c.x-7)+' '+c.y+'"/>';
