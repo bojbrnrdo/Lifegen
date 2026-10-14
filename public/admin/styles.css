@@ -1120,7 +1120,11 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
   position:relative; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr));
   gap:15px; margin:0; padding:15px 0 0; border:0; align-items:start;
 }
-.network-detail__structure .tree__children::before { display:none; }
+.network-detail__structure .tree__children::before {
+  content:''; display:block; position:absolute; top:0; left:25%; right:25%; height:2px;
+  background:#adcbb7;
+}
+.network-detail__structure .tree__children:has(> :nth-child(3))::before { left:16.66%; right:16.66%; }
 .network-detail__structure .tree__children > *::before {
   content:''; display:block; position:absolute; left:50%; width:2px;
   height:15px; top:-16px; border:0; background:#adcbb7;
@@ -1162,7 +1166,7 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .network-detail__action {
   display:flex; align-items:center; width:100%; text-align:left; gap:11px;
   min-height:45px; border:1px solid #e1ebe3; border-radius:10px; background:#fff;
-  padding:10px 13px; color:#183b28; font:650 .88rem inherit; cursor:pointer;
+  padding:10px 13px; color:#183b28; font-size:.88rem; font-weight:650; font-family:inherit; cursor:pointer;
   transition:background .15s,border-color .15s;
 }
 .network-detail__action:hover:not(:disabled),.network-detail__action:focus-visible {
@@ -1207,13 +1211,15 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 }
 @media(max-width:900px) {
   .network-detail__workspace { grid-template-columns:minmax(0,1fr); }
-  .network-detail__stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .network-detail .network-detail__stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media(max-width:550px) {
   .network-detail__stats { gap:9px; }
   .network-detail__stats .stat { padding:13px; min-height:90px; }
   .network-detail__structure > .card__body { padding:14px 14px 23px; }
   .network-detail__structure .tree__children { grid-template-columns:minmax(0,1fr); }
+  .network-detail__structure .tree__children::before { display:none; }
+  .network-detail__structure .tree__children > *::before { top:-16px; }
   .network-detail__actions { padding:17px; }
 }
 @media(prefers-reduced-motion:reduce) {
