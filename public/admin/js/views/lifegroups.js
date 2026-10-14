@@ -38,29 +38,41 @@ const sexBadge = (sex) => (sex === 'male' ? raw('<span class="sex sex--boy">Boy<
 // are ever listed, so a girl can't even be picked for a boys group (and vice versa).
 const SEX_WORD = { male: 'boys', female: 'girls' };
 const SEX_OF = { boys: 'male', girls: 'female' };
-function personPicker(root, { inputId, hiddenId, labelId, initial, sex = null }) {
+function personPicker(root, { inputId, hiddenId, labelId, initial, sex = null, onSelect = null, onInput = null }) {
   const input = root.querySelector('#' + inputId);
   const hidden = root.querySelector('#' + hiddenId);
   const results = root.querySelector('#' + inputId + 'Results');
   const sexNow = () => (typeof sex === 'function' ? sex() : sex);
   if (initial) { input.value = initial.name; hidden.value = initial.id; }
-  const hide = () => { results.hidden = true; results.innerHTML = ''; };
-  input.addEventListener('input', debounce(async () => {
+  if (!results) throw new Error('Missing person search results element for ' + inputId);
+  const hide = () => { results.hidden = true; results.innerHTML = ''; input.setAttribute('aria-expanded', 'false'); };
+  input.setAttribute('aria-controls', results.id);
+  input.setAttribute('aria-expanded', 'false');
+  const search = debounce(async () => {
     const q = input.value.trim();
-    hidden.value = '';
     if (q.length < 2) return hide();
     try {
       const sx = sexNow();
       if (sex && !sx) { results.innerHTML = '<div class="gsearch__empty">Choose Boys group or Girls group first.</div>'; results.hidden = false; return; }
       const { people: found } = await api.search(q);
+      if (input.value.trim() !== q) return; // Ignore stale search results.
       const people = sx ? found.filter((p) => !p.sex || p.sex === sx) : found;
       if (!people.length) { results.innerHTML = `<div class="gsearch__empty">${sx ? `No ${SEX_WORD[sx]} found — only ${SEX_WORD[sx]} can be in this group.` : 'No one found'}</div>`; results.hidden = false; return; }
       results.innerHTML = people.map((p) => `<button type="button" class="gsearch__item" data-id="${p.id}" data-name="${esc(fullName(p))}">${avatar(p, 'sm')}<span><b>${esc(fullName(p))}</b><small>${esc(p.person_code)}</small></span></button>`).join('');
       results.hidden = false;
-      results.querySelectorAll('[data-id]').forEach((b) => { b.onclick = () => { hidden.value = b.dataset.id; input.value = b.dataset.name; hide(); }; });
-    } catch (e) { hide(); }
-  }, 200));
-  input.addEventListener('blur', () => setTimeout(hide, 150));
+      results.querySelectorAll('[data-id]').forEach((b) => {
+        const choose = () => { hidden.value = b.dataset.id; input.value = b.dataset.name; hide(); onSelect?.(); };
+        b.addEventListener('pointerdown', (event) => { event.preventDefault(); choose(); });
+        b.addEventListener('click', choose);
+      });
+    } catch (e) {
+      if (input.value.trim() !== q) return;
+      results.innerHTML = '<div class="gsearch__empty">Search failed. Please try again.</div>';
+      results.hidden = false;
+    }
+  }, 200);
+  input.addEventListener('input', () => { hidden.value = ''; hide(); onInput?.(); search(); });
+  input.addEventListener('blur', () => setTimeout(hide, 180));
 }
 
 // ---------------------------------------------------------------------------
@@ -214,22 +226,32 @@ export async function findLifegroup(person, onAssigned) {
 export function addMemberDialog(g, onDone, { title = null, buttonText = 'Add to group', role = 'member' } = {}) {
   const modal = openModal({
     title: title || `Add member to ${g.name}`,
-    body: `<div class="field gsearch-field"><label>Person</label><div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="memberPick" aria-label="Search a person to add" placeholder="${g.gender ? `Search a ${g.gender === 'boys' ? 'boy' : 'girl'} by name or ID…` : 'Search by name or ID…'}" autocomplete="off" /></div><input type="hidden" id="memberId" />
-        <span class="help">Only registered people. A person can be in one Lifegroup at a time — adding them here moves them out of their current group.</span></div>
+    body: `<div class="field gsearch-field"><label>Person</label><div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="memberPick" aria-label="Search a person to add" placeholder="${g.gender ? `Search a ${g.gender === 'boys' ? 'boy' : 'girl'} by name or ID…` : 'Search by name or ID…'}" autocomplete="off" /><div class="gsearch__results" id="memberPickResults" hidden></div></div><input type="hidden" id="memberId" />
+        <span class="help">Type at least 2 letters, then select a registered person from the results. Typing a name alone does not select them. A person can belong to one Lifegroup at a time.</span><span class="help" id="memberPickError" role="alert" style="color:var(--danger,#bb3232)" hidden>Select a registered person from the search results before adding them.</span></div>
       <div class="form-grid mt-1"><div class="field"><label>Joined on</label><input type="date" id="joinedAt" value="${toISODate(new Date())}" /></div>
       <div class="field"><label>Role</label><select id="memberRole"><option value="member" ${role === 'member' ? 'selected' : ''}>Member</option><option value="assistant" ${role === 'assistant' ? 'selected' : ''}>Assistant</option><option value="leader" ${role === 'leader' ? 'selected' : ''}>Leader</option></select></div></div>`,
     footer: `<button class="btn" data-close>Cancel</button><button class="btn btn--primary" id="saveMember">${buttonText}</button>`,
   });
   modal.querySelector('[data-close]').onclick = closeModal;
-  personPicker(modal, { inputId: 'memberPick', hiddenId: 'memberId', sex: SEX_OF[g.gender] || null });
-  modal.querySelector('#saveMember').onclick = (e) => withLoading(e.currentTarget, async () => {
+  const pickerError = modal.querySelector('#memberPickError');
+  const pickInput = modal.querySelector('#memberPick');
+  const clearError = () => { pickerError.hidden = true; pickInput.removeAttribute('aria-invalid'); };
+  personPicker(modal, { inputId: 'memberPick', hiddenId: 'memberId', sex: SEX_OF[g.gender] || null, onSelect: clearError, onInput: clearError });
+  modal.querySelector('#saveMember').onclick = (e) => {
     const pid = Number(modal.querySelector('#memberId').value);
-    if (!pid) return toast('Choose a registered person first.', 'error');
-    try {
-      const r = await api.assignLifegroup(g.id, pid, { joined_at: modal.querySelector('#joinedAt').value, role: modal.querySelector('#memberRole').value, sex: SEX_OF[g.gender] || undefined });
-      closeModal(); toast(r.unchanged ? 'Already a member of this group.' : 'Member added.'); onDone(r);
-    } catch (ex) { toast(ex.message, 'error'); }
-  });
+    if (!pid) {
+      pickerError.hidden = false;
+      pickInput.setAttribute('aria-invalid', 'true');
+      pickInput.focus();
+      return;
+    }
+    return withLoading(e.currentTarget, async () => {
+      try {
+        const r = await api.assignLifegroup(g.id, pid, { joined_at: modal.querySelector('#joinedAt').value, role: modal.querySelector('#memberRole').value, sex: SEX_OF[g.gender] || undefined });
+        closeModal(); toast(r.unchanged ? 'Already a member of this group.' : 'Member added.'); onDone(r);
+      } catch (ex) { toast(ex.message, 'error'); }
+    });
+  };
 }
 
 /** Per-person edit menu used inside member lists: Move to another Lifegroup · Remove · Edit profile. */
