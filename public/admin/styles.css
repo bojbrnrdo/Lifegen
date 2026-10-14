@@ -1503,3 +1503,27 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
  .lifegroup-detail__member-menu{right:6px;max-width:calc(100% - 12px)}
 }
 @media(prefers-reduced-motion:reduce){.lifegroups-page__extra-head>svg:last-child,.lifegroup-detail__info>summary svg:last-child,.lifegroup-detail__progress>summary svg:last-child{transition:none}}
+
+
+/* Lifegroups: compact, permission-gated Network / Cell Leader / Member removal. */
+.lf-remove{display:grid;gap:17px}
+.lf-remove__tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:5px;background:#f5f9f6;border:1px solid #dae9dd;border-radius:13px}
+.lf-remove__tabs button{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;min-height:45px;padding:10px 8px;border:0;border-radius:9px;background:transparent;color:#557160;font-size:.84rem;line-height:1.2;font-weight:650;font-family:inherit;cursor:pointer}
+.lf-remove__tabs button svg{flex:none}
+.lf-remove__tabs button[aria-selected="true"]{background:#fff;color:#235d3d;box-shadow:0 1px 7px #244b2d1c;border:1px solid #d7e8db}
+.lf-remove__tabs button:focus-visible,.lf-remove__field select:focus-visible{outline:2px solid #308556;outline-offset:2px}
+.lf-remove [role="tabpanel"][hidden]{display:none!important}
+.lf-remove form{display:grid;gap:17px}
+.lf-remove__fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));align-items:end;gap:12px}
+.lf-remove__field{display:flex;flex-direction:column;gap:8px;min-width:0;font-weight:650;font-size:.84rem;color:#315541}
+.lf-remove__field select{min-height:45px;width:100%;min-width:0;border:1px solid #d9e4dc;border-radius:9px;padding:9px 11px;color:#284732;background:#fff;font:inherit}
+.lf-remove__field select:disabled{opacity:.6;background:#f1f4f1}
+.lf-remove__impact{padding:16px 18px;border:1px solid #e3eae3;border-radius:11px;background:#f9fcf9;color:#2f4937}
+.lf-remove__impact strong{display:block;color:#1d4930;font-weight:700;margin-bottom:7px}
+.lf-remove__impact p{font-size:.85rem;line-height:1.5;margin:0;color:#5b7160}
+.lf-remove__impact small{display:block;margin-top:8px;font-size:.76rem;color:#879689}
+.lf-remove__submit{justify-self:end;display:inline-flex;align-items:center;gap:7px;border-color:#d7b4ae!important;color:#a33b37!important;background:#fff!important}
+.lf-remove__submit:hover{background:#fff1ed!important;border-color:#bb6961!important}
+.lf-remove__footer-note{display:flex;align-items:center;gap:8px;margin:0;color:#6d8273;font-size:.79rem}
+.lf-remove__footer-note svg{color:#378254;flex:none}
+@media(max-width:620px){.lf-remove__tabs button{flex-direction:column;gap:5px;font-size:.73rem}.lf-remove__fields{grid-template-columns:1fr}.lf-remove__submit{justify-self:stretch;justify-content:center}}

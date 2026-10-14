@@ -19,7 +19,7 @@ test('sidebar and page are named Lifegroups, without changing its route',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page, /<h1>Lifegroups<\/h1>/);
  assert.match(page, /id="treeCanvas"/);
- assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters\)/);
+ assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters,\{onRemove:can\('lifegroups:manage'\)\?/);
  assert.match(page, /createAddNewModal/);
  assert.match(page, /id="treeRefresh"/);
  assert.match(page, /id="treeStatus"/);
