@@ -9,3 +9,6 @@ node_modules/
 private-data/
 test-results/
 playwright-report/
+# Local media import sources and optional image tooling; ship only public assets.
+google_drive/
+.venv/

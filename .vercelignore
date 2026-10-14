@@ -10,3 +10,5 @@ test-results/
 playwright-report/
 *.log
 .env.*
+google_drive/
+.venv/
