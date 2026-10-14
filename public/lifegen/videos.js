@@ -111,7 +111,11 @@
             const note = frame.closest(".vcard")?.querySelector("[data-play-note]");
             if (note && note.dataset.playNote) note.textContent = note.dataset.playNote;
             const v = document.createElement("video");
-            Object.assign(v, { src, controls: true, preload: "metadata", playsInline: true, autoplay: true });
+            // preload="auto": the visitor has already committed to watching by
+            // tapping the cover, so let the browser buffer ahead instead of
+            // refilling the pipeline mid-playback. On this 4K file that is the
+            // difference between a clean picture and a stutter that reads as blur.
+            Object.assign(v, { src, controls: true, preload: "auto", playsInline: true, autoplay: true });
             v.setAttribute("aria-label", label);
             if (frame.dataset.poster) v.poster = frame.dataset.poster;
             if (onFail) v.addEventListener("error", onFail, { once: true });

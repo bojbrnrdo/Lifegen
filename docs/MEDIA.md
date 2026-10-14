@@ -44,6 +44,35 @@ The highlight slot names the church's own copy of the video in
 `mdat`, so it starts playing while it downloads). Its 2 min 13 sec running time
 is the same one the caption on the page shows.
 
+### Why this file is kept at 3840 × 2160
+
+The page renders the highlight 960 px wide, so the 4K frame is downscaled 4×
+on screen — which is exactly what makes it look clean, because that averaging
+hides the source's compression blocking. Measured against a reference rendered
+at the displayed size (960 × 540), the committed file scores **VMAF 99.9**.
+
+Re-encoding was tested rather than assumed, and it loses:
+
+| candidate | VMAF at displayed size | full-size file |
+| --- | --- | --- |
+| **committed 4K file** | **99.9** | 62 MB |
+| rebuild 1080p, 5 Mbps | 95.7 | ~79 MB |
+| rebuild 720p, 5 Mbps | 96.4 | ~79 MB |
+| rebuild 1080p, 7 Mbps | 98.0 | 111 MB (over GitHub's limit) |
+
+The source is an upscale — downscaling it to 1080p *triples* measured
+sharpness (73 → 212) and cuts 16-px blocking by a third — so no re-encode can
+recover detail that was never in the file, while every candidate either scores
+lower or is too large to publish. Playback was verified in a browser: 235/235
+frames decoded, 0 dropped, first frame 378 ms after the tap, no black frames
+on seek. `preload="auto"` is set once the visitor taps the cover so the
+pipeline stays fed.
+
+If a better master ever exists (the source was uploaded as
+`GRAND_CAMPUS_HANGOUT-compressed.mp4`), replacing this file with it is the only
+change that would genuinely raise clarity — re-run `npm run video:add` and keep
+the caption's running time in step.
+
 Putting a new video there is one command — it checks the file really is an MP4,
 reads its true duration and picture size straight out of the MP4, refuses
 anything GitHub would reject, and copies it into place:

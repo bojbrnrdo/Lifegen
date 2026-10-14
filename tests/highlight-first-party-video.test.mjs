@@ -48,6 +48,9 @@ test('a slot with a site-owned file is probed once and played in the first-party
  assert.match(native,/document\.createElement\("video"\)/);
  assert.match(native,/controls: true/);
  assert.match(native,/playsInline: true/);
+ // Buffer ahead once the visitor has committed: this file is 4K, and a
+ // starved pipeline drops frames, which reads to a viewer as blur.
+ assert.match(native,/preload: "auto"/,'the first-party player buffers ahead, not just metadata');
  assert.match(native,/frame\.replaceChildren\(v\)/);
  assert.match(native,/note\.textContent = note\.dataset\.playNote/,'the "Plays on…" note follows the player that actually runs');
  assert.doesNotMatch(native,/vplay-btn/,'the real player replaces the cover and its decorative button entirely');
