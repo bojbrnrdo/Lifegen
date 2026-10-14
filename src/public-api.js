@@ -25,6 +25,10 @@ function ageFromBirthdate(iso) {
   return age;
 }
 const normalizeName = (v) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+// Same acceptance as /^[^\s@]+@[^\s@]+\.[^\s@]+$/ (one @, no whitespace, a dot
+// inside the domain), but linear-time: that regex backtracks quadratically on
+// crafted input such as 'a@!.!.!.…', which would stall this public endpoint.
+const isEmailShape = (v) => { const at = v.indexOf('@'); return at > 0 && v.indexOf('@', at + 1) === -1 && !/\s/.test(v) && v.slice(at + 1).slice(1, -1).includes('.'); };
 
 // Cell leaders the public registration can offer for one Lifegroup gender:
 // active Lifegroups with a live leader person and the right gender, skipping the
@@ -264,7 +268,7 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
  const rawLeader=b.leader_person_id==null||b.leader_person_id===''?null:Number(b.leader_person_id);
  if(rawLeader!==null&&(!Number.isSafeInteger(rawLeader)||rawLeader<1))throw httpError(400,'Choose a leader from the list.');
  if(name.length<2||name.length>200)throw httpError(400,'Please enter your full name.');
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>200)throw httpError(400,'Please enter a valid email address.');
+ if(email.length>200||!isEmailShape(email))throw httpError(400,'Please enter a valid email address.');
  if(!isIsoDate(birthdate))throw httpError(400,'Please enter your birthday.');
  const age=ageFromBirthdate(birthdate);
  if(!Number.isInteger(age)||age<1||age>120)throw httpError(400,'Please enter a valid birthday.');
