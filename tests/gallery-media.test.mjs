@@ -75,7 +75,7 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
 });
 
 test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
-  const testimony = page.match(/<div class="story-grid story-grid--testimonies">\s*<article class="vcard vcard--testimony-featured reveal"[^>]*>(.*?)<\/article>/s)[1];
+  const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
   const url = 'https://docs.google.com/videos/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/edit?usp=drive_link';
   assert.ok(testimony.includes(`data-video="${url}"`));
   assert.ok(testimony.includes(`href="${url}"`));
@@ -88,7 +88,7 @@ test('Janime Rivera testimony is in the testimony video frame with a direct fall
 });
 
 test('the testimony thumbnail is a 16:9 widescreen LCF title card', () => {
-  const testimony = page.match(/<div class="story-grid story-grid--testimonies">\s*<article class="vcard vcard--testimony-featured reveal"[^>]*>(.*?)<\/article>/s)[1];
+  const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
   const poster = testimony.match(/data-poster="([^"]+)"/)[1];
   const cover = assets(poster);
   const size = sniffImage(cover);
