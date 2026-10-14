@@ -71,7 +71,29 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   const poster = highlight.match(/data-poster="([^"]+)"/)[1];
   assert.equal(poster, '/brand/gallery/drive/grand-campus-hangout-cover.webp');
   assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
-  assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 2);
+  assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 1);
+});
+
+test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
+  const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
+  const url = 'https://docs.google.com/videos/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/edit?usp=drive_link';
+  assert.ok(testimony.includes(`data-video="${url}"`));
+  assert.ok(testimony.includes(`href="${url}"`));
+  assert.match(testimony, /data-ratio="16\/9"/);
+  assert.match(testimony, /<h4>Janime Rivera<\/h4>/);
+  const poster = testimony.match(/data-poster="([^"]+)"/)[1];
+  assert.equal(poster, '/brand/gallery/drive/janime-rivera-testimony-cover.webp');
+  assert.match(testimony, /7 min 19 sec · Plays on Google Drive/);
+  assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
+});
+
+test('the testimony thumbnail is a 16:9 widescreen LCF title card', () => {
+  const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
+  const poster = testimony.match(/data-poster="([^"]+)"/)[1];
+  const cover = assets(poster);
+  const size = sniffImage(cover);
+  assert.equal(size.mime, 'image/webp');
+  assert.deepEqual([size.width, size.height], [1280, 720]);
 });
 
 test('the highlight thumbnail is a 16:9 crop of the supplied title card', () => {

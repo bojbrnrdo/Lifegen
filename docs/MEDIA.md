@@ -8,7 +8,8 @@ Source: [LIFEGEN Drive folder](https://drive.google.com/drive/folders/1U5ipH3vXo
 - The root **LIFEGEN PNG artwork** fills the poster card in the photo deck. It is artwork, not a claimed video still.
 - **GRAND CAMPUS HANGOUT.mp4** replaces the previous Facebook reel in the highlight frame. Drive metadata reports 3840 × 2160, 133.06 seconds, and 602,817,546 bytes. The frame retains the correct 16:9 ratio.
 - The highlight's **thumbnail** is the video's own title card, the supplied screenshot `GRAND CAMPUS HANGOUT title card.png` (“GRAND CAMPUS HANGOUT 2026 / LIGHT UP THE CAMPUS”). It is cropped to the frame's 16:9 and centred on that existing lettering, then written as the 1280 × 720 `grand-campus-hangout-cover.webp`. Nothing was redrawn, generated or retyped; the deck's poster card keeps the LIFEGEN artwork.
-- `VIDEOS / TESTIMONY` and `PHOTOS / CAMPUS MINISTRY` returned no files. No unrelated media or invented testimonies were inserted.
+- **JANIME RIVERA TESTIMONYY** fills the first testimony frame under Stories of Grace (`1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ`, 7 min 19 sec). The frame retains the 16:9 ratio and click-to-load embed with an always-visible fallback link. Its thumbnail is the supplied in-video title card featuring the LCF Lifegiver Church of Faith logo lockup on a black background, rendered as the 1280 × 720 `janime-rivera-testimony-cover.webp`. The second testimony slot remains as a "coming soon" placeholder.
+- `PHOTOS / CAMPUS MINISTRY` returned no files. No unrelated media or invented testimonies were inserted.
 
 ## Quality and loading
 
