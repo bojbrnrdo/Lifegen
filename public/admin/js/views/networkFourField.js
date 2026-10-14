@@ -22,12 +22,12 @@ function picker(host, {gender, used, initial=null, label, select}) {
   input.addEventListener('input',()=>{
     version++;clearTimeout(timer);selection=null;select(null);hide();
     const seq=version,q=input.value.trim();
-    if(q.length<2||!gender())return;
+    if(q.length<2)return;
     timer=setTimeout(async()=>{
       try{
         const {people=[]}=await api.search(q);
         if(version!==seq||!wrap.isConnected||input.value.trim()!==q)return;
-        const matches=people.filter(p=>(!p.sex||p.sex===sexOf[gender()])&&!used().has(Number(p.id))).slice(0,12);
+        const matches=people.filter(p=>(!gender()||!p.sex||p.sex===sexOf[gender()])&&!used().has(Number(p.id))).slice(0,12);
         results.replaceChildren();
         if(!matches.length){
           const none=document.createElement('div');none.className='gsearch__empty';
@@ -37,7 +37,7 @@ function picker(host, {gender, used, initial=null, label, select}) {
           const name=p.full_name||[p.first_name,p.last_name].filter(Boolean).join(' ')||p.person_code;
           const b=document.createElement('button');b.type='button';b.className='gsearch__item';
           b.textContent=name+(p.person_code?' · '+p.person_code:'');
-          const choose=()=>{const person={id:Number(p.id),name};set(person);select(person);};
+          const choose=()=>{const person={id:Number(p.id),name,sex:p.sex||null};set(person);select(person);};
           b.addEventListener('pointerdown',e=>{e.preventDefault();choose();});
           b.addEventListener('click',choose);
           results.append(b);
@@ -83,7 +83,14 @@ export function createFourFieldNetwork(onSaved){
   };
   const leaderPicker=picker(modal.querySelector('#netFourLeader'),{
     gender:()=>state.gender,label:'Network Leader',
-    used:()=>ids(state.leader),select:p=>{state.leader=p;clear();}
+    used:()=>ids(state.leader),select:p=>{
+      state.leader=p;
+      if(p?.sex&&!state.gender){
+        state.gender=p.sex==='male'?'boys':'girls';
+        modal.querySelector('input[name=gender][value='+state.gender+']').checked=true;
+      }
+      clear();
+    }
   });
   bindNetworkLeaderRegistration(modal,{
     genderNow:()=>state.gender,onError:fail,
