@@ -91,6 +91,15 @@ export function simplifyNetworkDetail(main, { cells, cal, manage }) {
       actions.append(report);
     }
   }
+  if (!manage) {
+    aside.querySelector('h2').textContent = 'Explore';
+    aside.querySelector('.network-detail__secondary').textContent = 'Select a Lifegroup to explore its members and activity.';
+    const link = document.createElement('a');
+    link.href = '#/lifegroups';
+    link.className = 'network-detail__action';
+    link.textContent = 'Browse Lifegroups →';
+    actions.append(link);
+  }
   if (notes?.textContent?.trim()) {
     const details = document.createElement('details');
     details.className = 'network-detail__extra';
