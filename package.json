@@ -20,7 +20,8 @@
     "package:vercel": "node scripts/package-vercel.mjs",
     "test:vip-design-integration": "node tests/vip-design-integration.mjs",
     "test:vip-gift-integration": "node tests/vip-gift-integration.mjs",
-    "assets:version": "node scripts/version-assets.mjs"
+    "assets:version": "node scripts/version-assets.mjs",
+    "video:add": "node scripts/add-video.mjs"
   },
   "dependencies": {
     "compression": "1.8.1",

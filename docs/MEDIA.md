@@ -39,7 +39,15 @@ The highlight slot names the church's own copy of the video in
      data-poster="/brand/gallery/drive/grand-campus-hangout-cover.webp"></div>
 ```
 
-`public/lifegen/videos.js` probes that file once with a same-origin `HEAD`
+Putting the file there is one command — it checks the file really is an MP4,
+reads its true duration and picture size straight out of the MP4, refuses
+anything GitHub would reject, and copies it into place:
+
+```bash
+npm run video:add -- ~/Downloads/GRAND-CAMPUS-HANGOUT.mp4 --as grand-campus-hangout-720p.mp4
+```
+
+`public/lifegen/videos.js` then probes that file once with a same-origin `HEAD`
 request when the visitor taps the cover. If the file is on the site, the video
 is played in the same first-party player the testimony videos use (real
 `<video controls>`, 16:9, transparent surround, no provider chrome and no
