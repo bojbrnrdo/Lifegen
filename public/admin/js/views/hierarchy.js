@@ -30,6 +30,14 @@ const CSS = [
  ".lfg__blank b{display:block;font-size:17px;color:#204c33;margin-bottom:7px}.lfg__blank p{font-size:13px;color:#71867a;line-height:1.6;margin:0}",
  "@media(max-width:700px){.lfg__heading{top:61px;left:14px}.lfg__buttons{left:12px;right:auto;top:12px}.lfg__svg{height:65vh;min-height:440px}.lfg__hint{font-size:10px}.lfg__panel{bottom:38px;left:12px}}",
  "@media(prefers-reduced-motion:reduce){.lfg__buttons button{transition:none}}"
+,
+'.lfg__node .touch-hit{fill:transparent!important;stroke:none!important;pointer-events:all}',
+'.lfg__node text{cursor:pointer}',
+'.lfg__node[aria-expanded="true"] circle:not(.touch-hit){fill:#dbf1e2;stroke:#187447}',
+'.lfg__node:focus-visible{outline:none}',
+'.lfg__node:focus-visible circle:not(.touch-hit){stroke:#165f3b;stroke-width:3.5}',
+'.lfg__nodes-live{position:absolute;left:15px;bottom:10px;font-size:11px;color:#718876;pointer-events:none;max-width:60%}',
+'@media(max-width:700px){.lfg__nodes-live{max-width:90%;left:12px;bottom:10px}.lfg__hint{display:none}.lfg__svg{height:67vh;min-height:500px}}'
 ].join('\n');
 function ensureCSS(){
  if(document.getElementById('lifegen-node-graph-style'))return;
@@ -74,6 +82,7 @@ export function arrangeLifegroupTree(roots){
  let row=0;const all=[],lines=[];
  function walk(node,depth,parent){
   node.x=100+depth*265;
+  node.parentKey=parent?.key||null;
   for(const child of node.children)walk(child,depth+1,node);
   node.y=node.children.length?(node.children[0].y+node.children[node.children.length-1].y)/2:70+(row++*46);
   all.push(node);
@@ -82,21 +91,41 @@ export function arrangeLifegroupTree(roots){
  for(const root of roots)walk(root,0,null);
  return {nodes:all,lines,height:Math.max(320,140+row*46),width:Math.max(420,...all.map(n=>n.x+240))};
 }
+/** Smooth cubic ease-out for OSINT-style branch transitions. */
+export function hierarchyEasing(progress) {
+ const t=Math.max(0,Math.min(1,Number(progress)||0));
+ return 1-(1-t)*(1-t)*(1-t);
+}
+/** Curved connection between leader and child nodes. */
+export function hierarchyCurve(parent,child) {
+ const x1=parent.x+8,x2=child.x-8,y1=parent.y,y2=child.y;
+ const bend=(x1+x2)/2;
+ return 'M'+x1+' '+y1+' C'+bend+' '+y1+' '+bend+' '+y2+' '+x2+' '+y2;
+}
 export async function renderHierarchy(target,networks,groups,filters={}){
  ensureCSS();
  const old=target.__lifegenTree||{};
+ old.cleanup?.();
  const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
- const state={expanded,members,loading,selected:old.selected||null};
+ const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
  target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a network leader to explore its Lifegroups</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
  const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
+ let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
+ let observer=null;
+ const reducedMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
- function fit(){
+ function fit(fitAll=false){
   const width=svg.clientWidth||900,height=svg.clientHeight||550;
-  k=Math.max(.22,Math.min(1.25,(width-60)/layout.width,(height-65)/layout.height));
-  panX=(width-layout.width*k)/2;
-  panY=(height-layout.height*k)/2;
+  if(width<700&&!fitAll&&layout.nodes.length){
+   k=.94;const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
+   panX=27-root.x*k;
+   panY=(layout.nodes.length<=6?height*.43:125)-root.y*k;
+  }else{
+   k=Math.max(.22,Math.min(1.15,(width-60)/layout.width,(height-65)/layout.height));
+   panX=(width-layout.width*k)/2;panY=(height-layout.height*k)/2;
+  }
   updateTransform();
  }
  function details(node){
@@ -108,34 +137,136 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
    (node.kind==='network'&&node.count===0?'<p>No cell leaders are connected yet. Assign a Lifegroup to this Network using its Edit screen.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
- function draw(shouldFit=false){
+ function focusNode(key){
+  const n=layout.nodes.find(node=>node.key===key);
+  if(!n)return;
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
+  const width=svg.clientWidth||900,height=svg.clientHeight||550,mobile=width<700;
+  const targetK=mobile?.82:Math.max(.8,Math.min(k,1.15));
+  const goalX=(mobile?31:Math.min(width*.23,225))-n.x*targetK;
+  const goalY=height*.45-n.y*targetK;
+  if(reducedMotion){k=targetK;panX=goalX;panY=goalY;updateTransform();return;}
+  const old={k,panX,panY},started=performance.now();
+  function frame(now){
+   if(!svg.isConnected)return;
+   const t=hierarchyEasing((now-started)/470);
+   k=old.k+(targetK-old.k)*t;panX=old.panX+(goalX-old.panX)*t;panY=old.panY+(goalY-old.panY)*t;
+   updateTransform();
+   if(t<1)cameraFrame=requestAnimationFrame(frame);else cameraFrame=0;
+  }
+  cameraFrame=requestAnimationFrame(frame);
+ }
+ function draw(shouldFit=false,focusKey=null){
+  if(animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;}
+  const oldPos=new Map(previousPositions);
+  const oldEdges=new Set(previousEdges);
+  const oldNodeSpecs=new Map(previousNodeSpecs);
   layout=arrangeLifegroupTree(buildLifegroupTree(networks,groups,filters,expanded,members,loading));
-  edgeLayer.innerHTML=layout.lines.map(pair=>{
-   const p=pair[0],c=pair[1],x=(p.x+c.x)/2;
-   return '<path class="lfg__edge" d="M'+(p.x+7)+' '+p.y+' C'+x+' '+p.y+' '+x+' '+c.y+' '+(c.x-7)+' '+c.y+'"/>';
+  const parents=new Map(layout.lines.map(([parent,child])=>[child.key,parent]));
+  const edgePairs=layout.lines.map(([parent,child])=>({parent:parent.key,child:child.key,key:parent.key+'>'+child.key}));
+  const newEdges=new Set(edgePairs.map(edge=>edge.key));
+  const activeKeys=new Set(layout.nodes.map(n=>n.key));
+  const exitingNodes=[...oldNodeSpecs.values()].filter(n=>!activeKeys.has(n.key));
+  const exitingEdges=[...previousPairSpecs.values()].filter(edge=>!newEdges.has(edge.key));
+  const allEdges=edgePairs.concat(exitingEdges);
+  const allNodes=layout.nodes.concat(exitingNodes);
+  edgeLayer.innerHTML=allEdges.map(edge=>'<path class="lfg__edge" data-edge="'+esc(edge.key)+'"'+(newEdges.has(edge.key)?'':' data-exit="true"')+'/>').join('');
+  nodeLayer.innerHTML=allNodes.map(n=>{
+   const opened=expanded.has(n.key),canExpand=n.kind!=='member'&&n.count>0;
+   const action=n.kind==='member'?'Open profile':opened?'Collapse branch':'Expand branch';
+   return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+esc(n.kind)+'" role="button" tabindex="0" aria-label="'+esc(action+': '+n.name)+'"'+
+    (n.kind==='member'?'':' aria-expanded="'+(opened?'true':'false')+'"')+'>'+
+    '<circle class="touch-hit" r="22"/><circle r="8.5"/>'+
+    (canExpand?'<text class="symbol" text-anchor="middle" y="4">'+(opened?'−':'+')+'</text>':'')+
+    '<text x="19" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="19" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
   }).join('');
-  nodeLayer.innerHTML=layout.nodes.map(n=>{
-   const isOpen=expanded.has(n.key),canExpand=n.kind!=='member'&&n.count>0;
-   return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+n.kind+'" role="button" tabindex="0" aria-label="'+esc(n.name)+'" transform="translate('+n.x+','+n.y+')">'+
-    '<circle r="7.2"/>'+(canExpand?'<text class="symbol" text-anchor="middle" y="3">'+(isOpen?'−':'+')+'</text>':'')+
-    '<text x="15" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="15" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
-  }).join('');
+  const elements=new Map([...nodeLayer.querySelectorAll('[data-key]')].map(el=>[el.dataset.key,el]));
+  const paths=new Map([...edgeLayer.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,el]));
+  for(const [key,el] of elements)if(!activeKeys.has(key)){el.setAttribute('data-exit','true');el.setAttribute('aria-hidden','true');el.setAttribute('pointer-events','none');}
+  const origins=new Map();
+  for(const n of layout.nodes){
+   let origin=oldPos.get(n.key);
+   if(!origin){
+    const parent=parents.get(n.key);
+    origin=parent&&(oldPos.get(parent.key)||{x:parent.x,y:parent.y});
+   }
+   origins.set(n.key,origin||{x:n.x,y:n.y});
+  }
+  function paint(progress){
+   const ease=hierarchyEasing(progress);
+   const current=new Map();
+   for(const n of layout.nodes){
+    const from=origins.get(n.key),exists=oldPos.has(n.key);
+    const p={x:from.x+(n.x-from.x)*ease,y:from.y+(n.y-from.y)*ease};
+    current.set(n.key,p);
+    const el=elements.get(n.key);
+    el.setAttribute('transform','translate('+p.x+','+p.y+')');
+    el.setAttribute('opacity',String(exists?1:ease));
+   }
+   for(const n of exitingNodes){
+    const from=oldPos.get(n.key)||{x:n.x,y:n.y};
+    const anchor=layout.nodes.find(node=>node.key===n.parentKey)||oldNodeSpecs.get(n.parentKey)||n;
+    const p={x:from.x+(anchor.x-from.x)*ease,y:from.y+(anchor.y-from.y)*ease};
+    current.set(n.key,p);
+    const el=elements.get(n.key);
+    el.setAttribute('transform','translate('+p.x+','+p.y+')');
+    el.setAttribute('opacity',String(1-ease));
+   }
+   for(const edge of allEdges){
+    const from=current.get(edge.parent),to=current.get(edge.child);
+    const isNew=!oldEdges.has(edge.key);
+    const endPos=isNew?{x:from.x+(to.x-from.x)*ease,y:from.y+(to.y-from.y)*ease}:to;
+    const path=paths.get(edge.key);
+    path.setAttribute('d',hierarchyCurve(from,endPos));
+    path.style.opacity=String(newEdges.has(edge.key)?(isNew?ease:1):1-ease);
+   }
+   previousPositions=current;
+  }
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
-  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Lifegroups without a network are shown separately for assignment.</p>';}else{blank.hidden=true;}
-  if(first||shouldFit){fit();first=false;}else updateTransform();
-  for(const el of nodeLayer.querySelectorAll('[data-key]')){
-   const activateNode=()=>{const node=layout.nodes.find(n=>n.key===el.dataset.key);if(node)activate(node);};
+  if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Lifegroups are listed separately for assignment.</p>';}else blank.hidden=true;
+  if(first||shouldFit){fit();first=false;}
+  const animate=oldPos.size>0&&!reducedMotion;
+  if(!animate){
+   paint(1);
+   for(const el of nodeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+   for(const el of edgeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+   previousPositions=new Map([...previousPositions].filter(([key])=>activeKeys.has(key)));
+  }
+  else{
+   paint(0);
+   const start=performance.now();
+   const frame=now=>{
+    if(!svg.isConnected)return;
+    const t=Math.min(1,(now-start)/540);
+    paint(t);
+    if(t<1)animationFrame=requestAnimationFrame(frame);else{
+     animationFrame=0;
+     for(const el of nodeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+     for(const el of edgeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+     previousPositions=new Map([...previousPositions].filter(([key])=>activeKeys.has(key)));
+    }
+   };
+   animationFrame=requestAnimationFrame(frame);
+  }
+  previousEdges=newEdges;
+  previousNodeSpecs=new Map(layout.nodes.map(n=>[n.key,n]));
+  previousPairSpecs=new Map(edgePairs.map(edge=>[edge.key,edge]));
+  for(const [key,el] of elements){
+   if(!activeKeys.has(key))continue;
+   const activateNode=()=>{const node=layout.nodes.find(n=>n.key===key);if(node)activate(node);};
    el.addEventListener('click',activateNode);
    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activateNode();}});
   }
+  if(focusKey)focusNode(focusKey);
  }
  async function activate(node){
   details(node);
   if(node.kind==='member'){draw();return;}
-  if(expanded.has(node.key)){expanded.delete(node.key);draw(true);return;}
+  if(expanded.has(node.key)){expanded.delete(node.key);draw(false,node.key);return;}
   expanded.add(node.key);
+  draw(false,node.key);
   if(node.kind==='group'&&!members.has(node.key)&&!loading.has(node.key)){
-   loading.add(node.key);draw();
+   loading.add(node.key);draw(false,node.key);
    try{
     const response=await api.lifegroup(node.record.id);
     if(target.__lifegenTree!==state||!target.isConnected)return;
@@ -146,25 +277,44 @@ export async function renderHierarchy(target,networks,groups,filters={}){
     panel.hidden=false;panel.innerHTML='<strong>Unable to load members</strong><p>'+esc(error.message||'Please try again.')+'</p>';
    }finally{loading.delete(node.key);}
   }
-  if(target.__lifegenTree===state&&target.isConnected)draw(true);
+  if(target.__lifegenTree===state&&target.isConnected)draw(false,node.key);
  }
- target.querySelector('[data-action="fit"]').onclick=fit;
+ target.querySelector('[data-action="fit"]').onclick=()=>fit(true);
  target.querySelector('[data-action="collapse"]').onclick=()=>{expanded.clear();state.selected=null;panel.hidden=true;draw(true);};
- const zoom=amount=>{k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
+ const zoom=amount=>{if(cameraFrame)cancelAnimationFrame(cameraFrame);k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
  target.querySelector('[data-action="plus"]').onclick=()=>zoom(1.25);
  target.querySelector('[data-action="minus"]').onclick=()=>zoom(.8);
  svg.addEventListener('wheel',e=>{
   e.preventDefault();
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
   const rect=svg.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
   const next=Math.max(.2,Math.min(3,k*(e.deltaY<0?1.13:.88)));
   panX=x-(x-panX)*next/k;panY=y-(y-panY)*next/k;k=next;updateTransform();
  },{passive:false});
  svg.addEventListener('pointerdown',e=>{
   if(e.button!==0||e.target.closest('[data-key]'))return;
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
   drag={x:e.clientX,y:e.clientY,px:panX,py:panY};svg.setPointerCapture(e.pointerId);svg.classList.add('panning');
  });
  svg.addEventListener('pointermove',e=>{if(drag){panX=drag.px+e.clientX-drag.x;panY=drag.py+e.clientY-drag.y;updateTransform();}});
  const stop=()=>{drag=null;svg.classList.remove('panning');};
  svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+ state.cleanup=()=>{
+  if(animationFrame)cancelAnimationFrame(animationFrame);
+  if(cameraFrame)cancelAnimationFrame(cameraFrame);
+  observer?.disconnect();
+ };
  draw(true);
+ if(typeof ResizeObserver!=='undefined'){
+  let width=svg.clientWidth;
+  observer=new ResizeObserver(()=>{
+   if(!svg.isConnected)return;
+   const next=svg.clientWidth;
+   if(Math.abs(next-width)<20)return;
+   width=next;
+   if(cameraFrame)cancelAnimationFrame(cameraFrame);
+   fit();
+  });
+  observer.observe(svg);
+ }
 }
