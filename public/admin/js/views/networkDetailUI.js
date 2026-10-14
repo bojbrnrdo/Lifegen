@@ -15,19 +15,25 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   header.classList.add('network-detail__header');
   stats.classList.add('network-detail__stats');
   stats.removeAttribute('style');
-  const statCards = Array.from(stats.children);
-  if (statCards[2]) statCards[2].querySelector('.stat__label').textContent = 'Members';
-  if (statCards[3]) {
-    const label = statCards[3].querySelector('.stat__label');
-    const value = statCards[3].querySelector('.stat__value');
-    label.textContent = 'Meetings this week';
-    const summary = cal?.summary;
-    value.textContent = summary ? String(summary.met_this_week ?? 0) + ' / ' + String(summary.groups ?? 0) : '—';
-    const desc = statCards[3].querySelector('.small.muted');
-    if (desc) desc.remove();
+  // Present only the three roles and an optional attendance metric.
+  const [leadersCard, duplicateCellCard, memberCard, attendanceCard, extraCard] = Array.from(stats.children);
+  if (leadersCard) {
+    leadersCard.querySelector('.stat__label').textContent = 'Cell Leaders';
+    leadersCard.querySelector('.stat__value').textContent = String(cells.length);
+    leadersCard.querySelector('.small.muted')?.remove();
   }
-  if (statCards[4]) statCards[4].remove();
-
+  duplicateCellCard?.remove();
+  if (memberCard) {
+    memberCard.querySelector('.stat__label').textContent = 'Members';
+    memberCard.querySelector('.small.muted')?.remove();
+  }
+  if (attendanceCard) {
+    attendanceCard.querySelector('.stat__label').textContent = 'Meetings this week';
+    const summary = cal?.summary;
+    attendanceCard.querySelector('.stat__value').textContent = summary ? String(summary.met_this_week ?? 0) : '—';
+    attendanceCard.querySelector('.small.muted')?.remove();
+  }
+  extraCard?.remove();
   // Reuse existing cell-team records: only the leader and member count are
   // visible until the person opens that group.
   structure.classList.add('network-detail__structure');
@@ -42,7 +48,6 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
   if (extraEdit) extraEdit.remove();
 
   const leaderChips = node?.querySelector('#addCellLeader')?.closest('.row') || null;
-  const notes = structure.querySelector('.tree__root > .small.muted');
   const workspace = document.createElement('div');
   workspace.className = 'network-detail__workspace';
   structure.before(workspace);
@@ -73,15 +78,11 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     quickButton('netCreateGroup', 'Add Cell Leader', '+');
     quickButton('netQuickAddMember', 'Add member', '+', !cells.length);
     if (leaderChips) {
-      const leaderButton = leaderChips.querySelector('#addCellLeader');
-      if (leaderButton) {
-        leaderButton.classList.add('network-detail__action');
-        leaderButton.textContent = '＋ Add to leader team';
-        actions.append(leaderButton);
-      }
+      // Older Network Leader team assignments remain accessible without adding
+      // a second, confusing Cell Leader button to the primary workflow.
       const leaders = document.createElement('details');
       leaders.className = 'network-detail__extra';
-      leaders.innerHTML = '<summary>Leader team assignments</summary>';
+      leaders.innerHTML = '<summary>Existing leader team</summary>';
       leaders.append(leaderChips);
       aside.querySelector('#netExtras').append(leaders);
     }
@@ -100,13 +101,6 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     link.className = 'network-detail__action';
     link.textContent = 'Browse Cell Leaders →';
     actions.append(link);
-  }
-  if (notes?.textContent?.trim()) {
-    const details = document.createElement('details');
-    details.className = 'network-detail__extra';
-    details.innerHTML = '<summary>Network notes</summary>';
-    details.append(notes);
-    aside.querySelector('#netExtras').append(details);
   }
 
   const history = document.createElement('details');
