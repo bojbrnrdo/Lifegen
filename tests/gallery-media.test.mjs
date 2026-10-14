@@ -69,9 +69,24 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   assert.match(highlight, /data-ratio="16\/9"/);
   assert.match(highlight, /<h4>Grand Campus Hangout<\/h4>/);
   const poster = highlight.match(/data-poster="([^"]+)"/)[1];
-  assert.equal(sniffImage(assets(poster)).width, 1280);
+  assert.equal(poster, '/brand/gallery/drive/grand-campus-hangout-cover.webp');
   assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
   assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 2);
+});
+
+test('the highlight thumbnail is a 16:9 crop of the supplied title card', () => {
+  const highlight = page.match(/<article class="vcard reveal vcard-feature"[^>]*>(.*?)<\/article>/s)[1];
+  const poster = highlight.match(/data-poster="([^"]+)"/)[1];
+  const cover = assets(poster);
+  const size = sniffImage(cover);
+  assert.equal(size.mime, 'image/webp');
+  // Drop-in shape for the 16:9 frame, and for a 1280 × 720 video thumbnail.
+  assert.deepEqual([size.width, size.height], [1280, 720]);
+  // The supplied title card is the only artwork; the deck poster is untouched.
+  assert.notEqual(sha(cover), manifest.items[0].fullSha256);
+  assert.equal(assets('/brand/gallery/drive/lifegen-artwork-preview.webp').length,
+               manifest.items[0].previewBytes);
+  assert.doesNotMatch(page, /lifegen-highlight-cover/);
 });
 
 test('landing banner and logos use the supplied LIFEGEN artwork, without duplicate overlays', () => {

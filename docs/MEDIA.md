@@ -5,8 +5,9 @@ Source: [LIFEGEN Drive folder](https://drive.google.com/drive/folders/1U5ipH3vXo
 ## Placement
 
 - All **48 JPEGs** from `PHOTOS / LIFEGEN` fill the existing photo deck under Stories & highlights. Similar photos are kept; nothing was discarded as a duplicate.
-- The root **LIFEGEN PNG artwork** fills the poster card and supplies the highlight's local cover image. It is artwork, not a claimed video still.
+- The root **LIFEGEN PNG artwork** fills the poster card in the photo deck. It is artwork, not a claimed video still.
 - **GRAND CAMPUS HANGOUT.mp4** replaces the previous Facebook reel in the highlight frame. Drive metadata reports 3840 × 2160, 133.06 seconds, and 602,817,546 bytes. The frame retains the correct 16:9 ratio.
+- The highlight's **thumbnail** is the video's own title card, the supplied screenshot `GRAND CAMPUS HANGOUT title card.png` (“GRAND CAMPUS HANGOUT 2026 / LIGHT UP THE CAMPUS”). It is cropped to the frame's 16:9 and centred on that existing lettering, then written as the 1280 × 720 `grand-campus-hangout-cover.webp`. Nothing was redrawn, generated or retyped; the deck's poster card keeps the LIFEGEN artwork.
 - `VIDEOS / TESTIMONY` and `PHOTOS / CAMPUS MINISTRY` returned no files. No unrelated media or invented testimonies were inserted.
 
 ## Quality and loading
@@ -14,14 +15,14 @@ Source: [LIFEGEN Drive folder](https://drive.google.com/drive/folders/1U5ipH3vXo
 - Full-size JPEGs are **byte-identical** to the downloaded originals. SHA-256 checksums and source filenames are recorded in `public/brand/gallery/drive/manifest.json`.
 - Full-size artwork is **lossless WebP**, with decoded RGBA pixels verified against the PNG by the import script: 4,372,716 → 2,021,956 bytes (54% smaller).
 - Deck previews are at most 512 px, WebP quality 92. These are resized, lossy **display previews**, not replacements for the originals. The deck's roughly 252 CSS-pixel cards get approximately 2× resolution. Whole photos remain visible, without cropping people's faces from landscape groups.
-- The 49 previews total **3,040,670 bytes** versus **19,833,282 bytes** for the source images (about **85% less**). They are lazy-loaded; full-size files load only when opened in the lightbox. The separate 1280 px highlight cover is not included in that preview total.
+- The 49 previews total **3,040,670 bytes** versus **19,833,282 bytes** for the source images (about **85% less**). They are lazy-loaded; full-size files load only when opened in the lightbox. The separate 1280 × 720 highlight thumbnail (73,346 bytes, WebP quality 92) is not included in that preview total.
 - Video remains externally hosted and **was not locally recompressed**: its 603 MB size exceeds the Drive connector's 100 MB download limit. The original is untouched; Drive controls its playback renditions. No claim is made that a Drive rendition is lossless.
 - The Drive player mounts only after the visitor presses Play, with fullscreen support and an always-visible “Open video in a new tab” fallback. There is no pre-play request to Drive, and no broadening of the site's content-security policy.
 - Drive sharing was already enabled for anyone with the link. Permissions were not modified. The returned public permission allowed editing; the owner should consider changing public access to **Viewer** in Drive.
 
 ## Rebuilding
 
-Download the same 48 JPEGs and the root artwork into the ignored `google_drive/` folder. Keep their source filenames; the artwork is named `LIFEGEN` without an extension.
+Download the same 48 JPEGs, the root artwork and the title-card screenshot into the ignored `google_drive/` folder. Keep their source filenames; the artwork is named `LIFEGEN` without an extension and the screenshot is named `GRAND CAMPUS HANGOUT title card.png`.
 
 ```sh
 python -m venv .venv
@@ -31,7 +32,7 @@ npm run build
 npm test
 ```
 
-This writes deployable assets and the manifest, and updates the existing deck's cards in `public/lifegen/index.html`. Python/Pillow are import-time tools only; production needs no new dependencies. Raw downloads, the Python environment, browser tooling and screenshots are excluded from Git and deployment. `npm test` checks completeness, file hashes, image dimensions, preview size savings and highlight placement.
+This writes deployable assets and the manifest, and updates the existing deck's cards in `public/lifegen/index.html`. Python/Pillow are import-time tools only; production needs no new dependencies. Raw downloads, the Python environment, browser tooling and screenshots are excluded from Git and deployment. `npm test` checks completeness, file hashes, image dimensions, preview size savings, the 1280 × 720 highlight thumbnail and highlight placement.
 
 ## Verification
 
