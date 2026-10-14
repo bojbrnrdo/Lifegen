@@ -16,8 +16,8 @@
     "sha256": "6bbabe73baa001a7160b09687d1cd9bed92218bce352594fed913d0b63e0b061"
   },
   "/lifegen/videos.js": {
-    "version": "2.4.4",
-    "sha256": "a0de6763803d96c5b342cf05afbd077f763c8810d6f063c83b86db975a55dae9"
+    "version": "2.4.5",
+    "sha256": "c6a2343ff91ebc55fa44e79fe93d722c9f0b1f5222a3a6aab1eabaca0d2b24e1"
   },
   "/vendor/lucide-subset.min.js": {
     "version": "2.3.0",
