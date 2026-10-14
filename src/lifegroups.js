@@ -347,6 +347,20 @@ async function saveGroup(body, actor, id = null) {
     if (id && !existing) throw httpError(404, 'Lifegroup not found.');
     const data = validateGroupInput(body, existing);
     await validateGroupReferences(client, data, id);
+    if (data.network_id && data.leader_person_id && data.is_active) {
+      const network = (await client.query('SELECT leader_person_id FROM networks WHERE id=$1', [data.network_id])).rows[0];
+      if (network && Number(network.leader_person_id) !== Number(data.leader_person_id)) {
+        const used = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups
+          WHERE network_id=$1 AND is_active AND id<>coalesce($2,0)
+            AND (leader_person_id IS DISTINCT FROM $3)`,
+          [data.network_id,id,network.leader_person_id])).rows[0].n);
+        if (used >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409,'Network has reached its 12 Cell Leader limit.');
+        const duplicate = (await client.query(`SELECT id FROM lifegroups WHERE network_id=$1 AND is_active
+          AND leader_person_id=$2 AND id<>coalesce($3,0) LIMIT 1`,
+          [data.network_id,data.leader_person_id,id])).rows[0];
+        if (duplicate) throw httpError(409,'This Cell Leader already leads a Cell in the Network.');
+      }
+    }
     if (id) {
       const { rows } = await client.query(`UPDATE lifegroups SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,network_id=$5,
         network_manual=$6,network=$7,area=$8,schedule_day=$9,schedule_time=$10,category=$11,capacity=$12,venue=$13,notes=$14,
@@ -415,9 +429,9 @@ async function createNetworkStructure(body, actor) {
       }
     }
     const existingNetwork = (await client.query(
-      'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',
-      [input.leader_person_id])).rows[0];
-    if (existingNetwork) throw httpError(409,'This Network Leader already leads an active Network.');
+      'SELECT id FROM networks WHERE leader_person_id=ANY($1::int[]) AND is_active LIMIT 1',
+      [input.person_ids])).rows[0];
+    if (existingNetwork) throw httpError(409,'One of the selected people already leads an active Network.');
     const currentMemberships = (await client.query(
       'SELECT person_id FROM lifegroup_memberships WHERE person_id=ANY($1::int[]) AND left_at IS NULL LIMIT 1',
       [input.person_ids])).rows;
