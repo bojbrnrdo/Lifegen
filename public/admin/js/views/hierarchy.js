@@ -158,12 +158,13 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   if(animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;}
   const oldPos=new Map(previousPositions);
   const oldEdges=new Set(previousEdges);
+  const oldNodeSpecs=new Map(previousNodeSpecs);
   layout=arrangeLifegroupTree(buildLifegroupTree(networks,groups,filters,expanded,members,loading));
   const parents=new Map(layout.lines.map(([parent,child])=>[child.key,parent]));
   const edgePairs=layout.lines.map(([parent,child])=>({parent:parent.key,child:child.key,key:parent.key+'>'+child.key}));
   const newEdges=new Set(edgePairs.map(edge=>edge.key));
   const activeKeys=new Set(layout.nodes.map(n=>n.key));
-  const exitingNodes=[...previousNodeSpecs.values()].filter(n=>!activeKeys.has(n.key));
+  const exitingNodes=[...oldNodeSpecs.values()].filter(n=>!activeKeys.has(n.key));
   const exitingEdges=[...previousPairSpecs.values()].filter(edge=>!newEdges.has(edge.key));
   const allEdges=edgePairs.concat(exitingEdges);
   const allNodes=layout.nodes.concat(exitingNodes);
@@ -202,7 +203,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    }
    for(const n of exitingNodes){
     const from=oldPos.get(n.key)||{x:n.x,y:n.y};
-    const anchor=layout.nodes.find(node=>node.key===n.parentKey)||previousNodeSpecs.get(n.parentKey)||n;
+    const anchor=layout.nodes.find(node=>node.key===n.parentKey)||oldNodeSpecs.get(n.parentKey)||n;
     const p={x:from.x+(anchor.x-from.x)*ease,y:from.y+(anchor.y-from.y)*ease};
     current.set(n.key,p);
     const el=elements.get(n.key);
@@ -223,7 +224,12 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders to display</b><p>Check the filters or create a Network above. Unassigned Lifegroups are listed separately for assignment.</p>';}else blank.hidden=true;
   if(first||shouldFit){fit();first=false;}
   const animate=oldPos.size>0&&!reducedMotion;
-  if(!animate)paint(1);
+  if(!animate){
+   paint(1);
+   for(const el of nodeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+   for(const el of edgeLayer.querySelectorAll('[data-exit="true"]'))el.remove();
+   previousPositions=new Map([...previousPositions].filter(([key])=>activeKeys.has(key)));
+  }
   else{
    paint(0);
    const start=performance.now();
