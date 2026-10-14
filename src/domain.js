@@ -87,6 +87,8 @@ function validatePerson(body, existing = null) {
   const data = {
     first_name: clean(src.first_name), last_name: clean(src.last_name) || '', middle_name: clean(src.middle_name), full_name: clean(src.full_name), age: src.age === '' || src.age == null ? null : Number(src.age), ministry: clean(src.ministry), inviter: clean(src.inviter), registration_source: clean(src.registration_source) || existing?.registration_source || 'staff',
     photo: src.photo === undefined ? (existing ? existing.photo : null) : clean(src.photo),
+    facebook_url: clean(src.facebook_url), instagram_url: clean(src.instagram_url),
+    tiktok_url: clean(src.tiktok_url), x_url: clean(src.x_url), youtube_url: clean(src.youtube_url),
     birthdate: clean(src.birthdate), sex: clean(src.sex), contact_number: clean(src.contact_number), email: clean(src.email),
     address: clean(src.address), school: clean(src.school), course_year: clean(src.course_year), occupation: clean(src.occupation),
     status: clean(src.status) || 'first_timer', date_registered: clean(src.date_registered) || today(),
@@ -108,6 +110,23 @@ function validatePerson(body, existing = null) {
   if (!isValidDate(data.date_registered)) errors.push('Date registered must be a valid date.');
   if (data.date_first_attended && !isValidDate(data.date_first_attended)) errors.push('Date first attended must be a valid date.');
   if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.push('Email address looks invalid.');
+  const socialHosts = {
+    facebook_url: ['facebook.com','fb.com'],
+    instagram_url: ['instagram.com'],
+    tiktok_url: ['tiktok.com'],
+    x_url: ['x.com','twitter.com'],
+    youtube_url: ['youtube.com','youtu.be'],
+  };
+  for(const [key,allowed] of Object.entries(socialHosts)){
+    const value=data[key];
+    if(!value)continue;
+    try {
+      const url=new URL(value);
+      const host=url.hostname.toLowerCase().replace(/^www\./,'');
+      if(url.protocol!=='https:'||!allowed.some(domain=>host===domain||host.endsWith('.'+domain))||
+        url.username||url.password||value.length>500)throw new Error('Invalid link');
+    }catch{errors.push(key.replace('_url','')+' must be a valid HTTPS profile link.');}
+  }
   if (data.photo && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(data.photo) || data.photo.length > 400 * 1024)) errors.push('Photo must be an image under 300 KB.');
   if (errors.length) throw httpError(400, errors.join(' '), errors);
   return data;

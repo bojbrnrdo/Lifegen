@@ -1,8 +1,54 @@
 /** Three-level vertical hierarchy: Network Leader → Cell Leader → Member. */
 import { api } from '../api.js';
+// Browser-independent SVG glyphs keep the hierarchy pure/testable.
+const GLYPHS={
+ facebook:'<path d="M15 21v-8h3l.5-4H15V7c0-1 .4-1.5 1.6-1.5H19V2h-3.6C11.8 2 11 4.5 11 7v2H8v4h3v8"/>',
+ instagram:'<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/>',
+ tiktok:'<path d="M13 3v12a4 4 0 1 1-4-4h1M13 3c1.2 3.2 3.2 5 6.5 5.5"/>',
+ xsocial:'<path d="m4 3 16 18M20 3 4 21M4 3h4l12 18h-4"/>',
+ youtube:'<rect x="2" y="5" width="20" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
+};
+const socialIcon=(glyph,size=16)=>'<svg aria-hidden="true" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">'+(GLYPHS[glyph]||'')+'</svg>';
+
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const personName = p => p.full_name || [p.first_name,p.last_name].filter(Boolean).join(' ') || 'Unnamed';
 const shorten = (s,len=30) => String(s||'').length>len ? String(s).slice(0,len-1)+'…' : String(s||'');
+const SOCIAL = [
+ ['facebook','Facebook','facebook_url',['facebook.com','fb.com']],
+ ['instagram','Instagram','instagram_url',['instagram.com']],
+ ['tiktok','TikTok','tiktok_url',['tiktok.com']],
+ ['xsocial','X','x_url',['x.com','twitter.com']],
+ ['youtube','YouTube','youtube_url',['youtube.com','youtu.be']],
+];
+export function safeSocialLink(value,domains) {
+ try {
+  const u=new URL(String(value||''));
+  const host=u.hostname.toLowerCase().replace(/^www\./,'');
+  if(u.protocol!=='https:'||u.username||u.password||u.href.length>500)return null;
+  return domains.some(domain=>host===domain||host.endsWith('.'+domain))?u.href:null;
+ } catch {return null;}
+}
+export function nodePhoto(node) {
+ const photo=node?.kind==='member'?node?.record?.photo:node?.record?.leader_photo;
+ return typeof photo==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo)&&photo.length<=400000?photo:null;
+}
+function linksForNode(node) {
+ const isMember=node.kind==='member';
+ return SOCIAL.map(([glyph,label,key,hosts])=>{
+  const url=safeSocialLink(node.record?.[(isMember?'':'leader_')+key],hosts);
+  return url?{glyph,label,url}:null;
+ }).filter(Boolean);
+}
+function profileAvatar(node) {
+ const key=String(node.key).replace(/[^a-zA-Z0-9_-]/g,'_');
+ const photo=nodePhoto(node);
+ const image=photo?'<defs><clipPath id="lg-avatar-'+key+'"><circle r="21"/></clipPath></defs>'+
+  '<image x="-21" y="-21" width="42" height="42" preserveAspectRatio="xMidYMid slice" href="'+esc(photo)+'" clip-path="url(#lg-avatar-'+key+')"/>':
+  '<path class="lfg__avatar-fallback" d="M-8 8c1-9 15-9 16 0M-6-8a6 6 0 1 0 12 0a6 6 0 1 0-12 0" fill="none" stroke="#36724f" stroke-width="2.6" stroke-linecap="round"/>';
+ return '<circle class="lfg__avatar-background" r="23"/>'+image+
+  '<circle class="lfg__avatar-ring" r="23" fill="none"/>';
+}
+
 const CSS = [
 '.lg-tree-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) minmax(155px,190px) minmax(135px,160px) auto;gap:10px;align-items:center;margin-bottom:16px}',
 '.lg-tree-toolbar .gsearch{min-width:0}.lg-tree-toolbar select{width:100%;min-width:0;height:42px;border-radius:9px;background:#fff;border:1px solid #dbe5dd}.lg-tree-toolbar #treeRefresh{height:42px;border-radius:9px}',
@@ -42,6 +88,15 @@ const CSS = [
 '.lfg__node .sub{font-size:11px}',
 '.lfg__node .symbol{font-size:11px}',
 '.lfg__edge{stroke-linecap:round}',
+'.lfg__node .lfg__avatar-background{fill:#e3f1e9;stroke:none}',
+'.lfg__node .lfg__avatar-ring{fill:none;stroke:#378760;stroke-width:2.2}',
+'.lfg__node[data-kind="group"] .lfg__avatar-ring{stroke:#6b9889}',
+'.lfg__node[data-kind="member"] .lfg__avatar-ring{stroke:#b59e66}',
+'.lfg__node .lfg__avatar-fallback{pointer-events:none}',
+'.lfg__node:hover .lfg__avatar-ring,.lfg__node:focus-visible .lfg__avatar-ring{stroke:#155f3f;stroke-width:3.5}',
+'.lfg__socials{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 12px}',
+'.lfg__socials a{display:inline-flex!important;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d8e9dc;border-radius:9px;text-decoration:none!important;background:#f6faf6;color:#256747}',
+'.lfg__socials a:hover,.lfg__socials a:focus-visible{background:#e7f4ea;border-color:#66a481}',
 '@media(max-width:700px){.lfg__node .name-label{font-size:13.5px}}'
 ].join('\n');
 function ensureCSS(){
@@ -86,7 +141,7 @@ export function buildLifegroupTree(networks,groups,filters,expanded,members,load
 export function arrangeLifegroupTree(roots){
  // Center a parent above the complete width of its visible descendant branches.
  // Every new depth goes DOWN; siblings spread from left to right.
- const columnGap=235,levelGap=178,margin=210,top=118;
+ const columnGap=235,levelGap=200,margin=210,top=118;
  const all=[],lines=[];
  let leaf=0,maxDepth=0;
  function walk(node,depth,parent){
@@ -118,7 +173,7 @@ export function hierarchyEasing(progress) {
 /** Curved connection between leader and child nodes. */
 export function hierarchyCurve(parent,child) {
  // Route each connector from beneath the parent label to above its child's circle.
- const x1=parent.x,y1=parent.y+57,x2=child.x,y2=child.y-15;
+ const x1=parent.x,y1=parent.y+75,x2=child.x,y2=child.y-29;
  const bend=(y1+y2)/2;
  return 'M'+x1+' '+y1+' C'+x1+' '+bend+' '+x2+' '+bend+' '+x2+' '+y2;
 }
@@ -156,7 +211,10 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    node.kind==='group'?'#/lifegroups/'+encodeURIComponent(node.record.id):
    node.kind==='member'?'#/people/'+encodeURIComponent(node.record.id):'';
   panel.hidden=false;
+  const socials=linksForNode(node);
   panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
+   (socials.length?'<nav class="lfg__socials" aria-label="Social media profiles">'+socials.map(item=>
+     '<a href="'+esc(item.url)+'" aria-label="'+esc(item.label)+'" title="'+esc(item.label)+'" target="_blank" rel="noopener noreferrer">'+socialIcon(item.glyph,17)+'</a>').join('')+'</nav>':'')+
    (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add Cell Leader to connect one.</p>':'')+(link?'<a href="'+link+'">Open details →</a>':'');
  }
  function focusNode(key){
@@ -199,10 +257,10 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    const action=n.kind==='member'?'Open profile':opened?'Collapse branch':'Expand branch';
    return '<g class="lfg__node" data-key="'+esc(n.key)+'" data-kind="'+esc(n.kind)+'" role="button" tabindex="0" aria-label="'+esc(action+': '+n.name)+'"'+
     (n.kind==='member'?'':' aria-expanded="'+(opened?'true':'false')+'"')+'>'+
-    '<circle class="touch-hit" r="22"/><circle r="8.5"/>'+
-    (canExpand?'<text class="symbol" text-anchor="middle" y="4">'+(opened?'−':'+')+'</text>':'')+
-    '<text class="name-label" text-anchor="middle" x="0" y="31">'+esc(shorten(n.name,25))+'</text>'+
-    '<text class="sub" text-anchor="middle" x="0" y="47">'+esc(shorten(n.subtitle,29))+'</text></g>';
+    '<circle class="touch-hit" r="37"/>'+profileAvatar(n)+
+    (canExpand?'<text class="symbol" text-anchor="middle" x="31" y="5">'+(opened?'−':'+')+'</text>':'')+
+    '<text class="name-label" text-anchor="middle" x="0" y="49">'+esc(shorten(n.name,25))+'</text>'+
+    '<text class="sub" text-anchor="middle" x="0" y="67">'+esc(shorten(n.subtitle,29))+'</text></g>';
   }).join('');
   const elements=new Map([...nodeLayer.querySelectorAll('[data-key]')].map(el=>[el.dataset.key,el]));
   const paths=new Map([...edgeLayer.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,el]));

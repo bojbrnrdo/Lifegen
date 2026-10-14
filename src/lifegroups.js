@@ -102,6 +102,12 @@ const GROUP_SELECT = `
  SELECT g.*,
    coalesce(nullif(concat_ws(' ', lp.first_name, lp.last_name), ''), g.leader_name) AS leader_display,
    n.name AS network_name,
+   lp.photo AS leader_photo,
+   lp.extras->>'facebook_url' AS leader_facebook_url,
+   lp.extras->>'instagram_url' AS leader_instagram_url,
+   lp.extras->>'tiktok_url' AS leader_tiktok_url,
+   lp.extras->>'x_url' AS leader_x_url,
+   lp.extras->>'youtube_url' AS leader_youtube_url,
    n.leader_person_id AS network_leader_person_id,
    coalesce(nullif(concat_ws(' ', nlp.first_name, nlp.last_name), ''), n.leader_name) AS network_leader_name,
    (SELECT count(*)::int FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
@@ -163,6 +169,7 @@ async function listNetworks(filters = {}) {
   const gender = ['boys', 'girls'].includes(filters.gender) ? filters.gender : null;
   const { rows } = await query(`SELECT n.*,
       coalesce(nullif(concat_ws(' ',lp.first_name,lp.last_name),''),n.leader_name) AS leader_display,
+      lp.photo AS leader_photo, lp.extras->>'facebook_url' AS leader_facebook_url, lp.extras->>'instagram_url' AS leader_instagram_url, lp.extras->>'tiktok_url' AS leader_tiktok_url, lp.extras->>'x_url' AS leader_x_url, lp.extras->>'youtube_url' AS leader_youtube_url,
       (SELECT count(*)::int FROM lifegroups g WHERE g.network_id=n.id AND g.is_active) AS group_count,
       (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL) AS people_count,
@@ -202,7 +209,7 @@ async function listNetworks(filters = {}) {
 }
 
 async function activeMembers(groupId) {
-  const { rows } = await query(`SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.photo,p.sex,p.status,p.archived_at,
+  const { rows } = await query(`SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.photo,p.extras->>'facebook_url' AS facebook_url,p.extras->>'instagram_url' AS instagram_url,p.extras->>'tiktok_url' AS tiktok_url,p.extras->>'x_url' AS x_url,p.extras->>'youtube_url' AS youtube_url,p.sex,p.status,p.archived_at,
       m.id AS membership_id,m.role,m.tier,m.joined_at::text AS joined_at,m.notes AS membership_notes,
       stats.sundays_attended,stats.last_attended,
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,

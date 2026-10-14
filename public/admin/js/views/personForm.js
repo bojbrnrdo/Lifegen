@@ -65,6 +65,12 @@ export function personFormHtml(p = {}, { compact = false, defaults = {} } = {}) 
         <div class="field"><label for="f_sex">Sex<span class="opt">optional</span></label>
           <select id="f_sex" name="sex"><option value="">—</option><option value="male" ${v('sex') === 'male' ? 'selected' : ''}>Male (boy)</option><option value="female" ${v('sex') === 'female' ? 'selected' : ''}>Female (girl)</option></select><span class="help">As shared on the registration form.</span></div>
         ${field('email', 'Email', { type: 'email', autocomplete: 'email' })}
+        <div class="field span-2"><label>Social profiles <span class="opt">optional</span></label><span class="help">Only add links the person agrees to share with church leaders.</span></div>
+        ${field('facebook_url', 'Facebook', { type: 'url', placeholder: 'https://www.facebook.com/...' })}
+        ${field('instagram_url', 'Instagram', { type: 'url', placeholder: 'https://www.instagram.com/...' })}
+        ${field('tiktok_url', 'TikTok', { type: 'url', placeholder: 'https://www.tiktok.com/@...' })}
+        ${field('x_url', 'X / Twitter', { type: 'url', placeholder: 'https://x.com/...' })}
+        ${field('youtube_url', 'YouTube', { type: 'url', placeholder: 'https://www.youtube.com/@...' })}
         ${field('address', 'Address', { span: true, autocomplete: 'street-address' })}
         <div class="field span-2"><label class="toggle" for="f_privacy_consent"><input type="checkbox" id="f_privacy_consent" name="privacy_consent" value="1" ${p?.privacy_consent_at ? 'checked' : ''} /> The person agreed that Lifegen keeps their details for registration and attendance follow-up</label>
           <span class="help">Data privacy consent (Data Privacy Act of 2012). ${p?.privacy_consent_at ? `Recorded ${p.privacy_consent_at}.` : 'Tick it once they say yes — it can be added later.'} Details are used only for church follow-up, never shared. <a href="#/privacy" target="_blank" rel="noopener">Privacy notice</a></span></div>
