@@ -535,7 +535,7 @@ export async function renderLifegroup({ main }, id) {
 // report to their Network leader. Networks are flat — every Network has the same shape.
 // ---------------------------------------------------------------------------
 async function networkForm(n, onSaved) {
-  if (!n) return createFourFieldNetwork(onSaved);
+  if (!n) return createFourFieldNetwork(onSaved,{allowRegistration:can('people:write')});
   // Existing optional fields are intentionally omitted; server-side update merges them from the record.
   const v = (k) => esc(n?.[k] ?? '');
   const modal = openModal({
