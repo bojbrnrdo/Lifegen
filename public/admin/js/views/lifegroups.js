@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
+import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -544,52 +545,150 @@ async function networkForm(n, onSaved) {
   const v = (k) => esc(n?.[k] ?? '');
   const modal = openModal({
     title: n ? `Edit ${n.name}` : 'New Network',
-    subtitle: n ? 'An independent network — its leader is the root. Networks are never placed under another Network.' : 'A new independent Network. Its leader is the root — it is never under another Network leader.',
+    subtitle: 'Choose a category and link a registered leader. You can assign the leader later.',
     body: `<form id="netForm" class="form-grid" novalidate>
       <div id="netErr" class="alert alert--error span-2" hidden></div>
       <div class="field span-2"><label>Network name <span class="req">*</span></label><input name="name" value="${v('name')}" required autocomplete="off" placeholder="e.g. Network A" /></div>
-      <div class="field span-2"><label>Boys or girls <span class="req">*</span></label>
-        <div class="choice">
-          <label class="choice__opt"><input type="radio" name="gender" value="boys" ${n?.gender === 'boys' ? 'checked' : ''} /><span>Boys network</span></label>
-          <label class="choice__opt"><input type="radio" name="gender" value="girls" ${n?.gender === 'girls' ? 'checked' : ''} /><span>Girls network</span></label>
-        </div></div>
-      <div class="field span-2 gsearch-field"><label>Network leader <span class="opt">registered person</span></label>
-        <div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="netLeaderPick" aria-label="Search a registered person to be Network leader" placeholder="Search a registered person…" autocomplete="off" /><div class="gsearch__results" id="netLeaderPickResults" hidden></div></div>
+      <div class="field span-2"><label>Network category <span class="req">*</span></label>
+        <div class="choice choice--gender" role="group" aria-label="Network category">
+          <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="boys" aria-label="Boys network" ${n?.gender === 'boys' ? 'checked' : ''} /><span title="Boys network">${icon('mars', 23)}</span></label>
+          <label class="choice__opt choice__opt--gender"><input type="radio" name="gender" value="girls" aria-label="Girls network" ${n?.gender === 'girls' ? 'checked' : ''} /><span title="Girls network">${icon('venus', 23)}</span></label>
+        </div><span class="help">Choose a category icon to filter eligible leaders.</span></div>
+      <div class="field span-2 gsearch-field"><label for="netLeaderPick">Network leader <span class="opt">optional until assigned</span></label>
+        <div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="netLeaderPick" aria-label="Find a registered Network Leader" placeholder="Find a registered person…" autocomplete="off" /><div class="gsearch__results" id="netLeaderPickResults" hidden></div></div>
         <input type="hidden" id="netLeaderId" name="leader_person_id" />
-        <span class="help" id="netLeaderHint"></span>
-        <input name="leader_name" value="${v('leader_name')}" placeholder="Leader name (if not registered)" autocomplete="off" style="margin-top:6px" /></div>
+        <input type="hidden" id="netLegacyLeaderName" name="leader_name" value="${n?.leader_person_id ? '' : v('leader_name')}" />
+        <div class="network-leader-picker__status" id="netLeaderStatus" role="status"></div>
+        <span class="help" id="netLeaderHint">Select a search result to link a registered person.</span>
+        <div class="row network-leader-picker__actions">
+          ${can('people:write') ? `<button type="button" class="btn btn--sm" id="netLeaderRegister" aria-expanded="false">${icon('plus', 14).value} Register new leader</button>` : ''}
+          <button type="button" class="btn btn--sm btn--ghost" id="netLeaderClear" hidden>Remove leader</button>
+        </div>
+        ${n?.leader_name && !n?.leader_person_id ? `<div class="network-leader-picker__legacy" role="status">${icon('info', 15)} Existing name: <b>${v('leader_name')}</b>. Select or register this person to link a real profile.</div>` : ''}
+      </div>
       <div class="field span-2"><label>Notes <span class="opt">optional</span></label><textarea name="notes">${v('notes')}</textarea></div>
       ${n ? `<div class="field span-2"><label class="toggle"><input type="checkbox" name="is_active" ${n.is_active ? 'checked' : ''}/> Network is active</label></div>` : ''}
-    </form>`,
+    </form>${can('people:write') ? networkLeaderRegistrationHtml() : ''}`,
     footer: `<button class="btn" data-close>Cancel</button><button class="btn btn--primary" id="saveNet">${n ? 'Save' : 'Create Network'}</button>`,
   });
   modal.querySelector('[data-close]').onclick = closeModal;
-  const netGenderNow = () => modal.querySelector('[name=gender]:checked')?.value || null;
-  const netHint = modal.querySelector('#netLeaderHint');
-  const syncNetGender = (clearLeader) => {
-    const gg = netGenderNow();
-    netHint.textContent = gg ? '' : 'Choose Boys network or Girls network first.';
-    if (clearLeader && modal.querySelector('#netLeaderId').value) { modal.querySelector('#netLeaderId').value = ''; modal.querySelector('#netLeaderPick').value = ''; }
-  };
-  syncNetGender(false);
-  modal.querySelectorAll('[name=gender]').forEach((r) => r.addEventListener('change', () => syncNetGender(true)));
-  personPicker(modal, { inputId: 'netLeaderPick', hiddenId: 'netLeaderId', sex: () => SEX_OF[netGenderNow()] || null, initial: n?.leader_person_id ? { id: n.leader_person_id, name: n.leader_name } : null });
-  const save = (e) => withLoading(modal.querySelector('#saveNet'), async () => {
-    e.preventDefault();
-    const form = modal.querySelector('#netForm');
-    const d = formData(form);
-    d.gender = form.querySelector('[name=gender]:checked')?.value || null;
-    d.leader_person_id = form.querySelector('#netLeaderId').value || null;
-    if (n) d.is_active = form.querySelector('[name=is_active]').checked;
-    for (const k of Object.keys(d)) if (d[k] === '') d[k] = null;
-    const err = modal.querySelector('#netErr');
-    try {
-      const saved = n ? await api.updateNetwork(n.id, d) : await api.createNetwork(d);
-      closeModal(); toast(n ? 'Network updated.' : `${saved.name} created.`); onSaved(saved);
-    } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+
+  const form = modal.querySelector('#netForm');
+  const err = modal.querySelector('#netErr');
+  const personId = modal.querySelector('#netLeaderId');
+  const personPick = modal.querySelector('#netLeaderPick');
+  const legacyName = modal.querySelector('#netLegacyLeaderName');
+  const hint = modal.querySelector('#netLeaderHint');
+  const status = modal.querySelector('#netLeaderStatus');
+  const clear = modal.querySelector('#netLeaderClear');
+  const netGenderNow = () => form.querySelector('[name=gender]:checked')?.value || null;
+  let explicitlyCleared = false;
+  function errorMessage(message) {
+    err.textContent = message;
+    err.hidden = false;
+  }
+  function showLeaderStatus() {
+    if (personId.value) {
+      status.textContent = 'Linked to registered person: ' + personPick.value;
+      status.className = 'network-leader-picker__status is-linked';
+    } else if (legacyName.value && !explicitlyCleared) {
+      status.textContent = 'Not linked to a registered profile yet';
+      status.className = 'network-leader-picker__status is-pending';
+    } else {
+      status.textContent = 'No leader assigned yet';
+      status.className = 'network-leader-picker__status is-pending';
+    }
+    clear.hidden = !personId.value && !legacyName.value;
+  }
+  function syncGender(clearSelected = false) {
+    const gender = netGenderNow();
+    hint.textContent = gender ? 'Choose a matching registered person from the search results.' :
+      'Choose the category icon first.';
+    if (clearSelected && (personId.value || legacyName.value)) {
+      // Never silently keep a leader selected for a category they may not match.
+      personId.value = '';
+      personPick.value = '';
+      legacyName.value = '';
+      explicitlyCleared = false; // Re-selection is required when changing categories on an existing Network.
+      errorMessage('Network category changed. Choose an eligible leader again, or use Remove leader.');
+    }
+    showLeaderStatus();
+  }
+  syncGender();
+  form.querySelectorAll('[name=gender]').forEach(input => input.addEventListener('change', () => syncGender(true)));
+  personPicker(modal, {
+    inputId: 'netLeaderPick', hiddenId: 'netLeaderId',
+    sex: () => SEX_OF[netGenderNow()] || null,
+    initial: n?.leader_person_id ? { id: n.leader_person_id, name: n.leader_name } : null,
+    onInput: () => { err.hidden = true; explicitlyCleared = false; showLeaderStatus(); },
+    onSelect: () => {
+      legacyName.value = '';
+      explicitlyCleared = false;
+      err.hidden = true;
+      showLeaderStatus();
+    },
   });
+  showLeaderStatus();
+  clear.onclick = () => {
+    personId.value = '';
+    personPick.value = '';
+    legacyName.value = '';
+    explicitlyCleared = true;
+    err.hidden = true;
+    showLeaderStatus();
+  };
+  bindNetworkLeaderRegistration(modal, {
+    genderNow: netGenderNow, onError: errorMessage,
+    onRegistered: person => {
+      personId.value = String(person.id);
+      personPick.value = person.name;
+      legacyName.value = '';
+      explicitlyCleared = false;
+      err.hidden = true;
+      showLeaderStatus();
+    },
+  });
+  const save = event => {
+    event.preventDefault();
+    if (!form.querySelector('[name=name]').value.trim()) {
+      errorMessage('Enter a Network name.');
+      form.querySelector('[name=name]').focus();
+      return;
+    }
+    if (!netGenderNow()) {
+      errorMessage('Choose a Network category icon.');
+      return;
+    }
+    if (personPick.value.trim() && !personId.value) {
+      errorMessage('Select an existing registered person from the search results, or choose Register new leader.');
+      personPick.focus();
+      return;
+    }
+    if (n?.leader_person_id && !personId.value && !explicitlyCleared) {
+      errorMessage('The original leader selection changed. Select a registered person or choose Remove leader.');
+      personPick.focus();
+      return;
+    }
+    return withLoading(modal.querySelector('#saveNet'), async () => {
+      const data = formData(form);
+      data.gender = netGenderNow();
+      data.leader_person_id = personId.value || null;
+      data.leader_name = data.leader_person_id ? null : (legacyName.value.trim() || null);
+      if (n) data.is_active = form.querySelector('[name=is_active]').checked;
+      for (const key of Object.keys(data)) if (data[key] === '') data[key] = null;
+      try {
+        const saved = n ? await api.updateNetwork(n.id, data) : await api.createNetwork(data);
+        closeModal();
+        toast(n ? 'Network updated.' : 'Network created.');
+        onSaved(saved);
+      } catch (error) {
+        errorMessage(error.message);
+      }
+    });
+  };
   modal.querySelector('#saveNet').onclick = save;
-  modal.querySelector('#netForm').onsubmit = save;
+  form.onsubmit = save;
+
 }
 
 export async function renderNetwork({ main }, id, openGroups = new Set(), { autoTried = false } = {}) {
