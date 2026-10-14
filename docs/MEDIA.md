@@ -71,17 +71,23 @@ The artwork is 16:9. Painted at `100vw` it was already a full screen tall on a
 It now fills the width edge to edge **and** fits a laptop screen:
 
 - Tablet/laptop (≥ 641 px): the strip is cropped top and bottom to a band —
-  `height:min(26.3vw + 120px, 70vh)` with `object-fit:cover`, centred. The
-  artwork's emblem renders at 1120/4269 = 26.3vw once the artwork spans the
-  viewport, so the band is the emblem plus ~60 px above and below. That
-  clearance is what keeps the fixed navigation (≈ 54 px) off the emblem, and
-  the emblem is never clipped at any width — verified from 641 px to 3440 px.
-  On a 1440 × 900 screen the banner is 1440 × 499 (55% of the screen), and the
+  `height:min(28.3vw + 144px, 78vh)` with `object-fit:cover`, centred. The
+  artwork's emblem is 26.2vw tall and starts 14.1vw down once the artwork spans
+  the viewport, so the band keeps the emblem whole with ~75–84 px of clearance
+  above it. That clearance is what holds the fixed navigation clear of the logo
+  printed in the artwork: the bar pads itself from the viewport height
+  (`clamp(6px, 1.4vh, 14px)`) so short screens get a shorter bar, and the header
+  logo never reaches the banner logo at any tested size — 22 px of gap at
+  1440 × 900, 21 px at 1920 × 1080, still positive at 2560 × 1080 and
+  3440 × 1440. `tests/gallery-media.test.mjs` recomputes that gap from the
+  stylesheet at 19 viewports and fails if it closes.
+  On a 1440 × 900 screen the band is 1440 × 552 (61% of the screen), and the
   page below it — tagline, welcome copy, calls to action and the service
   countdown — is visible without scrolling.
 - Phones (≤ 640 px): the artwork is shown whole and uncropped (`height:auto`),
   which is already short there and keeps the address and service time readable.
-  The header logo is 32–34 px.
+  The header is compact (30 px logo, 36 px menu button, 4 px bar padding) so it
+  clears the logo printed inside the artwork.
 
 There are **no side bars and no matte**: nothing is drawn beside the artwork at
 any width. An earlier revision capped the banner's width and matted the leftover

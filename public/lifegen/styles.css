@@ -103,13 +103,23 @@
    clearance is what keeps the fixed navigation off the emblem, and the emblem
    is never clipped at any width. */
 @media(min-width:641px){
- .hero-strip.hero-strip--artwork .hero-banner-image{height:min(calc(26.3vw + 120px),70vh);object-fit:cover;object-position:center}
+ /* The bar is as short as its contents need, and shorter again on short screens
+    so it never reaches down into the artwork's logo. */
+ .nav,.nav.scrolled{padding:clamp(6px,1.4vh,14px) 0}
+ .nav.scrolled{padding:clamp(5px,1.1vh,11px) 0}
+ .hero-strip.hero-strip--artwork .hero-banner-image{height:min(calc(28.3vw + 144px),78vh);object-fit:cover;object-position:center}
  .nav .logo img{width:34px;height:34px}
 }
 @media(max-width:640px){
  /* Phones: the whole 16:9 artwork, uncropped — it is already short there, and
     it keeps the address and service time large enough to read. */
+ .nav,.nav.scrolled{padding:4px 0}
  .hero-strip.hero-strip--artwork .hero-banner-image{height:auto}
  .hero-lower{padding-top:36px}
- .nav .logo img{width:32px;height:32px}
+ .nav .logo img{width:30px;height:30px}
+ .nav .nav-burger{width:36px;height:36px}
+}
+@media(max-width:380px){
+ .nav,.nav.scrolled{padding:3px 0}
+ .nav .nav-burger{width:34px;height:34px}
 }
