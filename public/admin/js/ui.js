@@ -137,6 +137,8 @@ export function personCell(p, { link = true } = {}) {
 // Icons (inline SVG paths)
 // ---------------------------------------------------------------------------
 const ICONS = {
+  mars: '<circle cx="10" cy="14" r="6"/><path d="M14.5 9.5 21 3M15 3h6v6"/>',
+  venus: '<circle cx="12" cy="9" r="6"/><path d="M12 15v7m-4-4h8"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5A5 5 0 0 1 21.5 20"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
   check: '<path d="m5 12 5 5L20 7"/>',
