@@ -37,7 +37,12 @@ const CSS = [
 '.lfg__node:focus-visible{outline:none}',
 '.lfg__node:focus-visible circle:not(.touch-hit){stroke:#165f3b;stroke-width:3.5}',
 '.lfg__nodes-live{position:absolute;left:15px;bottom:10px;font-size:11px;color:#718876;pointer-events:none;max-width:60%}',
-'@media(max-width:700px){.lfg__nodes-live{max-width:90%;left:12px;bottom:10px}.lfg__hint{display:none}.lfg__svg{height:67vh;min-height:500px}}'
+'@media(max-width:700px){.lfg__nodes-live{max-width:90%;left:12px;bottom:10px}.lfg__hint{display:none}.lfg__svg{height:67vh;min-height:500px}}',
+'.lfg__node .name-label{font-size:13px;font-weight:700;letter-spacing:-.01em}',
+'.lfg__node .sub{font-size:11px}',
+'.lfg__node .symbol{font-size:11px}',
+'.lfg__edge{stroke-linecap:round}',
+'@media(max-width:700px){.lfg__node .name-label{font-size:13.5px}}'
 ].join('\n');
 function ensureCSS(){
  if(document.getElementById('lifegen-node-graph-style'))return;
@@ -79,17 +84,31 @@ export function buildLifegroupTree(networks,groups,filters,expanded,members,load
  return roots;
 }
 export function arrangeLifegroupTree(roots){
- let row=0;const all=[],lines=[];
+ // Center a parent above the complete width of its visible descendant branches.
+ // Every new depth goes DOWN; siblings spread from left to right.
+ const columnGap=235,levelGap=178,margin=210,top=118;
+ const all=[],lines=[];
+ let leaf=0,maxDepth=0;
  function walk(node,depth,parent){
-  node.x=100+depth*265;
   node.parentKey=parent?.key||null;
-  for(const child of node.children)walk(child,depth+1,node);
-  node.y=node.children.length?(node.children[0].y+node.children[node.children.length-1].y)/2:70+(row++*46);
+  node.y=top+depth*levelGap;
+  maxDepth=Math.max(maxDepth,depth);
+  if(node.children.length){
+   for(const child of node.children)walk(child,depth+1,node);
+   node.x=(node.children[0].x+node.children[node.children.length-1].x)/2;
+  }else{
+   node.x=margin+leaf*columnGap;
+   leaf++;
+  }
   all.push(node);
   if(parent)lines.push([parent,node]);
  }
  for(const root of roots)walk(root,0,null);
- return {nodes:all,lines,height:Math.max(320,140+row*46),width:Math.max(420,...all.map(n=>n.x+240))};
+ return {
+  nodes:all,lines,
+  width:Math.max(420,margin*2+Math.max(0,leaf-1)*columnGap),
+  height:Math.max(345,top+maxDepth*levelGap+112),
+ };
 }
 /** Smooth cubic ease-out for OSINT-style branch transitions. */
 export function hierarchyEasing(progress) {
@@ -98,9 +117,10 @@ export function hierarchyEasing(progress) {
 }
 /** Curved connection between leader and child nodes. */
 export function hierarchyCurve(parent,child) {
- const x1=parent.x+8,x2=child.x-8,y1=parent.y,y2=child.y;
- const bend=(x1+x2)/2;
- return 'M'+x1+' '+y1+' C'+bend+' '+y1+' '+bend+' '+y2+' '+x2+' '+y2;
+ // Route each connector from beneath the parent label to above its child's circle.
+ const x1=parent.x,y1=parent.y+57,x2=child.x,y2=child.y-15;
+ const bend=(y1+y2)/2;
+ return 'M'+x1+' '+y1+' C'+x1+' '+bend+' '+x2+' '+bend+' '+x2+' '+y2;
 }
 export async function renderHierarchy(target,networks,groups,filters={}){
  ensureCSS();
@@ -109,7 +129,7 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  const expanded=old.expanded||new Set(),members=old.members||new Map(),loading=old.loading||new Set();
  const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
- target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a network leader to explore its Lifegroups</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
+ target.innerHTML='<section class="lfg"><div class="lfg__heading"><b>LIFEGEN · Discipleship Network</b><small>Click a Network Leader to reveal Cell Leaders below</small></div><div class="lfg__buttons"><button type="button" data-action="fit" aria-label="Fit diagram">Fit view</button><button type="button" data-action="collapse" aria-label="Collapse all branches">Reset</button><button type="button" data-action="plus" aria-label="Zoom in">+</button><button type="button" data-action="minus" aria-label="Zoom out">−</button></div><svg class="lfg__svg" aria-label="Expandable discipleship network diagram"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg><div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div><span class="lfg__hint">Drag to pan · Scroll to zoom · Click nodes to expand</span></section>';
  const svg=target.querySelector('svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
@@ -118,13 +138,15 @@ export async function renderHierarchy(target,networks,groups,filters={}){
  const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
  function fit(fitAll=false){
   const width=svg.clientWidth||900,height=svg.clientHeight||550;
-  if(width<700&&!fitAll&&layout.nodes.length){
-   k=.94;const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
-   panX=27-root.x*k;
-   panY=(layout.nodes.length<=6?height*.43:125)-root.y*k;
+  if(fitAll){
+   k=Math.max(.23,Math.min(1.13,(width-65)/layout.width,(height-78)/layout.height));
+   panX=(width-layout.width*k)/2;
+   panY=(height-layout.height*k)/2;
   }else{
-   k=Math.max(.22,Math.min(1.15,(width-60)/layout.width,(height-65)/layout.height));
-   panX=(width-layout.width*k)/2;panY=(height-layout.height*k)/2;
+   const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
+   k=width<700?.82:width<1024?1:1.08;
+   panX=width/2-(root?.x||0)*k;
+   panY=(width<700?170:192)-(root?.y||0)*k;
   }
   updateTransform();
  }
@@ -142,9 +164,10 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   if(!n)return;
   if(cameraFrame)cancelAnimationFrame(cameraFrame);
   const width=svg.clientWidth||900,height=svg.clientHeight||550,mobile=width<700;
-  const targetK=mobile?.82:Math.max(.8,Math.min(k,1.15));
-  const goalX=(mobile?31:Math.min(width*.23,225))-n.x*targetK;
-  const goalY=height*.45-n.y*targetK;
+  const targetK=mobile?.82:Math.max(.9,Math.min(k,1.12));
+  // Put the selected leader near the top CENTER, with room for children below.
+  const goalX=width/2-n.x*targetK;
+  const goalY=(mobile?170:195)-n.y*targetK;
   if(reducedMotion){k=targetK;panX=goalX;panY=goalY;updateTransform();return;}
   const old={k,panX,panY},started=performance.now();
   function frame(now){
@@ -178,7 +201,8 @@ export async function renderHierarchy(target,networks,groups,filters={}){
     (n.kind==='member'?'':' aria-expanded="'+(opened?'true':'false')+'"')+'>'+
     '<circle class="touch-hit" r="22"/><circle r="8.5"/>'+
     (canExpand?'<text class="symbol" text-anchor="middle" y="4">'+(opened?'−':'+')+'</text>':'')+
-    '<text x="19" y="-5">'+esc(shorten(n.name))+'</text><text class="sub" x="19" y="11">'+esc(shorten(n.subtitle,36))+'</text></g>';
+    '<text class="name-label" text-anchor="middle" x="0" y="31">'+esc(shorten(n.name,25))+'</text>'+
+    '<text class="sub" text-anchor="middle" x="0" y="47">'+esc(shorten(n.subtitle,29))+'</text></g>';
   }).join('');
   const elements=new Map([...nodeLayer.querySelectorAll('[data-key]')].map(el=>[el.dataset.key,el]));
   const paths=new Map([...edgeLayer.querySelectorAll('[data-edge]')].map(el=>[el.dataset.edge,el]));
@@ -215,10 +239,19 @@ export async function renderHierarchy(target,networks,groups,filters={}){
    for(const edge of allEdges){
     const from=current.get(edge.parent),to=current.get(edge.child);
     const isNew=!oldEdges.has(edge.key);
-    const endPos=isNew?{x:from.x+(to.x-from.x)*ease,y:from.y+(to.y-from.y)*ease}:to;
     const path=paths.get(edge.key);
-    path.setAttribute('d',hierarchyCurve(from,endPos));
-    path.style.opacity=String(newEdges.has(edge.key)?(isNew?ease:1):1-ease);
+    path.setAttribute('d',hierarchyCurve(from,to));
+    // Reveal the whole curved line progressively, rather than snapping it in.
+    if(newEdges.has(edge.key)&&isNew){
+     const length=path.getTotalLength();
+     path.style.strokeDasharray=String(length);
+     path.style.strokeDashoffset=String(length*(1-ease));
+     path.style.opacity=String(ease);
+    }else{
+     path.style.strokeDasharray='none';
+     path.style.strokeDashoffset='0';
+     path.style.opacity=newEdges.has(edge.key)?'1':String(1-ease);
+    }
    }
    previousPositions=current;
   }
@@ -280,7 +313,10 @@ export async function renderHierarchy(target,networks,groups,filters={}){
   if(target.__lifegenTree===state&&target.isConnected)draw(false,node.key);
  }
  target.querySelector('[data-action="fit"]').onclick=()=>fit(true);
- target.querySelector('[data-action="collapse"]').onclick=()=>{expanded.clear();state.selected=null;panel.hidden=true;draw(true);};
+ target.querySelector('[data-action="collapse"]').onclick=()=>{
+  expanded.clear();state.selected=null;panel.hidden=true;
+  draw(false,layout.nodes.find(n=>n.kind==='network')?.key);
+ };
  const zoom=amount=>{if(cameraFrame)cancelAnimationFrame(cameraFrame);k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
  target.querySelector('[data-action="plus"]').onclick=()=>zoom(1.25);
  target.querySelector('[data-action="minus"]').onclick=()=>zoom(.8);
