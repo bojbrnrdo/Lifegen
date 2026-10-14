@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
+import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -78,11 +79,13 @@ function personPicker(root, { inputId, hiddenId, labelId, initial, sex = null, o
 // ---------------------------------------------------------------------------
 // Group form (create / edit)
 // ---------------------------------------------------------------------------
-async function groupForm(g, onSaved) {
+async function groupForm(g, onSaved, { networkId = null, gender = null } = {}) {
   let opts = { areas: [], categories: [], networks: [] };
   try { opts = await api.lifegroupOptions(); } catch (e) { /* optional */ }
   const dl = (id, items) => `<datalist id="${id}">${items.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`;
   const v = (k) => esc(g?.[k] ?? '');
+  const selectedNetworkId = g?.network_id ?? networkId;
+  const selectedGender = g?.gender ?? gender;
   const modal = openModal({
     title: g ? `Edit ${g.name}` : 'New Lifegroup',
     subtitle: g ? '' : 'A cell group people can be connected to after Sunday.',
@@ -92,10 +95,10 @@ async function groupForm(g, onSaved) {
       <div class="field"><label>Group name <span class="req">*</span></label><input name="name" value="${v('name')}" required autocomplete="off" placeholder="e.g. Joshua Group" /></div>
       <div class="field"><label>Boys or girls <span class="req">*</span></label>
         <div class="choice">
-          <label class="choice__opt"><input type="radio" name="gender" value="boys" ${g?.gender === 'boys' ? 'checked' : ''} /><span>Boys group</span></label>
-          <label class="choice__opt"><input type="radio" name="gender" value="girls" ${g?.gender === 'girls' ? 'checked' : ''} /><span>Girls group</span></label>
+          <label class="choice__opt"><input type="radio" name="gender" value="boys" ${selectedGender === 'boys' ? 'checked' : ''} /><span>Boys group</span></label>
+          <label class="choice__opt"><input type="radio" name="gender" value="girls" ${selectedGender === 'girls' ? 'checked' : ''} /><span>Girls group</span></label>
         </div></div>
-      <div class="field"><label>Network</label><select name="network_id"><option value="" ${!g?.network_id ? 'selected' : ''}>No network</option>${(opts.networks || []).map((n) => `<option value="${n.id}" data-gender="${n.gender || ''}" ${g?.network_manual && Number(g?.network_id) === n.id ? 'selected' : ''}>${esc(n.name)}${n.gender ? ' (' + n.gender + ')' : ''}${n.leader_name ? ' · ' + esc(n.leader_name) : ''}</option>`).join('')}</select></div>
+      <div class="field"><label>Network</label><select name="network_id"><option value="" ${!selectedNetworkId ? 'selected' : ''}>No network</option>${(opts.networks || []).map((n) => `<option value="${n.id}" data-gender="${n.gender || ''}" ${Number(selectedNetworkId) === n.id && (!g || g.network_manual) ? 'selected' : ''}>${esc(n.name)}${n.gender ? ' (' + n.gender + ')' : ''}${n.leader_name ? ' · ' + esc(n.leader_name) : ''}</option>`).join('')}</select></div>
       <div class="field span-2 gsearch-field"><label>Leader <span class="opt">registered person</span></label>
         <div class="gsearch" style="max-width:none">${icon('search', 16).value}<input id="leaderPick" aria-label="Search a registered person to be leader" placeholder="Search a registered person…" autocomplete="off" /><div class="gsearch__results" id="leaderPickResults" hidden></div></div>
         <input type="hidden" id="leaderId" name="leader_person_id" />
@@ -660,7 +663,37 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
 
     <div class="card mb-2" id="netCalendar"></div>
     ${can('lifegroups:manage') && !n.groups.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delNet" style="color:var(--muted)">Delete this empty network</button></div>` : ''}`;
-  renderNetworkCalendar(main.querySelector('#netCalendar'), n.id, cal);
+  const compact = simplifyNetworkDetail(main, { cells, cal, manage });
+  // Load the eight-week table only when explicitly requested.
+  compact?.history.addEventListener('toggle', () => {
+    if (!compact.history.open || compact.history.dataset.loaded) return;
+    compact.history.dataset.loaded = 'true';
+    renderNetworkCalendar(main.querySelector('#netCalendar'), n.id, cal).catch((e) => toast(e.message, 'error'));
+  });
+  main.querySelector('#netCreateGroup')?.addEventListener('click', () =>
+    groupForm(null, () => renderNetwork({ main }, id), { networkId: n.id, gender: n.gender }));
+  main.querySelector('#netQuickAddMember')?.addEventListener('click', () => {
+    if (!cells.length) return;
+    if (cells.length === 1) return addMemberDialog(cells[0], () => renderNetwork({ main }, id));
+    const chooser = compact?.chooser;
+    if (!chooser) return;
+    chooser.hidden = !chooser.hidden;
+    if (chooser.hidden) return;
+    chooser.replaceChildren();
+    const heading = document.createElement('strong');
+    heading.textContent = 'Choose a Lifegroup';
+    chooser.append(heading);
+    cells.forEach((group) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = group.name + (group.leader_name ? ' · ' + group.leader_name : '');
+      button.addEventListener('click', () => {
+        chooser.hidden = true;
+        addMemberDialog(group, () => renderNetwork({ main }, id));
+      });
+      chooser.append(button);
+    });
+  });
   // move a member between Open / Closed cell straight from the Structure tree (closed cell cap still applies)
   main.querySelectorAll('.tree [data-tier]').forEach((b) => {
     b.onclick = () => withLoading(b, async () => {
