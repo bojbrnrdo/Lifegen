@@ -66,7 +66,12 @@
 .nav .nav-burger,.nav:not(.scrolled) .nav-burger{background:rgba(6,30,24,.65);border-color:rgba(255,255,255,.6);color:#fff}
 .nav :focus-visible{outline:3px solid #fff;outline-offset:3px}
 .hero-strip.hero-strip--artwork{padding:0;background:#062b19}
-.hero-banner-image{display:block;width:100%;height:auto;object-fit:contain;margin-inline:auto}
+/* The artwork is 16:9. Painted at 100vw it was a full screen tall on a 1440 x 900
+   laptop, so on tablet/laptop screens it is capped (below) and cropped to a band:
+   full-bleed with object-fit:cover, never a letterbox or side bars. Phones show
+   it uncropped, which is already short there. */
+.hero-banner-art{display:block;margin-inline:auto;width:100%}
+.hero-banner-image{display:block;width:100%;height:auto;object-fit:cover;margin-inline:auto}
 .hero-strip .hero-banner-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .hero-tagline.hero-tagline--below{margin-top:0;color:var(--ink);text-shadow:none}
 .logo img[src$="lifegen-emblem.webp"]{object-fit:contain;border-radius:4px}
@@ -88,3 +93,33 @@
  .nav .nav-burger{width:34px;height:34px}
 }
 .hero-lower>.backend-warning,.hero-lower>.public-preview{margin-bottom:24px;border-radius:12px}
+
+/* Keep the first screen a landing page, not a poster. The artwork still fills
+   the width edge to edge; it is cropped top and bottom to a cinematic band
+   instead, so the page below it is visible without scrolling.
+
+   The emblem inside the artwork is 26.3vw tall once the artwork spans the
+   viewport, so the band is the emblem plus ~60px above and below. That
+   clearance is what keeps the fixed navigation off the emblem, and the emblem
+   is never clipped at any width. */
+@media(min-width:641px){
+ /* The bar is as short as its contents need, and shorter again on short screens
+    so it never reaches down into the artwork's logo. */
+ .nav,.nav.scrolled{padding:clamp(6px,1.4vh,14px) 0}
+ .nav.scrolled{padding:clamp(5px,1.1vh,11px) 0}
+ .hero-strip.hero-strip--artwork .hero-banner-image{height:min(calc(28.3vw + 144px),78vh);object-fit:cover;object-position:center}
+ .nav .logo img{width:34px;height:34px}
+}
+@media(max-width:640px){
+ /* Phones: the whole 16:9 artwork, uncropped — it is already short there, and
+    it keeps the address and service time large enough to read. */
+ .nav,.nav.scrolled{padding:4px 0}
+ .hero-strip.hero-strip--artwork .hero-banner-image{height:auto}
+ .hero-lower{padding-top:36px}
+ .nav .logo img{width:30px;height:30px}
+ .nav .nav-burger{width:36px;height:36px}
+}
+@media(max-width:380px){
+ .nav,.nav.scrolled{padding:3px 0}
+ .nav .nav-burger{width:34px;height:34px}
+}

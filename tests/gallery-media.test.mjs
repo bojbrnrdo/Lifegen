@@ -69,9 +69,24 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   assert.match(highlight, /data-ratio="16\/9"/);
   assert.match(highlight, /<h4>Grand Campus Hangout<\/h4>/);
   const poster = highlight.match(/data-poster="([^"]+)"/)[1];
-  assert.equal(sniffImage(assets(poster)).width, 1280);
+  assert.equal(poster, '/brand/gallery/drive/grand-campus-hangout-cover.webp');
   assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
   assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 2);
+});
+
+test('the highlight thumbnail is a 16:9 crop of the supplied title card', () => {
+  const highlight = page.match(/<article class="vcard reveal vcard-feature"[^>]*>(.*?)<\/article>/s)[1];
+  const poster = highlight.match(/data-poster="([^"]+)"/)[1];
+  const cover = assets(poster);
+  const size = sniffImage(cover);
+  assert.equal(size.mime, 'image/webp');
+  // Drop-in shape for the 16:9 frame, and for a 1280 × 720 video thumbnail.
+  assert.deepEqual([size.width, size.height], [1280, 720]);
+  // The supplied title card is the only artwork; the deck poster is untouched.
+  assert.notEqual(sha(cover), manifest.items[0].fullSha256);
+  assert.equal(assets('/brand/gallery/drive/lifegen-artwork-preview.webp').length,
+               manifest.items[0].previewBytes);
+  assert.doesNotMatch(page, /lifegen-highlight-cover/);
 });
 
 test('landing banner and logos use the supplied LIFEGEN artwork, without duplicate overlays', () => {
@@ -92,6 +107,63 @@ test('landing banner and logos use the supplied LIFEGEN artwork, without duplica
   assert.equal(imageSize(assets('/brand/lifegen-icon.webp')).width, 64);
 });
 
+
+test('the banner fills the width with no side bars and never taller than the first screen', () => {
+  const styles = read('public/lifegen/styles.css');
+  const page = read('public/lifegen/index.html');
+  // The 16:9 artwork at 100vw was a whole screen tall on a laptop. It is still
+  // edge to edge — cropped to a band, not letterboxed: no column caps, no matte
+  // behind it, so nothing shows beside the artwork at any width.
+  assert.doesNotMatch(styles, /\.hero-banner-art\{[^}]*max-width/);
+  assert.doesNotMatch(styles, /banner-blur|background-image:url\("\/brand/);
+  assert.match(styles, /\.hero-strip\.hero-strip--artwork\{padding:0;background:#062b19\}/);
+  assert.ok(!fs.existsSync(path.join(root, 'public/brand/lifegen-banner-blur.webp')), 'No matte asset ships');
+  // The band is the artwork's emblem plus clearance for the fixed navigation,
+  // capped against viewport height; cover-cropping keeps the emblem whole.
+  assert.match(styles, /\.hero-banner-image\{height:min\(calc\(28\.3vw \+ 144px\),78vh\);object-fit:cover;object-position:center\}/);
+  // Phones keep the uncropped 16:9 artwork and its 960 px source.
+  assert.match(styles, /\.hero-banner-image\{height:auto\}/);
+  assert.match(page, /<source media="\(max-width:640px\)" srcset="\/brand\/lifegen-banner-960\.webp"\/>/);
+});
+
+test('the header logo never reaches the logo printed inside the banner', () => {
+  // The band rule and the navigation's own height are the two numbers that keep
+  // the small header logo and the big logo in the artwork apart. They are read
+  // out of the stylesheet so changing either one has to keep the gap positive —
+  // an earlier revision left the band so short that they overlapped by 5-40px.
+  const styles = read('public/lifegen/styles.css');
+  const band = styles.match(/\.hero-banner-image\{height:min\(calc\(([\d.]+)vw \+ (\d+)px\),(\d+)vh\)/);
+  assert.ok(band, 'The banner band rule is missing');
+  const [, bandVw, bandPx, bandCapVh] = band.map(Number);
+  const pad = styles.match(/\.nav,\.nav\.scrolled\{padding:clamp\((\d+)px,([\d.]+)vh,(\d+)px\) 0\}/);
+  assert.ok(pad, 'The navigation height rule is missing');
+  const [, padMin, padVh, padMax] = pad.map(Number);
+
+  // Artwork geometry: 1079 tall for every 1920 wide, and the emblem sits on rows
+  // 603-1723 of its 2400 rows (the crop prepare-brand.py derives it from).
+  const ART = 1079 / 1920, EMB_TOP = 603 / 2400, EMB_H = (1723 - 603) / 2400;
+  const viewports = [[3440, 1440], [2560, 1440], [2560, 1080], [1920, 1200], [1920, 1080], [1600, 900],
+    [1536, 864], [1440, 900], [1440, 700], [1366, 768], [1366, 650], [1280, 800], [1280, 720],
+    [1180, 820], [1024, 768], [900, 700], [768, 1024], [700, 900], [641, 900]];
+
+  let worst = { gap: Infinity };
+  for (const [vw, vh] of viewports) {
+    const height = Math.min(bandVw / 100 * vw + bandPx, bandCapVh / 100 * vh);
+    const displayed = ART * vw;                                  // artwork height at this width
+    const clearance = EMB_TOP * displayed - (displayed - height) / 2; // centred crop
+    const emblemHeight = EMB_H * displayed;
+    const navBottom = Math.min(Math.max(padMin, padVh / 100 * vh), padMax) + 40; // 40px tallest nav child
+    // The emblem must stay whole below the crop, with the navigation above it.
+    assert.ok(clearance + emblemHeight <= height + 0.5,
+      `The emblem is clipped at ${vw}x${vh}: it ends ${Math.round(clearance + emblemHeight)}px into a ${Math.round(height)}px band`);
+    assert.ok(clearance >= navBottom + 8,
+      `The header logo reaches the banner logo at ${vw}x${vh}: ${Math.round(clearance)}px of clearance, ` +
+      `navigation ends at ${Math.round(navBottom)}px`);
+    const gap = clearance - navBottom;
+    if (gap < worst.gap) worst = { gap, vw, vh };
+  }
+  assert.ok(worst.gap >= 8, `Worst gap ${Math.round(worst.gap)}px at ${worst.vw}x${worst.vh}`);
+});
 
 test('navigation overlays the banner without a colored strip or reserved space', () => {
   const styles = read('public/lifegen/styles.css');
