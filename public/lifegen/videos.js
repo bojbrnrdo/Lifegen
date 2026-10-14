@@ -83,6 +83,12 @@
         btn.innerHTML =
             '<span class="vph-play" aria-hidden="true"><i data-lucide="play"></i></span>' +
             '<span class="vph-text">Tap to play</span>';
+        if (frame.dataset.poster) {
+            const poster = document.createElement("img");
+            Object.assign(poster, { src: frame.dataset.poster, alt: "", loading: "lazy", decoding: "async", className: "vcover-poster" });
+            btn.classList.add("has-poster");
+            btn.prepend(poster);
+        }
         btn.addEventListener("click", () => {
             const f = document.createElement("iframe");
             // Keep Facebook's iframe query identical to its official embed code;
@@ -123,7 +129,10 @@
         const src = (card.dataset.img || "").trim();
         const caption = card.dataset.caption || "";
         if (!src) { deckPlaceholder(card, caption); return; }
-        const index = shots.push({ src, caption }) - 1;
+        // Use the small WebP in the deck, and fetch the untouched full-size
+        // JPEG (or lossless artwork) only when this photo is opened.
+        const full = (card.dataset.full || src).trim();
+        const index = shots.push({ src: full, caption, card }) - 1;
         card.innerHTML =
             '<img class="deck-photo" loading="lazy" decoding="async" src="' + escText(src) +
             '" alt="' + escText(caption || "LIFEGEN photo") + '"/>' +
@@ -137,7 +146,7 @@
     const lbImg = document.getElementById("lbImg");
     const lbCap = document.getElementById("lbCap");
     const lbCount = document.getElementById("lbCount");
-    let lbOpen = false, lbIndex = 0;
+    let lbOpen = false, lbIndex = 0, returnFocus = null, previousOverflow = "";
 
     function showShot(i) {
         if (!shots.length) return;
@@ -151,6 +160,8 @@
     }
     function openLightbox(i) {
         if (!lightbox || !shots.length) return;
+        returnFocus = shots[i]?.card || document.activeElement;
+        previousOverflow = document.body.style.overflow;
         showShot(i);
         lightbox.classList.add("open");
         lightbox.setAttribute("aria-hidden", "false");
@@ -163,8 +174,9 @@
         if (!lightbox || !lbOpen) return;
         lightbox.classList.remove("open");
         lightbox.setAttribute("aria-hidden", "true");
-        document.body.style.overflow = "";
+        document.body.style.overflow = previousOverflow;
         lbOpen = false;
+        returnFocus?.focus({ preventScroll: true });
     }
 
     if (lightbox) {
@@ -175,9 +187,18 @@
         });
         document.addEventListener("keydown", (e) => {
             if (!lbOpen) return;
-            if (e.key === "Escape") closeLightbox();
-            else if (e.key === "ArrowRight") showShot(lbIndex + 1);
-            else if (e.key === "ArrowLeft") showShot(lbIndex - 1);
+            if (e.key === "Escape") { e.preventDefault(); closeLightbox(); }
+            else if (e.key === "ArrowRight") { e.preventDefault(); showShot(lbIndex + 1); }
+            else if (e.key === "ArrowLeft") { e.preventDefault(); showShot(lbIndex - 1); }
+            else if (e.key === "Tab") {
+                const controls = [...lightbox.querySelectorAll("button")];
+                const first = controls[0], last = controls[controls.length - 1];
+                if (e.shiftKey && (document.activeElement === first || !lightbox.contains(document.activeElement))) {
+                    e.preventDefault(); last?.focus();
+                } else if (!e.shiftKey && (document.activeElement === last || !lightbox.contains(document.activeElement))) {
+                    e.preventDefault(); first?.focus();
+                }
+            }
         });
     }
 
