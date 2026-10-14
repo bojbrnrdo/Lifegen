@@ -1360,3 +1360,41 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .network-four__search .gsearch__results{top:calc(100% + 5px);}
 @media(max-width:500px){.network-four__steps button{gap:4px;font-size:.73rem;flex-direction:column;}}
 @media(prefers-reduced-motion:reduce){.network-four__section.is-revealed{animation:none;}}
+
+
+/* Single Add New entry point: three accessible tabs, circular photo upload. */
+.unified-add{max-width:790px;margin:0 auto;}
+.unified-add__tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:23px;padding:5px;border:1px solid #dfebe2;border-radius:13px;background:#f6faf6;}
+.unified-add__tabs button{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;border:0;border-radius:9px;background:transparent;color:#617b69;padding:13px 7px;font:650 .88rem/1.2 inherit;font-weight:650;font-family:inherit;cursor:pointer;}
+.unified-add__tabs button svg{flex:none;}
+.unified-add__tabs button[aria-selected="true"]{background:#1c633e;color:#fff;box-shadow:0 3px 9px #174c3222;}
+.unified-add__tabs button:focus-visible{outline:2px solid #296e45;outline-offset:2px;}
+.unified-add [role="tabpanel"][hidden]{display:none!important;}
+.unified-add [role="tabpanel"]:not([hidden]){animation:unified-add-enter .24s ease-out both;}
+@keyframes unified-add-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.unified-add form{display:grid;gap:17px;}
+.unified-add__field{display:flex;flex-direction:column;gap:8px;min-width:0;color:#244735;font-size:.89rem;font-weight:650;}
+.unified-add__field input,.unified-add__field select,.unified-add__socials input{width:100%;min-height:45px;border-radius:10px;border:1px solid #d8e4da;padding:10px 12px;background:#fff;font:inherit;color:#1f3e2c;}
+.unified-add__identity{display:grid;grid-template-columns:155px minmax(0,1fr);align-items:center;gap:22px;}
+.unified-add__names{display:grid;gap:15px;min-width:0;}
+.unified-add__photo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;cursor:pointer;text-align:center;min-height:180px;border:1px dashed #abc9b7;border-radius:14px;background:#f6fbf7;color:#246744;padding:12px;}
+.unified-add__photo input[type=file]{position:absolute;width:1px;height:1px;opacity:0;}
+.unified-add__photo:focus-within{outline:2px solid #207b4b;outline-offset:2px;}
+.unified-add__photo-preview{display:grid;place-items:center;width:89px;height:89px;border-radius:50%;border:2px solid #aed1ba;background:#e8f3ec;overflow:hidden;color:#2c7750;}
+.unified-add__photo-preview img{display:block;width:100%;height:100%;object-fit:cover;}
+.unified-add__photo-action{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;}
+.unified-add__gender{display:flex;gap:13px;align-items:center;border:0;padding:0;margin:0;}
+.unified-add__gender legend{font-weight:650;font-size:.9rem;color:#244735;margin-bottom:9px;}
+.unified-add__gender label{cursor:pointer;}
+.unified-add__gender label svg{display:block;width:52px;height:52px;padding:14px;border-radius:13px;border:1px solid #dae7dd;}
+.unified-add__gender input{position:absolute;opacity:0;}
+.unified-add__gender input:checked+svg{color:#226f47;background:#e5f5e9;border-color:#589a71;box-shadow:0 0 0 1px #589a71 inset;}
+.unified-add__gender input:focus-visible+svg{outline:2px solid #207b4b;outline-offset:3px;}
+.unified-add__optional summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;color:#416c50;font-size:.84rem;font-weight:650;}
+.unified-add__socials{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:13px;}
+.unified-add__socials label{display:grid;gap:5px;text-transform:capitalize;font-size:.78rem;color:#61776a;font-weight:600;}
+.unified-add__consent{display:flex;align-items:flex-start;gap:10px;line-height:1.45;font-size:.8rem;color:#667d6d;cursor:pointer;}
+.unified-add__consent input{flex:none;width:17px;height:17px;margin:2px 0;accent-color:#216b44;}
+.unified-add__submit{justify-self:end;min-width:170px;}
+@media(max-width:580px){.unified-add__tabs button{flex-direction:column;gap:4px;font-size:.75rem;padding:9px 2px;}.unified-add__identity{grid-template-columns:1fr;gap:14px;}.unified-add__photo{min-height:130px}.unified-add__photo-preview{width:74px;height:74px;}.unified-add__socials{grid-template-columns:1fr;}.unified-add__submit{width:100%;justify-self:stretch;}}
+@media(prefers-reduced-motion:reduce){.unified-add [role="tabpanel"]:not([hidden]){animation:none;}}
