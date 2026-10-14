@@ -30,6 +30,14 @@ const CSS = [
  ".lfg__blank b{display:block;font-size:17px;color:#204c33;margin-bottom:7px}.lfg__blank p{font-size:13px;color:#71867a;line-height:1.6;margin:0}",
  "@media(max-width:700px){.lfg__heading{top:61px;left:14px}.lfg__buttons{left:12px;right:auto;top:12px}.lfg__svg{height:65vh;min-height:440px}.lfg__hint{font-size:10px}.lfg__panel{bottom:38px;left:12px}}",
  "@media(prefers-reduced-motion:reduce){.lfg__buttons button{transition:none}}"
+,
+'.lfg__node .touch-hit{fill:transparent!important;stroke:none!important;pointer-events:all}',
+'.lfg__node text:not(.symbol){pointer-events:none}',
+'.lfg__node[aria-expanded="true"] circle:not(.touch-hit){fill:#dbf1e2;stroke:#187447}',
+'.lfg__node:focus-visible{outline:none}',
+'.lfg__node:focus-visible circle:not(.touch-hit){stroke:#165f3b;stroke-width:3.5}',
+'.lfg__nodes-live{position:absolute;left:15px;bottom:10px;font-size:11px;color:#718876;pointer-events:none;max-width:60%}',
+'@media(max-width:700px){.lfg__nodes-live{max-width:90%;left:12px;bottom:10px}.lfg__hint{display:none}.lfg__svg{height:67vh;min-height:500px}}'
 ].join('\n');
 function ensureCSS(){
  if(document.getElementById('lifegen-node-graph-style'))return;
@@ -81,6 +89,17 @@ export function arrangeLifegroupTree(roots){
  }
  for(const root of roots)walk(root,0,null);
  return {nodes:all,lines,height:Math.max(320,140+row*46),width:Math.max(420,...all.map(n=>n.x+240))};
+}
+/** Smooth cubic ease-out for OSINT-style branch transitions. */
+export function hierarchyEasing(progress) {
+ const t=Math.max(0,Math.min(1,Number(progress)||0));
+ return 1-(1-t)*(1-t)*(1-t);
+}
+/** Curved connection between leader and child nodes. */
+export function hierarchyCurve(parent,child) {
+ const x1=parent.x+8,x2=child.x-8,y1=parent.y,y2=child.y;
+ const bend=(x1+x2)/2;
+ return 'M'+x1+' '+y1+' C'+bend+' '+y1+' '+bend+' '+y2+' '+x2+' '+y2;
 }
 export async function renderHierarchy(target,networks,groups,filters={}){
  ensureCSS();
