@@ -91,7 +91,11 @@
                 f.setAttribute("scrolling", "no");
                 f.setAttribute("frameborder", "0");
             }
-            if (embed.provider === "Google Drive") {
+            // The legacy -56px Google Drive toolbar crop leaves a black band
+            // beneath Janime's testimony in the standard 16:9 card. Let
+            // selected Drive videos use the full, uncropped provider iframe;
+            // other Drive embeds keep their existing presentation.
+            if (embed.provider === "Google Drive" && frame.dataset.driveFit !== "natural") {
                 frame.classList.add("vframe-gdrive");
             }
             frame.replaceChildren(f);
