@@ -3,6 +3,7 @@ import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
 import { createFourFieldNetwork } from './networkFourField.js';
+import { createAddNewModal } from './unifiedAddNew.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -292,7 +293,7 @@ export async function renderLifegroups({main, query}) {
  const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
  main.innerHTML=html`
  <div class="page-header"><div><h1>Discipleship Tree</h1><p class="sub">Network leaders, cell leaders and members in one collapsible hierarchy.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn" id="newNetwork">${icon('plus')} New Network</button><button class="btn btn--primary" id="newGroup">${icon('plus')} Add Cell Leader</button>`:''}</div></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" aria-label="Search network, group, or leader" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
@@ -303,8 +304,7 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="needsPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">People needing a Cell</summary><div style="padding:12px" id="needsBody"></div></details>
  <details class="card" id="progressPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">Cell progress</summary><div style="padding:12px" id="progressBody"></div></details>
  </div>`;
- main.querySelector('#newGroup')?.addEventListener('click',()=>groupForm(null,g=>location.hash=`#/lifegroups/${g.id}`));
- main.querySelector('#newNetwork')?.addEventListener('click',()=>networkForm(null,n=>location.hash=`#/networks/${n.id}`));
+ main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load()}));
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
