@@ -12,8 +12,12 @@ with Image.open(DEST / 'gallery/drive/lifegen-artwork.webp') as artwork:
         banner = artwork.resize((width, round(artwork.height * width / artwork.width)), Image.Resampling.LANCZOS)
         banner.save(DEST / f'lifegen-banner-{width}.webp', lossless=True, method=6, exact=True)
     # Square emblem, including its white border and LIFE GENERATION lettering.
-    # Coordinates refer to the 4269 × 2400 original, not the video-cover preview.
-    emblem = artwork.crop((474, 603, 1594, 1723))
+    # Coordinates are relative to the artwork size: the gallery file is capped
+    # at 2048 px (was the 4269 × 2400 original), so fixed pixels would miss.
+    w, h = artwork.size
+    left, top = round(474 / 4269 * w), round(603 / 2400 * h)
+    side = min(round(1594 / 4269 * w) - left, round(1723 / 2400 * h) - top)
+    emblem = artwork.crop((left, top, left + side, top + side))
     for name, size in [('lifegen-emblem.webp', 320), ('lifegen-icon.webp', 64)]:
         image = emblem.resize((size, size), Image.Resampling.LANCZOS)
         image.save(DEST / name, lossless=True, method=6, exact=True)

@@ -12,6 +12,60 @@ const $ = id => document.getElementById(id),
         window.lucide && lucide.createIcons()
     };
 renderIcons();
+// Scroll-reveal runs first and standalone: .reveal starts invisible in CSS,
+// so an error anywhere later in this file must never leave content hidden.
+(function initReveals() {
+    try {
+        const els = qsa(".reveal");
+        if (!els.length) return;
+        if (!("IntersectionObserver" in window)) {
+            els.forEach(el => el.classList.add("in"));
+            return;
+        }
+        const ro = new IntersectionObserver(es => {
+            es.forEach(e => {
+                e.isIntersecting && (e.target.classList.add("in"), ro.unobserve(e.target))
+            })
+        }, {
+            threshold: .1,
+            rootMargin: "0px 0px -40px 0px"
+        });
+        els.forEach(el => ro.observe(el));
+    } catch (e) {
+        try { qsa(".reveal").forEach(el => el.classList.add("in")); } catch (_) {}
+    }
+})();
+// iOS-safe scroll lock (shared protocol with videos.js / calendar.js):
+// position:fixed freezes the page where it is; overflow:hidden alone still
+// lets iOS Safari scroll behind overlays. The counter lets the mobile menu,
+// modals and lightbox nest without unlocking each other early.
+function lockBodyScroll() {
+    const n = parseInt(document.body.dataset.scrollLock || "0", 10) || 0;
+    if (n === 0) {
+        const y = window.scrollY || 0;
+        document.body.dataset.scrollY = String(y);
+        document.body.style.position = "fixed";
+        document.body.style.top = "-" + y + "px";
+        document.body.style.left = "0";
+        document.body.style.right = "0";
+    }
+    document.body.dataset.scrollLock = String(n + 1);
+}
+function unlockBodyScroll() {
+    const n = parseInt(document.body.dataset.scrollLock || "0", 10) || 0;
+    if (n <= 1) {
+        delete document.body.dataset.scrollLock;
+        const y = parseInt(document.body.dataset.scrollY || "0", 10) || 0;
+        delete document.body.dataset.scrollY;
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        window.scrollTo(0, y);
+    } else {
+        document.body.dataset.scrollLock = String(n - 1);
+    }
+}
 var REDUCED_MOTION = !1;
 try {
     REDUCED_MOTION = !(!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches)
@@ -244,10 +298,12 @@ window.addEventListener("scroll", onScroll, {
 }), onScroll();
 const mm = $("mobileMenu");
 $("burger").addEventListener("click", () => {
-    mm.classList.add("open"), document.body.style.overflow = "hidden"
+    if (mm.classList.contains("open")) return;
+    mm.classList.add("open"), lockBodyScroll()
 });
 const closeMM = () => {
-    mm.classList.remove("open"), document.body.style.overflow = ""
+    if (!mm.classList.contains("open")) return;
+    mm.classList.remove("open"), unlockBodyScroll()
 };
 $("mmClose").addEventListener("click", closeMM), mm.querySelectorAll("a").forEach(a => a.addEventListener("click", closeMM));
 const spy = new IntersectionObserver(es => {
@@ -258,14 +314,6 @@ const spy = new IntersectionObserver(es => {
     rootMargin: "-45% 0px -50% 0px"
 });
 qsa("main section[id]").forEach(s => spy.observe(s));
-const io = new IntersectionObserver(es => {
-    es.forEach(e => {
-        e.isIntersecting && (e.target.classList.add("in"), io.unobserve(e.target))
-    })
-}, {
-    threshold: .1,
-    rootMargin: "0px 0px -40px 0px"
-});
 
 // ---- Next-service countdown (Sundays 1:00–3:00 PM, Asia/Manila) ------------
 const SERVICE_START_H = 13, SERVICE_END_H = 15, HOUR = 36e5, DAY = 864e5;
@@ -321,7 +369,17 @@ setInterval(() => {
 }, 6e4);
 syncServiceCycle();
 const cdNums = Object.fromEntries(qsa("#countdown .cd-num").map(el => [el.dataset.u, el]));
-let cdLastLabel = "", cdLastLive = null;
+let cdLastLabel = "", cdLastLive = null, cdLastDate = "", cdLastPill = "";
+// The date, pill and aria-label only change across minute/day boundaries, so
+// cache them instead of touching the DOM on every one-second tick.
+function setCdDate(value) {
+    if (value === cdLastDate) return;
+    cdLastDate = value, $("cdDate").textContent = value
+}
+function setCdPill(value) {
+    if (value === cdLastPill) return;
+    cdLastPill = value, $("cdPill").textContent = value
+}
 
 function setNum(key, value) {
     const el = cdNums[key], text = String(value).padStart(2, "0");
@@ -344,24 +402,24 @@ function tickCountdown() {
     if (live) {
         const start = target - 7 * DAY; // today's service started 7 days before next week's
         progress = (now - start) / (2 * HOUR);
-        $("cdDate").textContent = "Today, " + (nextService.announceDate || new Date(start).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric" }));
+        setCdDate("Today, " + (nextService.announceDate || new Date(start).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric" })));
         // nextService.announceDate is the server's short form ("Oct 18"), so the
         // "Today, " prefix reads the same as the locally computed fallback.
-        $("cdPill").textContent = "Happening now";
+        setCdPill("Happening now");
     } else {
         setNum("d", d), setNum("h", h), setNum("m", m), setNum("s", s);
         // Progress through the week: from the end of last Sunday's service to the next one.
         const lastEnd = target - 7 * DAY + 2 * HOUR;
         progress = (now - lastEnd) / (target - lastEnd);
         const daysAway = nextService.daysAway;
-        $("cdDate").textContent = nextService.displayDate || new Date(target).toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" });
-        $("cdPill").textContent = daysAway <= 0 ? "Today" : 1 === daysAway ? "Tomorrow" : "In " + daysAway + " days";
+        setCdDate(nextService.displayDate || new Date(target).toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" }));
+        setCdPill(daysAway <= 0 ? "Today" : 1 === daysAway ? "Tomorrow" : "In " + daysAway + " days");
         const label = (d ? d + (1 === d ? " day " : " days ") : "") + h + (1 === h ? " hour " : " hours ") + m + (1 === m ? " minute" : " minutes") + " until the next service";
         if (label !== cdLastLabel) cdLastLabel = label, $("countdown").setAttribute("aria-label", label);
     }
     $("cdBar").style.width = (100 * Math.min(1, Math.max(0, progress))).toFixed(2) + "%"
 }
-qsa(".reveal").forEach(el => io.observe(el)), tickCountdown(), setInterval(tickCountdown, 1e3);
+tickCountdown(), setInterval(tickCountdown, 1e3);
 const prayers = {
     vip: [{
         title: "Personal Prayer for VIP (Visitors & Newcomers)",
@@ -385,7 +443,9 @@ function renderPrayer(type) {
 }
 
 function openPrayerModal(type) {
-    renderPrayer(type), $("prayerModal").classList.add("open"), document.body.style.overflow = "hidden"
+    renderPrayer(type);
+    if ($("prayerModal").classList.contains("open")) return;
+    $("prayerModal").classList.add("open"), lockBodyScroll()
 }
 $("praySegVip").addEventListener("click", () => renderPrayer("vip")), $("praySegRegular").addEventListener("click", () => renderPrayer("regular")), $("readVipPrayer").addEventListener("click", () => openPrayerModal("vip")), $("newPrayer").addEventListener("click", () => {
     renderPrayer(currentType), toast("Prayer refreshed. Take a fresh moment with the Lord.", "book-open")
@@ -439,14 +499,18 @@ async function loadPrizeInVipSection() {
         el.textContent = "—"
     }
 }
+function closeModal(modal) {
+    if (!modal.classList.contains("open")) return;
+    modal.classList.remove("open"), unlockBodyScroll()
+}
 qsa("[data-story]").forEach(b => b.addEventListener("click", e => {
-    e.preventDefault(), $("storyModal").classList.add("open"), document.body.style.overflow = "hidden"
+    e.preventDefault();
+    if ($("storyModal").classList.contains("open")) return;
+    $("storyModal").classList.add("open"), lockBodyScroll()
 })), modals.forEach(modal => {
-    modal.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => {
-        modal.classList.remove("open"), document.body.style.overflow = ""
-    }))
+    modal.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(modal)))
 }), document.addEventListener("keydown", e => {
-    "Escape" === e.key && (modals.forEach(m => m.classList.remove("open")), closeMM(), document.body.style.overflow = "")
+    "Escape" === e.key && (modals.forEach(closeModal), closeMM())
 });
 function syncVipDashboardState() {
     const signup = $("vip-signup-form-container"),

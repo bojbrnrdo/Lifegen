@@ -15,6 +15,35 @@
     const catOf = (e) => (CATS[e.category] ? e.category : "special");
 
     const icons = () => { try { window.lucide && lucide.createIcons(); } catch (e) {} };
+    // iOS-safe scroll lock (shared protocol with app.js / videos.js):
+    // position:fixed freezes the page; overflow:hidden alone does not on iOS.
+    function lockBodyScroll() {
+        const n = parseInt(document.body.dataset.scrollLock || "0", 10) || 0;
+        if (n === 0) {
+            const y = window.scrollY || 0;
+            document.body.dataset.scrollY = String(y);
+            document.body.style.position = "fixed";
+            document.body.style.top = "-" + y + "px";
+            document.body.style.left = "0";
+            document.body.style.right = "0";
+        }
+        document.body.dataset.scrollLock = String(n + 1);
+    }
+    function unlockBodyScroll() {
+        const n = parseInt(document.body.dataset.scrollLock || "0", 10) || 0;
+        if (n <= 1) {
+            delete document.body.dataset.scrollLock;
+            const y = parseInt(document.body.dataset.scrollY || "0", 10) || 0;
+            delete document.body.dataset.scrollY;
+            document.body.style.position = "";
+            document.body.style.top = "";
+            document.body.style.left = "";
+            document.body.style.right = "";
+            window.scrollTo(0, y);
+        } else {
+            document.body.dataset.scrollLock = String(n - 1);
+        }
+    }
     const pad = (n) => String(n).padStart(2, "0");
     const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const parts = (key) => key.split("-").map(Number);
@@ -224,14 +253,16 @@
     let lastFocus = null;
     function openModal() {
         lastFocus = document.activeElement;
+        if (modal.classList.contains("open")) { icons(); return; }
         modal.classList.add("open");
-        document.body.style.overflow = "hidden";
+        lockBodyScroll();
         icons();
         modal.querySelector(".modal-close").focus();
     }
     function closeModal() {
+        if (!modal.classList.contains("open")) return;
         modal.classList.remove("open");
-        document.body.style.overflow = "";
+        unlockBodyScroll();
         if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
     modal.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));

@@ -14,7 +14,7 @@ Source: [LIFEGEN Drive folder](https://drive.google.com/drive/folders/1U5ipH3vXo
 ## Quality and loading
 
 - Full-size JPEGs are **byte-identical** to the downloaded originals. SHA-256 checksums and source filenames are recorded in `public/brand/gallery/drive/manifest.json`.
-- Full-size artwork is **lossless WebP**, with decoded RGBA pixels verified against the PNG by the import script: 4,372,716 → 2,021,956 bytes (54% smaller).
+- Full-size artwork is WebP quality 90 capped at 2048 px (2048 × 1151, 73,014 bytes): 4,372,716 → 73,014 bytes (98% smaller). The original import was lossless WebP verified against the PNG (2,021,956 bytes); it was resized for lightbox performance — quality 90 keeps the poster lettering crisp, and the PNG source stays in the ignored `google_drive/` folder.
 - Deck previews are at most 512 px, WebP quality 92. These are resized, lossy **display previews**, not replacements for the originals. The deck's roughly 252 CSS-pixel cards get approximately 2× resolution. Whole photos remain visible, without cropping people's faces from landscape groups.
 - The 49 previews total **3,040,670 bytes** versus **19,833,282 bytes** for the source images (about **85% less**). They are lazy-loaded; full-size files load only when opened in the lightbox. The separate 1280 × 720 highlight thumbnail (73,346 bytes, WebP quality 92) is not included in that preview total.
 - Video remains externally hosted and **was not locally recompressed**: its 603 MB size exceeds the Drive connector's 100 MB download limit. The original is untouched; Drive controls its playback renditions. No claim is made that a Drive rendition is lossless.
@@ -44,12 +44,14 @@ Browser smoke checks covered desktop (1440 px), tablet (768 px) and mobile (390 
 The same supplied artwork now serves as the landing-page banner. The banner is
 rendered as an uncropped image (not a background behind duplicate branding),
 with responsive 960 px / 1920 px versions and a matching responsive preload.
-Both are lossless WebP encodings of their resized pixels; the full-resolution
-artwork remains available in the gallery. The header and footer use a square
-crop of the artwork's original emblem, and the favicon uses the same crop.
-No generated artwork or alterations to the lettering were used.
+Both are lossless WebP encodings of their resized pixels; the 2048 px gallery
+artwork they were built from remains available in the gallery. The header and
+footer use a square crop of the artwork's original emblem, and the favicon
+uses the same crop. No generated artwork or alterations to the lettering were
+used.
 
-Rebuild these assets from the already-imported, lossless artwork with:
+Rebuild these assets from the already-imported gallery artwork with
+(`prepare-brand.py` scales the emblem crop to the artwork size):
 
 ```sh
 .venv/bin/python scripts/prepare-brand.py
