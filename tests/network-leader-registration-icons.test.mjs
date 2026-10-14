@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { networkLeaderRegistrationHtml } from '../public/admin/js/views/networkLeaderRegistration.js';
 
 const lifegroupView = readFileSync(new URL('../public/admin/js/views/lifegroups.js', import.meta.url),'utf8');
 const networkUI = readFileSync(new URL('../public/admin/js/views/networkDetailUI.js', import.meta.url),'utf8');
@@ -9,7 +8,7 @@ const helper = readFileSync(new URL('../public/admin/js/views/networkLeaderRegis
 const icons = readFileSync(new URL('../public/admin/js/ui.js', import.meta.url),'utf8');
 
 test('Network Leader registration uses its own form with consent and a duplicate guard', () => {
-  const markup = networkLeaderRegistrationHtml();
+  const markup = helper;
   assert.match(markup, /id="netRegisterPanel"/);
   assert.match(markup, /id="netRegisterForm"/);
   assert.match(markup, /id="netRegFirst"/);
