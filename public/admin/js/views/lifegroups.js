@@ -6,7 +6,7 @@ import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge,
 import { can } from '../app.js';
 import {
   html, raw, icon, avatar, fullName, statusBadge, fmtDate, fmtNum, emptyState, debounce, toast, confirmDialog,
-  openModal, closeModal, withLoading, formData, DAY_LABELS, DAY_SHORT, TIME_LABELS, fmtClock, fmtSchedule, toISODate,
+  openModal, closeModal, withLoading, formData, toISODate,
 } from '../ui.js';
 
 /**
@@ -528,6 +528,7 @@ export async function renderLifegroup({ main }, id) {
 // report to their Network leader. Networks are flat — every Network has the same shape.
 // ---------------------------------------------------------------------------
 async function networkForm(n, onSaved) {
+  // Existing optional fields are intentionally omitted; server-side update merges them from the record.
   const v = (k) => esc(n?.[k] ?? '');
   const modal = openModal({
     title: n ? `Edit ${n.name}` : 'New Network',
