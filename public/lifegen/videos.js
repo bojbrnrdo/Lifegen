@@ -19,9 +19,12 @@
 // Facebook video into 16:9. The plugin only offers fixed sizes, so odd ratios
 // still letterbox inside the closest of the two.
 //
-// Google Drive note: the drive.google.com/file/d/…/preview player is shown
-// as-is, title bar included. An earlier top:-56px crop hid the bar but also
-// clipped the top of the video on some viewports, so the crop was removed.
+// Google Drive note: the drive.google.com/file/d/…/preview player is embedded
+// with ?rm=minimal, which hides its header bar so the video itself fills the
+// 16:9 frame edge-to-edge. An earlier top:-56px crop hid the bar but also
+// clipped the top of the video on some viewports, so the crop was removed in
+// favour of the player's own minimal-chrome mode. Same host, so the CSP
+// frame-src is unchanged.
 (() => {
     "use strict";
 
@@ -90,7 +93,7 @@
         // Google Drive / Google Docs video
         if (host === "drive.google.com" || host === "docs.google.com") {
             const id = (path.match(/\/(?:file|videos)\/d\/([\w-]+)/) || [])[1] || u.searchParams.get("id");
-            if (id) return { type: "iframe", provider: "Google Drive", src: `https://drive.google.com/file/d/${id}/preview` };
+            if (id) return { type: "iframe", provider: "Google Drive", src: `https://drive.google.com/file/d/${id}/preview?rm=minimal` };
         }
         // Direct video file
         if (/\.(mp4|webm|mov|m4v)$/i.test(path)) return { type: "video", provider: "self", src: u.href };

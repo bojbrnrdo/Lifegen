@@ -92,10 +92,10 @@ test('Google Drive file and Docs video links become preview embeds', () => {
   const file = embedFor('https://drive.google.com/file/d/1rZt48LpaSTRQM3dvfbxkb-ta7cwtSAUb/view');
   assert.equal(file.type, 'iframe');
   assert.equal(file.provider, 'Google Drive');
-  assert.equal(file.src, 'https://drive.google.com/file/d/1rZt48LpaSTRQM3dvfbxkb-ta7cwtSAUb/preview');
+  assert.equal(file.src, 'https://drive.google.com/file/d/1rZt48LpaSTRQM3dvfbxkb-ta7cwtSAUb/preview?rm=minimal');
   const docs = embedFor('https://docs.google.com/videos/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/edit?usp=drive_link');
   assert.equal(docs.provider, 'Google Drive');
-  assert.equal(docs.src, 'https://drive.google.com/file/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/preview');
+  assert.equal(docs.src, 'https://drive.google.com/file/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/preview?rm=minimal');
 });
 
 test('Vimeo and direct video files are recognised', () => {
