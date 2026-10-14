@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, existsSync, statSync} from 'node:fs';
+import {mp4Info, formatDuration} from '../scripts/add-video.mjs';
 
 // Where the "extra" black framing and the second play button came from:
 // the Grand Campus Hangout highlight plays through *Google Drive's* preview
@@ -22,7 +23,7 @@ const fn=name=>player.match(new RegExp(`function ${name}\\(([^)]*)\\) \\{([\\s\\
 
 test('the highlight declares the church-owned file that plays first-party',()=>{
  const card=highlight();
- assert.match(card,/data-native-src="\/brand\/videos\/grand-campus-hangout-720p\.mp4"/,
+ assert.match(card,/data-native-src="\/brand\/videos\/grand-campus-hangout\.mp4"/,
   'the highlight must name the site-owned copy of the video');
  // The provider link stays as the fallback while that file is missing.
  assert.match(card,/data-video="https:\/\/drive\.google\.com\/file\/d\/1rZt48LpaSTRQM3dvfbxkb-ta7cwtSAUb\/view"/);
@@ -73,4 +74,24 @@ test('the first-party player uses the same framing rules as the testimonies',()=
  const playerVersion=page.match(/\/lifegen\/videos\.js\?v=(\d+\.\d+\.\d+)/)?.[1];
  assert.ok(playerVersion&&atLeast(playerVersion,'2.4.8'),`videos.js?v=${playerVersion} must be >= 2.4.8`);
  assert.equal(versions['/lifegen/videos.js'].version,playerVersion,'run: npm run assets:version');
+});
+
+test('the hangout video that ships is the one the page describes',()=>{
+ const file=new URL('../public/brand/videos/grand-campus-hangout.mp4',import.meta.url);
+ assert.ok(existsSync(file),'the site-owned hangout video must be committed, not just declared');
+ const size=statSync(file).size;
+ assert.ok(size>5_000_000,'not a truncated file');
+ assert.ok(size<90_000_000,`GitHub rejects nothing here yet, but keep it deployable (${(size/1048576).toFixed(1)} MB)`);
+ const {duration,width,height}=mp4Info(readFileSync(file));
+ // The caption is the promise to the visitor; the file has to keep it.
+ const label=formatDuration(duration);
+ assert.equal(label,'2 min 13 sec','the caption says 2 min 13 sec');
+ assert.ok(highlight().includes(label),'the highlight caption carries that running time');
+ assert.ok(width>=1280&&height>=720,'at least as sharp as the 960 px frame it plays in');
+ // Browsers only play what they can decode: H.264/AVC video, AAC audio.
+ const buf=readFileSync(file);
+ assert.equal(buf.toString('ascii',4,8),'ftyp','a real MP4');
+ assert.ok(buf.includes(Buffer.from('avc1')),'H.264 video track — universally decodable');
+ assert.ok(buf.includes(Buffer.from('mp4a')),'AAC audio track');
+ assert.ok(buf.includes(Buffer.from('avcC')),'an AVC configuration record, so the profile is explicit');
 });

@@ -43,12 +43,12 @@ test('the helper refuses what it cannot publish', () => {
     assert.ok(statSync(video).size > 5_000_000);
 });
 
-test('the hangout slot is ready for its file the moment it lands', () => {
+test('the hangout slot names a file that is actually there', () => {
     const slot = page.match(/data-native-src="([^"]+)"[^>]*data-label="Grand Campus Hangout"|data-label="Grand Campus Hangout"[^>]*data-native-src="([^"]+)"/);
     assert.ok(slot, 'the highlight names the file it will play first-party');
     const named = slot[1] || slot[2];
-    assert.equal(named, '/brand/videos/grand-campus-hangout-720p.mp4');
-    // Nothing else needs editing: dropping that file there flips the player.
-    const onDisk = existsSync(new URL('../public/brand/videos/grand-campus-hangout-720p.mp4', import.meta.url));
-    assert.equal(typeof onDisk, 'boolean');
+    assert.equal(named, '/brand/videos/grand-campus-hangout.mp4');
+    // A slot pointing at a file that is not on the site would silently fall
+    // back to the provider's black surround — the exact thing being fixed.
+    assert.ok(existsSync(new URL('../public' + named, import.meta.url)), `${named} must exist in public/`);
 });
