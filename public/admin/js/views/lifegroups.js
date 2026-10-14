@@ -261,10 +261,10 @@ export async function renderLifegroups({main, query}) {
  main.innerHTML=html`
  <div class="page-header"><div><h1>Discipleship Tree</h1><p class="sub">Network leaders, cell leaders and members in one collapsible hierarchy.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn" id="newNetwork">${icon('plus')} New Network</button><button class="btn btn--primary" id="newGroup">${icon('plus')} New Lifegroup</button>`:''}</div></div>
- <div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" /></div>
+ <div class="toolbar lg-tree-toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search network, cell or leader" aria-label="Search network, group, or leader" /></div>
  <select id="treeGender" aria-label="Network category"><option value="">All networks</option><option value="boys">Boys</option><option value="girls">Girls</option></select>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
- <button class="btn" id="treeRefresh">Refresh</button></div>
+ <button class="btn" id="treeRefresh" title="Reload current Lifegroup records">Refresh</button></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
  <div style="display:grid;gap:12px;margin-top:16px">
  <details class="card" id="needsPanel"><summary style="padding:18px;cursor:pointer;font-weight:650">People needing a Lifegroup</summary><div style="padding:12px" id="needsBody"></div></details>
