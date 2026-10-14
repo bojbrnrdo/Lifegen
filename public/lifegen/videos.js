@@ -68,12 +68,95 @@
         const label = frame.dataset.label || "LIFEGEN video";
         if (!embed) return placeholder(frame);
         frame.classList.remove("is-empty");
+        const immersive = frame.dataset.fullscreen === "true";
+        let fallback = null;
+        let fullscreenButton = null;
+
+        function restoreFallback() {
+            if (!fallback) return;
+            const { marker, overflow } = fallback;
+            frame.classList.remove("vframe--fullscreen-fallback");
+            marker.replaceWith(frame);
+            document.body.style.overflow = overflow;
+            fallback = null;
+            document.removeEventListener("keydown", handleFallbackEscape);
+            updateFullscreenButton();
+        }
+
+        function handleFallbackEscape(event) {
+            if (event.key === "Escape" && fallback) {
+                event.preventDefault();
+                restoreFallback();
+            }
+        }
+
+        function updateFullscreenButton() {
+            if (!fullscreenButton) return;
+            const open = document.fullscreenElement === frame || Boolean(fallback);
+            fullscreenButton.setAttribute("aria-label", open ? "Exit fullscreen video" : "Watch video fullscreen");
+            fullscreenButton.title = open ? "Exit fullscreen" : "Fullscreen";
+            fullscreenButton.innerHTML = open ?
+                '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6H3m18 6h-6v6M9 9 3 3m12 12 6 6"/></svg>' :
+                '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>';
+        }
+
+        // Fallback for browsers without element fullscreen (including older iOS):
+        // relocate the same player to the body instead of creating another embed.
+        function expandFallback() {
+            if (fallback) return;
+            const marker = document.createElement("div");
+            marker.className = "vframe-placeholder";
+            marker.style.aspectRatio = frame.style.getPropertyValue("--ratio") || "16 / 9";
+            frame.before(marker);
+            fallback = { marker, overflow: document.body.style.overflow };
+            document.body.append(frame);
+            document.body.style.overflow = "hidden";
+            frame.classList.add("vframe--fullscreen-fallback");
+            document.addEventListener("keydown", handleFallbackEscape);
+            updateFullscreenButton();
+            fullscreenButton?.focus({ preventScroll: true });
+        }
+
+        function enterFullscreen() {
+            if (fallback) {
+                restoreFallback();
+                return;
+            }
+            if (document.fullscreenElement === frame) {
+                document.exitFullscreen?.();
+                return;
+            }
+            if (typeof frame.requestFullscreen === "function") {
+                try {
+                    const request = frame.requestFullscreen();
+                    if (request && typeof request.catch === "function") request.catch(expandFallback);
+                } catch {
+                    expandFallback();
+                }
+            } else {
+                expandFallback();
+            }
+        }
+
+        function addFullscreenControl() {
+            if (!immersive) return;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "vfullscreen-button";
+            button.addEventListener("click", enterFullscreen);
+            fullscreenButton = button;
+            frame.appendChild(button);
+            updateFullscreenButton();
+            document.addEventListener("fullscreenchange", updateFullscreenButton);
+        }
+
         if (embed.type === "video") {
             const v = document.createElement("video");
             Object.assign(v, { src: embed.src, controls: true, preload: "metadata", playsInline: true });
             v.setAttribute("aria-label", label);
             if (frame.dataset.poster) v.poster = frame.dataset.poster;
             frame.replaceChildren(v);
+            addFullscreenControl();
             return;
         }
 
@@ -95,13 +178,14 @@
                 frame.classList.add("vframe-gdrive");
             }
             frame.replaceChildren(f);
+            addFullscreenControl();
         }
 
         if (frame.dataset.poster) {
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "vcover";
-            btn.setAttribute("aria-label", "Play video: " + label);
+            btn.setAttribute("aria-label", (immersive ? "Play fullscreen video: " : "Play video: ") + label);
 
             const poster = document.createElement("img");
             Object.assign(poster, {
@@ -119,7 +203,12 @@
 
             btn.appendChild(poster);
             btn.appendChild(playBtn);
-            btn.addEventListener("click", play);
+            btn.addEventListener("click", () => {
+                play();
+                // Native browser fullscreen requires this call directly inside
+                // the user's click. If refused, a full-viewport fallback opens.
+                if (immersive) enterFullscreen();
+            });
             frame.replaceChildren(btn);
         } else {
             play();
