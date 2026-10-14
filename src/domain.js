@@ -104,7 +104,7 @@ function validatePerson(body, existing = null) {
   if (!data.last_name && !data.full_name) errors.push('Last name is required.');
   if (data.contact_number && digitsOf(data.contact_number).length < 7) errors.push('Contact number looks too short.');
   if (data.age !== null && (!Number.isInteger(data.age) || data.age < 1 || data.age > 120)) errors.push('Age must be a whole number from 1 to 120.');
-  if (data.sex && !['male', 'female'].includes(data.sex)) errors.push('Invalid sex value.');
+  if (data.sex && !['male', 'female', 'other', 'prefer_not_to_say'].includes(data.sex)) errors.push('Invalid sex value.');
   if (!STATUSES.includes(data.status)) errors.push('Invalid status.');
   if (data.birthdate && !isValidDate(data.birthdate)) errors.push('Birthday must be a valid date.');
   if (!isValidDate(data.date_registered)) errors.push('Date registered must be a valid date.');

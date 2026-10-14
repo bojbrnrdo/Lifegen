@@ -449,40 +449,50 @@ qsa("[data-story]").forEach(b => b.addEventListener("click", e => {
     "Escape" === e.key && (modals.forEach(m => m.classList.remove("open")), closeMM(), document.body.style.overflow = "")
 });
 function syncVipDashboardState() {
-    const signup = $("vip-signup-form-container"),
+    const choice = $("reg-choice"),
+        signup = $("vip-signup-form-container"),
+        regular = $("regular-registration"),
+        success = $("reg-success"),
         dash = $("vip-attendance-dashboard"),
         device = getDevice();
+    // A confirmation the visitor is still reading stays on screen until the page
+    // is reloaded or they choose another flow — the background refresh must never
+    // paint over it.
+    if (success && !success.hidden) {
+        choice.hidden = !0, signup.hidden = !0, regular.hidden = !0, dash.hidden = !0;
+        return;
+    }
     // loadVipAttendance refreshes the VIP state first, so the prize display below can
     // reuse that response instead of making a second request.
-    device && device.token && device.name ? (signup.hidden = !0, dash.hidden = !1, $("vip-welcome-name").textContent = device.name, loadVipAttendance().finally(loadPrizeInVipSection)) : (signup.hidden = !1, dash.hidden = !0, clearLiveValidation("vip-signup-form"))
+    device && device.token && device.name ? (choice.hidden = !0, signup.hidden = !0, regular.hidden = !0, dash.hidden = !1, $("vip-welcome-name").textContent = device.name, loadVipAttendance().finally(loadPrizeInVipSection)) : (choice.hidden = !1, signup.hidden = !0, regular.hidden = !0, dash.hidden = !0, clearLiveValidation("vip-signup-form"))
 }
-
 function validateVipForm() {
     const nameInput = $("vip-name"),
-        ageInput = $("vip-age"),
+        genderInput = $("vip-gender"),
+        birthdateInput = $("vip-birthdate"),
         schoolInput = $("vip-school"),
         inviterInput = $("vip-inviter"),
         contactInput = $("vip-contact");
-    [nameInput, ageInput, schoolInput, inviterInput, contactInput].forEach(clearFieldError);
+    [nameInput, genderInput, birthdateInput, schoolInput, inviterInput, contactInput].forEach(clearFieldError);
     let firstInvalid = null;
     const fail = (input, msg) => {
             setFieldError(input, msg), firstInvalid || (firstInvalid = input)
         },
         name = nameInput.value.trim();
     name.length < 2 && fail(nameInput, "Please enter your full name (at least 2 characters).");
-    const age = ageInput.value.trim(),
-        ageNum = Number(age);
-    (!age || !Number.isInteger(ageNum) || ageNum < 1 || ageNum > 120) && fail(ageInput, "Please enter a valid age between 1 and 120."), schoolInput.value.trim().length < 2 && fail(schoolInput, "Please enter your school or institution."), inviterInput.value.trim().length < 2 && fail(inviterInput, "Please tell us who invited you.");
+    const birthdate = birthdateInput.value.trim(),
+        age = birthdate ? ageFromIso(birthdate) : NaN;
+    (!birthdate || !Number.isInteger(age) || age < 1 || age > 120) && fail(birthdateInput, "Please enter your birthday."), !genderInput.value && fail(genderInput, "Please choose your gender."), schoolInput.value.trim().length < 2 && fail(schoolInput, "Please enter your school or institution."), inviterInput.value.trim().length < 2 && fail(inviterInput, "Please tell us who invited you.");
     const contact = contactInput.value.trim();
     return contact && !/^[0-9+\-() ]{7,20}$/.test(contact) && fail(contactInput, "Please enter a valid contact number, or leave this blank."), firstInvalid ? (firstInvalid.focus(), toast("Please check the highlighted fields.", "alert-triangle"), null) : {
         name: name,
-        age: ageNum,
+        gender: genderInput.value,
+        birthdate: birthdate,
         school: schoolInput.value.trim(),
         inviter: inviterInput.value.trim(),
         contact: contact || null
     }
 }
-
 function getSundaysInMonth(year, month) {
     const sundays = [],
         date = new Date(year, month, 1);
@@ -562,9 +572,9 @@ $("vip-signup-form").addEventListener("submit", async e => {
     if (getDevice() && getDevice().token) return toast("You are already registered on this device — opening your portal.", "info"), void syncVipDashboardState();
     const token = makeToken(),
         reg = {
-            vip_token: token,
             full_name: data.name,
-            age: data.age,
+            gender: data.gender,
+            birthdate: data.birthdate,
             school: data.school,
             inviter: data.inviter,
             contact: data.contact
@@ -577,7 +587,7 @@ $("vip-signup-form").addEventListener("submit", async e => {
     setDevice({
         token: token,
         name: data.name
-    }), toast("Welcome to LIFEGEN, " + data.name + "! Your registration has been recorded.", "sparkles"), e.target.reset(), syncVipDashboardState()
+    }), toast("Welcome to LIFEGEN, " + data.name + "! Your registration has been recorded.", "sparkles"), e.target.reset(), showVipRegistrationSuccess()
 }), $("checkin-btn").addEventListener("click", async () => {
     if (!isTodaySunday()) return void toast("Attendance check-in is only available on Sundays.", "alert-triangle");
     const device = getDevice();
@@ -746,3 +756,210 @@ try {
 } catch (e) {}
 window.addEventListener("error", e => console.error("[LIFEGEN] Unexpected error:", e.message));
 Lifegen.initialize({sync:syncVipDashboardState,verse:renderVerse,toast,reducedMotion:REDUCED_MOTION});
+
+/* ==========================================================================
+   Public registration update — VIP / Regular selection screen, the VIP
+   form's birthday + gender fields, and the three-step regular attendee flow.
+   Everything below is additive; no other flow depends on it.
+   ========================================================================== */
+
+// Whole years since a birthday, using the church's clock (Asia/Manila).
+function ageFromIso(iso) {
+    const [y, m, d] = String(iso).split("-").map(Number),
+        t = getChurchNow();
+    let age = t.getFullYear() - y;
+    if (t.getMonth() + 1 < m || (t.getMonth() + 1 === m && t.getDate() < d)) age -= 1;
+    return age;
+}
+
+const GENDER_LABELS = { male: "Male", female: "Female", other: "Other", prefer_not_to_say: "Prefer not to say" };
+let regStepNow = 1,
+    regLeaders = [];
+
+function showRegPanels(which) {
+    $("reg-choice").hidden = which !== "choice";
+    $("vip-signup-form-container").hidden = which !== "vip";
+    $("regular-registration").hidden = which !== "regular";
+    $("reg-success").hidden = which !== "success";
+    $("vip-attendance-dashboard").hidden = which !== "dash";
+}
+
+function showRegSuccess(opts) {
+    if (opts.title) $("regSuccessTitle").textContent = opts.title;
+    if (opts.message) $("regSuccessMsg").textContent = opts.message;
+    const noteBox = $("regSuccessNote");
+    noteBox.textContent = opts.note || "", noteBox.hidden = !opts.note;
+    $("regSuccessFine").textContent = opts.fine || "";
+    showRegPanels("success");
+    $("reg-success").scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "center" });
+}
+
+function showVipRegistrationSuccess() {
+    showRegSuccess({
+        title: "Registration Successful!",
+        message: "Welcome to the LIFEGEN family. Your registration has been recorded.",
+        fine: "Your details are stored securely in the LIFEGEN Supabase database."
+    });
+}
+
+function goRegStep(step) {
+    regStepNow = step;
+    qsa("#regular-registration .reg-step").forEach((s) => { s.hidden = Number(s.dataset.step) !== step; });
+    qsa("#regSteps li").forEach((li) => { const k = Number(li.dataset.step); li.classList.toggle("is-active", k === step); li.classList.toggle("is-done", k < step); });
+    if (step === 2) loadRegLeaders();
+    if (step === 3) renderRegReview();
+    $("regular-registration").scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "start" });
+}
+
+function validateRegStep1() {
+    const name = $("rg-name"), email = $("rg-email"), birth = $("rg-birthdate"), gender = $("rg-gender"), school = $("rg-school");
+    [name, email, birth, gender, school].forEach(clearFieldError);
+    let first = null;
+    const fail = (el, msg) => { setFieldError(el, msg); first || (first = el); };
+    name.value.trim().length < 2 && fail(name, "Please enter your full name.");
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()) && fail(email, "Please enter a valid email address.");
+    const bd = birth.value.trim(), age = bd ? ageFromIso(bd) : NaN;
+    (!bd || !Number.isInteger(age) || age < 1 || age > 120) && fail(birth, "Please enter your birthday."), !gender.value && fail(gender, "Please choose your gender."), !school.value.trim() && fail(school, "Please enter your school.");
+    if (first) { first.focus(); toast("Please check the highlighted fields.", "alert-triangle"); return false; }
+    return true;
+}
+
+function validateRegStep2() {
+    const ministry = $("rg-ministry"), leader = $("rg-leader"), manual = $("rg-manual"), wrap = $("rgManualWrap");
+    [ministry, leader, manual].forEach(clearFieldError);
+    let first = null;
+    const fail = (el, msg) => { setFieldError(el, msg); first || (first = el); };
+    !ministry.value && fail(ministry, "Please choose a ministry.");
+    if (!wrap.hidden) manual.value.trim().length < 2 && fail(manual, "Please type your leader's name.");
+    else if (!leader.value && leader.dataset.empty !== "1") fail(leader, "Please choose a leader.");
+    if (first) { first.focus(); toast("Please check the highlighted fields.", "alert-triangle"); return false; }
+    return true;
+}
+
+function currentRegLeader() {
+    const id = $("rg-leader").value;
+    return regLeaders.find((l) => l.leader_person_id === id) || null;
+}
+
+function updateRegAssignment() {
+    const leader = currentRegLeader(), box = $("rgAssign");
+    if (!leader) { box.hidden = true; return; }
+    $("rgAssignLeader").textContent = leader.leader_name;
+    $("rgAssignNetwork").textContent = leader.network_leader_name || "No network leader yet — N/A";
+    $("rgAssignCell").textContent = leader.lifegroup_name ? leader.lifegroup_name + " (Open Cell)" : "No open cell configured yet";
+    box.hidden = false;
+}
+
+// The dropdown is filled from the live Lifegroups data for the selected gender.
+// Changing gender fetches again, and a leader that is no longer eligible is
+// cleared so the attendee chooses again.
+async function loadRegLeaders() {
+    const gender = $("rg-gender").value,
+        sel = $("rg-leader"),
+        help = $("rgLeaderHelp"),
+        previous = sel.dataset.selected || "";
+    sel.disabled = true, sel.dataset.empty = "", sel.dataset.selected = "", sel.innerHTML = '<option value="">Loading leaders…</option>';
+    help.textContent = "Loading available leaders…";
+    $("rgAssign").hidden = true;
+    try {
+        const r = await DB.listLeaders(gender);
+        regLeaders = Array.isArray(r.leaders) ? r.leaders : [];
+        if (!regLeaders.length) {
+            sel.dataset.empty = "1";
+            sel.innerHTML = '<option value="">No leader available yet.</option>';
+            help.textContent = "No leader available yet. You can still register — our team will review your Lifegroup assignment.";
+        } else {
+            sel.innerHTML = '<option value="">Select a leader…</option>' + regLeaders.map((l) => '<option value="' + esc(l.leader_person_id) + '">' + esc(l.leader_name) + (l.lifegroup_name ? " — " + esc(l.lifegroup_name) : "") + "</option>").join("");
+            help.textContent = regLeaders.length + " leader" + (regLeaders.length === 1 ? "" : "s") + " available for your Lifegroup.";
+        }
+        if (previous && regLeaders.some((l) => l.leader_person_id === previous)) sel.value = previous, sel.dataset.selected = previous;
+        updateRegAssignment();
+    } catch (err) {
+        regLeaders = [], sel.dataset.empty = "1";
+        sel.innerHTML = '<option value="">Leaders could not be loaded</option>';
+        help.textContent = "We could not load the leader list. Type your leader's name instead.";
+        toast("Could not load the leader list: " + err.message, "alert-triangle");
+    } finally {
+        sel.disabled = sel.dataset.empty === "1";
+    }
+}
+
+function renderRegReview() {
+    const manualOpen = !$("rgManualWrap").hidden,
+        manualName = $("rg-manual").value.trim(),
+        leader = currentRegLeader(),
+        noneYet = $("rg-leader").dataset.empty === "1",
+        row = (label, value) => '<div class="reg-review__row"><span>' + esc(label) + "</span><b>" + esc(value || "—") + "</b></div>";
+    const leaderText = manualOpen ? (manualName || "—") : leader ? leader.leader_name : noneYet ? "No leader available yet" : "—";
+    const groupText = manualOpen ? (manualName ? "To be checked and reviewed by our team" : "—") : leader ? leader.lifegroup_name || "—" : "—";
+    const netText = manualOpen ? "—" : leader ? leader.network_leader_name || "No network leader yet — N/A" : "—";
+    const cellText = manualOpen ? "—" : leader ? leader.lifegroup_name || "No open cell configured yet" : "—";
+    $("rgReview").innerHTML = "<h4>Basic Information</h4>" +
+        row("Full name", $("rg-name").value) + row("Email", $("rg-email").value) + row("Birthday", $("rg-birthdate").value) +
+        row("Gender", GENDER_LABELS[$("rg-gender").value] || "") + row("School", $("rg-school").value) +
+        "<h4>Ministry &amp; Leaders</h4>" +
+        row("Ministry", $("rg-ministry").value) + row("Invited by", $("rg-inviter").value) +
+        row("Selected leader", leaderText) + row("Lifegroup", groupText) + row("Network leader", netText) + row("Open Cell", cellText);
+}
+
+const REG_REVIEW_NOTES = {
+    manual_leader_unmatched: "We could not match the leader name you typed to our leader records. Your registration is saved, and our team will review your Lifegroup assignment.",
+    already_in_a_lifegroup: "You are already part of a Lifegroup, so we kept your existing membership instead of creating a duplicate.",
+    no_leader_selected: "No leader was selected, so your Lifegroup assignment is waiting for admin review."
+};
+
+$("chooseVip").addEventListener("click", () => { showRegPanels("vip"); $("vip-name").focus({ preventScroll: true }); });
+$("chooseRegular").addEventListener("click", () => { showRegPanels("regular"); goRegStep(1); });
+$("vipBack").addEventListener("click", () => showRegPanels("choice"));
+$("regBackChoice").addEventListener("click", () => showRegPanels("choice"));
+
+$("regular-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (regStepNow === 1 && validateRegStep1()) goRegStep(2);
+});
+$("rgBack2").addEventListener("click", () => goRegStep(1));
+$("rgNext2").addEventListener("click", () => { if (validateRegStep2()) goRegStep(3); });
+$("rgBack3").addEventListener("click", () => goRegStep(2));
+
+$("rg-gender").addEventListener("change", () => { if (regStepNow === 2) loadRegLeaders(); });
+$("rg-leader").addEventListener("change", () => { $("rg-leader").dataset.selected = $("rg-leader").value; updateRegAssignment(); });
+$("rgManualToggle").addEventListener("click", () => {
+    const wrap = $("rgManualWrap"), toggle = $("rgManualToggle");
+    wrap.hidden = !wrap.hidden;
+    if (!wrap.hidden) {
+        $("rg-leader").value = "", $("rg-leader").dataset.selected = "", $("rgAssign").hidden = true;
+        toggle.textContent = "Back to the leader list";
+        $("rg-manual").focus();
+    } else {
+        toggle.textContent = "Not on the list? Type the name.";
+    }
+});
+
+$("rgSubmit").addEventListener("click", async () => {
+    if (!$("rg-consent").checked) { toast("Please read and agree to the privacy notice.", "alert-triangle"); $("rg-consent").focus(); return; }
+    const manualOpen = !$("rgManualWrap").hidden,
+        leader = currentRegLeader();
+    const payload = {
+        full_name: $("rg-name").value.trim(),
+        email: $("rg-email").value.trim(),
+        birthdate: $("rg-birthdate").value,
+        gender: $("rg-gender").value,
+        school: $("rg-school").value.trim(),
+        ministry: $("rg-ministry").value,
+        invited_by: $("rg-inviter").value.trim() || null,
+        leader_person_id: !manualOpen && leader ? leader.leader_person_id : null,
+        leader_name_manual: manualOpen ? $("rg-manual").value.trim() : null
+    };
+    try {
+        const r = await DB.addRegularRegistration(payload);
+        const note = r && r.review && r.review.needed ? (REG_REVIEW_NOTES[r.review.reason] || "Part of your registration is waiting for admin review.") : "";
+        showRegSuccess({
+            title: "Registration Successful!",
+            message: "Welcome to the LIFEGEN family. Your registration has been recorded.",
+            note: note,
+            fine: "Your details are stored securely in the LIFEGEN Supabase database."
+        });
+    } catch (err) {
+        toast("Registration failed: " + err.message, "alert-triangle");
+    }
+});
