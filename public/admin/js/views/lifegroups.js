@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { renderHierarchy } from './hierarchy.js';
+import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
@@ -276,10 +276,8 @@ export async function renderLifegroups({main, query}) {
  main.querySelector('#treeGender').value=filters.gender;
  main.querySelector('#treeStatus').value=filters.status;
  const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
- function visibleGroup(g){return (!filters.gender||g.gender===filters.gender) && (filters.status==='all'||(filters.status==='inactive'?!g.is_active:!!g.is_active));}
  function renderUnassigned(){
-  const validNetworkIds=new Set(cache.nets.map(n=>String(n.id)));
-  const missing=cache.groups.filter(g=>visibleGroup(g)&&(g.network_id==null||!validNetworkIds.has(String(g.network_id))));
+  const missing=findUnassignedGroups(cache.nets,cache.groups,filters);
   if(!missing.length){notice.innerHTML='';return;}
   const canManage=can('lifegroups:manage');
   notice.innerHTML=html`<section class="card mb-2" style="border:1px solid #eadbb0;background:#fffdf7" aria-label="Unassigned Lifegroups">
