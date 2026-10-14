@@ -1309,3 +1309,28 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 @media(prefers-reduced-motion:reduce){
  .choice__opt--gender > span { transition:none; }
 }
+
+
+/* New Network: four fields only — Network Leader, Gender, Cell Leader, Member. */
+.network-four{display:grid;gap:0;max-width:800px;margin:auto;}
+.network-four__section{padding:17px 0 21px;border-bottom:1px solid #e7efe9;}
+.network-four__section:last-child{border-bottom:0;padding-bottom:3px;}
+.network-four__label{display:block;color:#1b3628;font-weight:700;font-size:.95rem;margin-bottom:11px;}
+.network-four__heading{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.network-four__count{font-size:.8rem;color:#6c8374;font-variant-numeric:tabular-nums;}
+.network-four__search{max-width:none!important;position:relative;}
+.network-four__search input{width:100%;min-width:0;}
+.network-four__register{margin-top:10px;}
+.network-four__cell,.network-four__member-block{border:1px solid #dce9df;border-radius:12px;background:#fafdfa;padding:13px 15px;margin-bottom:11px;}
+.network-four__cell-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px;}
+.network-four__cell-heading strong{font-size:.85rem;}
+.network-four__member-label{font-size:.87rem;font-weight:650;color:#2a5138;margin-bottom:8px;}
+.network-four__chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px;}
+.network-four__chips:empty{display:none;}
+.network-four__chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;background:#e5f5e9;color:#235339;border-radius:8px;font-size:.8rem;max-width:100%;}
+.network-four__chip button{background:transparent;border:0;color:#316344;font-size:16px;cursor:pointer;padding:0 2px;}
+.network-four__member-block .gsearch__results,.network-four__cell .gsearch__results{z-index:15;}
+.network-four .choice--gender{gap:11px;justify-content:flex-start;}
+.network-four .choice__opt--gender>span{min-width:55px;min-height:50px;}
+.network-four #netMembers:empty::after{content:'Add a Cell Leader to assign Members.';color:#7b897e;font-size:.85rem;}
+@media(max-width:620px){.network-four__section{padding:14px 0 16px;}.network-four__cell,.network-four__member-block{padding:11px;}.network-four__chip{font-size:.76rem;}}
