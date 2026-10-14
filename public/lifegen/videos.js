@@ -99,6 +99,12 @@
                 frame.classList.add("vframe-gdrive");
             }
             frame.replaceChildren(f);
+            // Keep the 16:9 poster intact. Once Janime's Google Drive video
+            // starts, trim the provider's unused lower black strip only.
+            // The iframe itself retains its original 16:9 rendering dimensions.
+            if (frame.dataset.trimBottom === "true" && embed.provider === "Google Drive") {
+                frame.classList.add("vframe--playing-trimmed");
+            }
         }
 
         if (frame.dataset.poster) {

@@ -31,6 +31,6 @@ test('embed stays click-to-play with direct Google Drive fallback and asset cach
  assert.match(script,/btn\.addEventListener\("click", play\)/);
  assert.match(script,/document\.createElement\("iframe"\)/);
  assert.match(markup,/7 min 19 sec · Plays on Google Drive/);
- assert.match(markup,/\/lifegen\/videos\.js\?v=2\.4\.5/);
- assert.equal(versions['/lifegen/videos.js'].version,'2.4.5');
+ assert.match(markup,/\/lifegen\/videos\.js\?v=2\.4\.6/);
+ assert.equal(versions['/lifegen/videos.js'].version,'2.4.6');
 });
