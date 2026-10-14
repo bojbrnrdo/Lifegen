@@ -36,6 +36,16 @@ function ensureCSS(){
  const style=document.createElement('style');style.id='lifegen-node-graph-style';
  style.textContent=CSS;document.head.append(style);
 }
+/** Lifegroups with missing/invalid network assignment, never misrepresented as Network Leaders. */
+export function findUnassignedGroups(networks,groups,filters={}){
+ const ids=new Set(networks.map(n=>String(n.id)));
+ const status=filters.status||'active';
+ return groups.filter(g=>
+  (!filters.gender||g.gender===filters.gender) &&
+  (status==='all'||(status==='inactive'?(g.is_active===false||g.is_active===0):(g.is_active!==false&&g.is_active!==0))) &&
+  (g.network_id==null||!ids.has(String(g.network_id)))
+ );
+}
 function build(networks,groups,filters,expanded,members,loading){
  const query=String(filters.q||'').trim().toLowerCase(), gender=filters.gender||'', status=filters.status||'active';
  const allowed=o=>status==='all'||(status==='inactive'?o.is_active===false||o.is_active===0:o.is_active!==false&&o.is_active!==0);
