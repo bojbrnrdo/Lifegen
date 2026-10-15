@@ -22,7 +22,7 @@ import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.4';
+const ADMIN_ASSET_VERSION='2.4.5';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -79,7 +79,7 @@ const methods={
  removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
- giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true]
+ giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
@@ -202,8 +202,28 @@ async function customMethod(req,name,args) {
  if(name==='getPrize')return {value:await currentPrize(),month:today().slice(0,7)};
  if(name==='setPrize')return transaction(async client=>{const value=String(args[0]||'').trim();if(!value||value.length>1000)throw httpError(400,'Enter a prize description up to 1000 characters.');const month=today().slice(0,7);await client.query('INSERT INTO monthly_prizes(month,description) VALUES($1,$2) ON CONFLICT(month) DO UPDATE SET description=EXCLUDED.description,updated_at=now()',[month,value]);await logAction(client,actor,'monthly_prizes',month,'update');return {value,month};});
  if(name==='qrRegistration'){const {public_url}=siteUrls(req);let url=public_url+'#vip';if(public_url.startsWith('/'))url=`${req.protocol}://${req.get('host')}${url}`;return {url,svg:await QRCode.toString(url,{type:'svg',width:360,margin:2}),enabled:true};}
- if(name==='postsAdmin')return (await query('SELECT id,type,author,content,is_anonymous,is_hidden,created_at FROM community_posts ORDER BY created_at DESC LIMIT 200')).rows;
+ if(name==='postsAdmin')return (await query('SELECT id,type,author,content,is_anonymous,is_hidden,created_at,(SELECT count(*)::int FROM prayer_reactions r WHERE r.post_id=community_posts.id) AS prayer_count FROM community_posts ORDER BY created_at DESC LIMIT 200')).rows;
  if(name==='moderatePost')return transaction(async client=>{const id=validId(args[0]),hidden=args[1]===true;if(!(await client.query('UPDATE community_posts SET is_hidden=$1 WHERE id=$2 RETURNING id',[hidden,id])).rows.length)throw httpError(404,'Post not found.');await logAction(client,actor,'community_posts',id,hidden?'hide':'show');return {};});
+ // Community board moderation — edit a post in place, or delete it for good
+ // (prayer_reactions cascade with the post; every step is written to the audit log).
+ if(name==='editPost')return transaction(async client=>{
+  const id=validId(args[0]),f=args[1]||{};
+  const type=String(f.type||'');if(!['prayer','testimony','praise'].includes(type))throw httpError(400,'Choose prayer, testimony or praise.');
+  const content=String(f.content||'').trim();if(!content||content.length>1000)throw httpError(400,'Write 1 to 1000 characters for the post message.');
+  const anonymous=Boolean(f.is_anonymous);
+  let author=null;if(!anonymous){author=String(f.author||'').trim().slice(0,60);if(!author)throw httpError(400,'Add a name for the author, or post anonymously.');}
+  const row=(await client.query('UPDATE community_posts SET type=$1,author=$2,content=$3,is_anonymous=$4 WHERE id=$5 RETURNING id,type,author,content,is_anonymous,is_hidden,created_at',[type,author,content,anonymous,id])).rows[0];
+  if(!row)throw httpError(404,'Post not found.');
+  await logAction(client,actor,'community_posts',id,'update',{type,anonymous});
+  return row;
+ });
+ if(name==='deletePost')return transaction(async client=>{
+  const id=validId(args[0]);
+  const gone=(await client.query('DELETE FROM community_posts WHERE id=$1 RETURNING id,type,is_anonymous',[id])).rows[0];
+  if(!gone)throw httpError(404,'Post not found.');
+  await logAction(client,actor,'community_posts',id,'delete',{type:gone.type,anonymous:gone.is_anonymous});
+  return {};
+ });
  return undefined;
 }
 app.use('/api/tracker',requireStaff,(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}});
