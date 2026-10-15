@@ -12,12 +12,12 @@
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.19",
-    "sha256": "12420cc487a2234b2f190d76073af67598c0dffd580773a4c9bd9185fa25c9f1"
+    "version": "2.4.20",
+    "sha256": "f3f5e91e208aea0cf44249c52cb3d6ccd160117fabbc3fa267cfcab4e14add0e"
   },
   "/lifegen/videos.js": {
-    "version": "2.4.7",
-    "sha256": "c6a2343ff91ebc55fa44e79fe93d722c9f0b1f5222a3a6aab1eabaca0d2b24e1"
+    "version": "2.4.10",
+    "sha256": "a57c8cbf231d92c850c9680fc5978ec555278bf13ce258ea215e229eea0c153b"
   },
   "/vendor/lucide-subset.min.js": {
     "version": "2.3.0",
