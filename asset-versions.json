@@ -1,7 +1,7 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.1",
-    "sha256": "36238a09034d53c7953e5a42964cff83a37ff222aac545a70dd1bf30de748568"
+    "version": "2.4.2",
+    "sha256": "5f3995643dda297947c616e239f8ed04307fecc5d59eff6bbf4b669851387331"
   },
   "/lifegen/backend.js": {
     "version": "2.4.9",
@@ -12,8 +12,8 @@
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.20",
-    "sha256": "f3f5e91e208aea0cf44249c52cb3d6ccd160117fabbc3fa267cfcab4e14add0e"
+    "version": "2.4.21",
+    "sha256": "c29f1c3e8ba57524b016d90ae7ed21fd30314fab03aca09efc88bcfb4106359f"
   },
   "/lifegen/videos.js": {
     "version": "2.4.10",
