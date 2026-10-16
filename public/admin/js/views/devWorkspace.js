@@ -21,13 +21,37 @@ export async function renderDevGit({main}){
  ${field}<button type="button" id="devBrowse" class="btn btn--primary" ${data.connected?'':'disabled'}>Browse files</button>
  <p id="devGitStatus" class="small muted" role="status"></p>
  <div class="field"><label for="devFileFilter">Filter files</label><input id="devFileFilter" type="search" placeholder="Search paths…" disabled/></div><div id="devGitFiles" class="stack"></div>
- </div></section></div>`;
+ </div></section></div>
+ <section class="card mt-2"><div class="card__header"><h2>Submit for review</h2></div><div class="card__body stack">
+ <p class="small muted">Create a draft pull request from a feature/fix branch into develop. Nothing is merged or deployed automatically.</p>
+ <div class="field"><label for="prBranch">Source branch</label><input id="prBranch" placeholder="feature/my-change" spellcheck="false"/></div>
+ <div class="field"><label for="prTitle">Pull request title</label><input id="prTitle" maxlength="120" placeholder="feat: describe the change"/></div>
+ <div class="field"><label for="prDescription">Review notes</label><textarea id="prDescription" rows="4" maxlength="4000" placeholder="What changed and what should reviewers test?"></textarea></div>
+ <button type="button" id="createDraftPr" class="btn btn--primary" ${data.connected?'':'disabled'}>Create draft pull request</button>
+ <p class="small muted" role="status" id="draftPrStatus"></p><div id="draftPrLink"></div>
+ </div></section>`;
  main.querySelector('#createDevBranch').onclick=async()=>{
   const name=main.querySelector('#newDevBranch').value.trim(),status=main.querySelector('#createBranchStatus');
   status.textContent='Creating branch…';
   try{const result=await api('branch',{method:'POST',body:{name}});status.textContent='Created '+result.name;
    main.querySelector('#devBranch').value=result.name;
+   main.querySelector('#prBranch').value=result.name;
   }catch(error){status.textContent=error.message;}
+ };
+ main.querySelector('#createDraftPr').onclick=async()=>{
+  const button=main.querySelector('#createDraftPr');
+  const status=main.querySelector('#draftPrStatus');
+  const output=main.querySelector('#draftPrLink');
+  button.disabled=true;status.textContent='Creating draft pull request…';output.replaceChildren();
+  try{
+   const result=await api('pull-request',{method:'POST',body:{
+    branch:main.querySelector('#prBranch').value.trim(),
+    title:main.querySelector('#prTitle').value.trim(),
+    description:main.querySelector('#prDescription').value.trim()
+   }});
+   status.textContent='Draft PR #'+result.number+' created for review.';
+   const link=document.createElement('a');link.href=result.url;link.textContent='Open pull request #'+result.number+' ↗';link.target='_blank';link.rel='noopener noreferrer';link.className='btn';output.append(link);
+  }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
  };
  let listedFiles=[];
  const filter=main.querySelector('#devFileFilter');
