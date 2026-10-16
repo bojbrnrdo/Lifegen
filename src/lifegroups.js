@@ -619,6 +619,11 @@ async function saveVipAssignmentPolicy(input,actor){
 async function autoAssignMember(personId, prefs = {}, actor = null) {
   const person = (await query('SELECT id,sex,archived_at,status,preferred_area,preferred_day,preferred_category FROM people WHERE id=$1',[personId])).rows[0];
   if (!person || person.archived_at || person.status === 'inactive') throw httpError(404, 'Active person not found.');
+  // Automatic placement is only for attendees, never an active Network/Cell Leader.
+  // Leadership relationships must be changed explicitly by a manager first.
+  const leadership=(await query(`SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active
+    UNION ALL SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1`,[personId])).rows[0];
+  if(leadership)return {assigned:false,reason:'active_leadership',needs_manual_assignment:true};
   const active = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
   if (active) return { assigned: true, already_assigned: true, lifegroup_id: Number(active.lifegroup_id) };
   if (!['male','female'].includes(person.sex)) return { assigned:false, reason:'sex_missing', needs_manual_assignment:true };
