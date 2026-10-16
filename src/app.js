@@ -19,10 +19,10 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
+import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
-registerDevWorkspace(app);
 const ADMIN_ASSET_VERSION='2.4.5';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -31,12 +31,13 @@ app.disable('x-powered-by');if(process.env.VERCEL||process.env.LOCAL_DEMO==='tru
 app.use((req,res,next)=>{res.locals.nonce=crypto.randomBytes(16).toString('base64');next();});
 app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:['https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
 app.use(cookieParser());
+app.use(express.json({limit:'512kb'}));
+registerDevWorkspace(app);
 // Gzip/deflate responses (HTML, CSS, JS, JSON, ICS) whenever the client accepts it.
 // The SSE live-update stream is excluded so events are never delayed by buffering.
 app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content-Type')||'');if(type.includes('text/event-stream')||type.includes('application/zip'))return false;return compression.filter(req,res);}}));
 // All tracker and public API payloads are small JSON documents (the deployment ZIP
 // upload uses its own raw-body parser with a separate limit).
-app.use(express.json({limit:'512kb'}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
