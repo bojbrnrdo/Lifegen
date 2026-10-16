@@ -55,3 +55,6 @@ jobs:
 
       - name: Verify Person profile permissions
         run: node --test tests/person-profile-permissions.test.mjs
+
+      - name: Verify Archive Restore history preservation
+        run: node --test tests/person-archive-restore-history.test.mjs
