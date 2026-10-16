@@ -113,9 +113,13 @@ export async function renderDevIDE({main,query={}}){
  <button type="button" class="btn btn--primary" id="ideSave" disabled>Commit changes</button>
  </div></div>`;
  let sha='',loadedBranch='',loadedPath='',savedContent='',canEdit=false;
+ const dirty=()=>canEdit&&document.getElementById('ideEditor')?.value!==savedContent;
+ const beforeUnload=e=>{if(dirty()){e.preventDefault();e.returnValue='';}};
+ window.addEventListener('beforeunload',beforeUnload);
+
  const updateSave=()=>{const message=el('ideCommit').value.trim();el('ideSave').disabled=!canEdit||!sha||el('ideEditor').value===savedContent||message.length<8||loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim();};
  const el=id=>main.querySelector('#'+id);
- el('ideOpen').onclick=async()=>{el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
+ el('ideOpen').onclick=async()=>{if(dirty()&&!confirm('Discard unsaved changes and open another file?'))return;el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
   try{const branch=el('ideBranch').value.trim(),path=el('idePath').value.trim();
    const f=await api('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));
    sha=f.sha;loadedBranch=branch;loadedPath=path;savedContent=f.content;canEdit=Boolean(f.editable)&&Boolean(data.writesEnabled);el('ideEditor').value=f.content;el('ideEditor').disabled=!canEdit||!data.writesEnabled;el('ideCommit').disabled=!canEdit||!data.writesEnabled;updateSave();el('ideMessage').textContent='Loaded '+path+' from '+branch+(canEdit?' · ready to edit':' · read-only');
@@ -133,6 +137,7 @@ export async function renderDevIDE({main,query={}}){
   }catch(e){el('ideMessage').textContent=e.message;}finally{updateSave();}
  };
  if(query.path&&data.connected)el('ideOpen').click();
+ return ()=>{window.removeEventListener('beforeunload',beforeUnload);};
 }
 
 export async function renderDevPackaging({main}){
