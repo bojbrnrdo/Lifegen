@@ -113,12 +113,10 @@ export async function renderDevIDE({main,query={}}){
  <button type="button" class="btn btn--primary" id="ideSave" disabled>Commit changes</button>
  </div></div>`;
  let sha='',loadedBranch='',loadedPath='',savedContent='',canEdit=false;
- let navigating=false;
  const dirty=()=>canEdit&&document.getElementById('ideEditor')?.value!==savedContent;
  const beforeUnload=e=>{if(dirty()){e.preventDefault();e.returnValue='';}};
- const routeGuard=()=>{if(!dirty())return; if(!window.confirm('Discard unsaved LifeIDE changes?')){navigating=true;location.hash='#/dev/ide?branch='+encodeURIComponent(loadedBranch)+'&path='+encodeURIComponent(loadedPath);setTimeout(()=>{navigating=false;},0);}};
  window.addEventListener('beforeunload',beforeUnload);
- window.addEventListener('hashchange',routeGuard);
+
  const updateSave=()=>{const message=el('ideCommit').value.trim();el('ideSave').disabled=!canEdit||!sha||el('ideEditor').value===savedContent||message.length<8||loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim();};
  const el=id=>main.querySelector('#'+id);
  el('ideOpen').onclick=async()=>{if(dirty()&&!confirm('Discard unsaved changes and open another file?'))return;el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
@@ -139,7 +137,7 @@ export async function renderDevIDE({main,query={}}){
   }catch(e){el('ideMessage').textContent=e.message;}finally{updateSave();}
  };
  if(query.path&&data.connected)el('ideOpen').click();
- return ()=>{window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('hashchange',routeGuard);};
+ return ()=>{window.removeEventListener('beforeunload',beforeUnload);};
 }
 
 export async function renderDevPackaging({main}){
