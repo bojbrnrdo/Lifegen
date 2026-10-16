@@ -442,6 +442,7 @@ export async function renderLifegroups({main, query}) {
  const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
  needs.addEventListener('toggle',()=>{if(needs.open&&!needs.dataset.loaded){needs.dataset.loaded='yes';drawNeeds(main.querySelector('#needsBody'));}});
  progress.addEventListener('toggle',()=>{if(progress.open&&!progress.dataset.loaded){progress.dataset.loaded='yes';drawProgressTab(main.querySelector('#progressBody'));}});
+ if(query.tab==='people')allPeople.open=true;
  if(query.tab==='needs')needs.open=true;
  if(query.tab==='progress')progress.open=true;
  main.__liveReload=()=>load(true);
