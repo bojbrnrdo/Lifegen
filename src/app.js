@@ -193,7 +193,8 @@ async function customMethod(req,name,args) {
   const gender=String(input.sex||'').trim(),school=String(input.school||'').trim(),inviter=String(input.inviter||'').trim();
   const age=Number(input.age),contact=String(input.contact_number||'').trim()||null;
   const key=String(input.idempotency_key||'').trim();
-  if(!first||!last||first.length>120||last.length>120)throw httpError(400,'Enter first and last names.');
+  const existingId=input.existing_person_id?validId(input.existing_person_id):null;
+  if((!existingId&&(!first||!last))||first.length>120||last.length>120)throw httpError(400,'Enter first and last names or choose an existing Person ID.');
   if(!['male','female'].includes(gender))throw httpError(400,'Choose Boy or Girl.');
   if(!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Provide age, school and inviter.');
   if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
@@ -202,16 +203,26 @@ async function customMethod(req,name,args) {
   return withState(async({data,client})=>{
     const prior=(await client.query('SELECT id,person_id FROM vip_registrations WHERE idempotency_key=$1',[hashed])).rows[0];
     if(prior)return {person_id:Number(prior.person_id),vip_registration_id:Number(prior.id),already_registered:true};
-    const person=await domain.createPerson({
-      first_name:first,last_name:last,full_name:first+' '+last,sex:gender,age,school,inviter,
-      contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true,
-      ...(input.photo?{photo:input.photo}:{})
-    });
+    let person;
+    if(existingId){
+      person=(await client.query('SELECT id,first_name,last_name,sex,archived_at FROM people WHERE id=$1 FOR UPDATE',[existingId])).rows[0];
+      if(!person||person.archived_at)throw httpError(404,'Active People profile not found.');
+      if(person.sex&&person.sex!==gender)throw httpError(409,'Existing People profile gender differs; update the profile before registering.');
+      const previous=(await client.query('SELECT id,person_id FROM vip_registrations WHERE person_id=$1 ORDER BY id DESC LIMIT 1',[existingId])).rows[0];
+      if(previous)return {person_id:Number(existingId),vip_registration_id:Number(previous.id),already_registered:true};
+    }else{
+      person=await domain.createPerson({
+        first_name:first,last_name:last,full_name:first+' '+last,sex:gender,age,school,inviter,
+        contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true,
+        ...(input.photo?{photo:input.photo}:{})
+      });
+    }
+    const fullName=[person.first_name,person.last_name].filter(Boolean).join(' ');
     const id=stateId(data,'vip_registrations'),recovery='LG-'+randomToken();
     await client.query(`INSERT INTO vip_registrations
       (id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [id,person.id,first+' '+last,age,school,inviter,contact,hashToken(recovery),hashed]);
+      [id,person.id,fullName,age,school,inviter,contact,hashToken(recovery),hashed]);
     await logAction(client,actor,'vip_registrations',id,'staff_registration',{person_id:person.id});
     return {person_id:person.id,vip_registration_id:id,recovery_code:recovery,already_registered:false};
   },{write:true,actor});
