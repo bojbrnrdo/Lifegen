@@ -112,15 +112,15 @@ export async function renderDevIDE({main,query={}}){
  <div class="field"><label for="ideCommit">Commit message</label><input id="ideCommit" placeholder="feat: describe change" maxlength="160" disabled/></div>
  <button type="button" class="btn btn--primary" id="ideSave" disabled>Commit changes</button>
  </div></div>`;
- let sha='',loadedBranch='',loadedPath='',savedContent='',canEdit=false;
- const dirty=()=>canEdit&&document.getElementById('ideEditor')?.value!==savedContent;
+ let sha='',loadedBranch='',loadedPath='',savedContent='',canEdit=false,committing=false;
+ const dirty=()=>committing||(canEdit&&document.getElementById('ideEditor')?.value!==savedContent);
  const beforeUnload=e=>{if(dirty()){e.preventDefault();e.returnValue='';}};
  window.addEventListener('beforeunload',beforeUnload);
  window.__lifegenCanLeaveEditor=()=>!dirty()||window.confirm('Discard unsaved LifeIDE changes?');
 
- const updateSave=()=>{const message=el('ideCommit').value.trim();el('ideSave').disabled=!canEdit||!sha||el('ideEditor').value===savedContent||message.length<8||loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim();};
+ const updateSave=()=>{const message=el('ideCommit').value.trim();el('ideSave').disabled=committing||!canEdit||!sha||el('ideEditor').value===savedContent||message.length<8||loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim();};
  const el=id=>main.querySelector('#'+id);
- el('ideOpen').onclick=async()=>{if(dirty()&&!confirm('Discard unsaved changes and open another file?'))return;el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
+ el('ideOpen').onclick=async()=>{if(committing){el('ideMessage').textContent='Wait for the current commit to finish.';return;}if(dirty()&&!confirm('Discard unsaved changes and open another file?'))return;el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
   try{const branch=el('ideBranch').value.trim(),path=el('idePath').value.trim();
    const f=await api('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));
    sha=f.sha;loadedBranch=branch;loadedPath=path;savedContent=f.content;canEdit=Boolean(f.editable)&&Boolean(data.writesEnabled);el('ideEditor').value=f.content;el('ideEditor').disabled=!canEdit||!data.writesEnabled;el('ideCommit').disabled=!canEdit||!data.writesEnabled;updateSave();el('ideMessage').textContent='Loaded '+path+' from '+branch+(canEdit?' · ready to edit':' · read-only');
@@ -132,10 +132,17 @@ export async function renderDevIDE({main,query={}}){
   if(!canEdit||el('ideEditor').value===savedContent){el('ideMessage').textContent='No changes to commit.';return;}
   if(el('ideCommit').value.trim().length<8){el('ideMessage').textContent='Enter a descriptive commit message of at least 8 characters.';return;}
   if(!confirm('Commit the edits to '+loadedBranch+'?'))return;
-  el('ideSave').disabled=true;el('ideMessage').textContent='Committing…';
-  try{const result=await api('file',{method:'PUT',body:{branch:loadedBranch,path:loadedPath,sha,content:el('ideEditor').value,message:el('ideCommit').value.trim()}});
-   sha=result.sha;savedContent=el('ideEditor').value;el('ideCommit').value='';el('ideMessage').textContent='Committed: '+result.commit.slice(0,12);
-  }catch(e){el('ideMessage').textContent=e.message;}finally{updateSave();}
+  const snapshot={branch:loadedBranch,path:loadedPath,sha,content:el('ideEditor').value,message:el('ideCommit').value.trim()};
+  committing=true;el('ideSave').disabled=true;el('ideOpen').disabled=true;
+  for(const id of ['ideBranch','idePath','ideEditor','ideCommit'])el(id).disabled=true;
+  el('ideMessage').textContent='Committing…';
+  try{const result=await api('file',{method:'PUT',body:snapshot});
+   sha=result.sha;savedContent=snapshot.content;el('ideCommit').value='';el('ideMessage').textContent='Committed: '+result.commit.slice(0,12);
+  }catch(e){el('ideMessage').textContent=e.message;}finally{
+   committing=false;el('ideOpen').disabled=!data.connected;
+   for(const id of ['ideBranch','idePath'])el(id).disabled=false;
+   el('ideEditor').disabled=!canEdit;el('ideCommit').disabled=!canEdit;updateSave();
+  }
  };
  if(query.path&&data.connected)el('ideOpen').click();
  return ()=>{window.removeEventListener('beforeunload',beforeUnload);delete window.__lifegenCanLeaveEditor;};
