@@ -69,14 +69,16 @@ const CSS = [
  ".lfg__node:hover .lfg__avatar-ring,.lfg__node:focus-visible .lfg__avatar-ring{stroke:#125b36;stroke-width:3.5;filter:drop-shadow(0 0 5px #2e8c5b40)}",
  ".lfg__node text{font:600 13px system-ui,sans-serif;fill:#203d2d;paint-order:stroke;stroke:#fbfdf9;stroke-width:3.5px;stroke-linejoin:round}",
  ".lfg__node .sub{font-weight:400;font-size:11px;fill:#708577}.lfg__node .symbol{font-size:11px;font-weight:700;stroke:none;fill:#2e8054}",
- ".lfg__panel{position:absolute;bottom:20px;left:18px;max-width:310px;padding:15px 17px;border-radius:12px;background:#fff;border:1px solid #d6e4da;box-shadow:0 12px 32px #183b2418}",
- ".lfg__panel p{font-size:12px;color:#6c8575;margin:5px 0 10px}.lfg__panel a{font-size:12px;color:#216b42;text-decoration:underline;font-weight:600}",
- ".lfg__panel .lfg__remove{display:inline-flex;align-items:center;gap:6px;border:1px solid #e2b8b5;border-radius:8px;background:#fff;color:#a63636;font-size:12px;font-weight:650;padding:6px 10px;cursor:pointer;margin-top:9px}",
- ".lfg__panel .lfg__remove:hover,.lfg__panel .lfg__remove:focus-visible{background:#fdf0ed;border-color:#c65c51;outline:2px solid transparent}",
+ ".lfg__toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid #d6e4da;background:#fff}.lfg__toolbar .lfg__heading,.lfg__toolbar .lfg__buttons{position:static}.lfg__canvas{position:relative}.lfg__selection{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:10px 18px;border-bottom:1px solid #d6e4da;background:#fff}.lfg__selection[hidden]{display:none}",
+ ".lfg__identity{flex:1 1 180px;min-width:0}.lfg__identity strong{display:block;font-size:14px;overflow-wrap:anywhere}.lfg__identity p{font-size:12px;color:#6c8575;margin:3px 0 0;overflow-wrap:anywhere}",
+ ".lfg__actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}.lfg__details{display:inline-flex;align-items:center;min-height:44px;font-size:12px;color:#216b42;font-weight:650;text-underline-offset:3px}",
+ ".lfg__selection .lfg__remove{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:6px;background:transparent;color:#a63636;font-size:12px;font-weight:600;min-height:44px;padding:8px;cursor:pointer}",
+ ".lfg__selection .lfg__remove:hover{background:#fdf0ed}.lfg__selection a:focus-visible,.lfg__selection button:focus-visible{outline:2px solid #3b8a62;outline-offset:2px}",
+ ".lfg__selection .lfg__socials{margin:0;gap:6px}.lfg__selection .lfg__socials a{width:44px;height:44px}.lfg__node[data-selected] .lfg__avatar-ring{stroke:#125b36;stroke-width:4;filter:drop-shadow(0 0 4px #2e8c5b40)}",
  ".lfg__hint{position:absolute;bottom:12px;right:16px;color:#84988a;font-size:11px;pointer-events:none}",
  ".lfg__blank{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);min-width:min(340px,80%);max-width:470px;padding:25px;text-align:center;background:#ffffffec;border:1px dashed #bdd6c3;border-radius:16px;box-shadow:0 7px 24px #17462b0d}",
  ".lfg__blank b{display:block;font-size:17px;color:#204c33;margin-bottom:7px}.lfg__blank p{font-size:13px;color:#71867a;line-height:1.6;margin:0}",
- "@media(max-width:700px){.lfg__heading{top:61px;left:14px}.lfg__buttons{left:12px;right:auto;top:12px}.lfg__svg{height:65vh;min-height:440px}.lfg__hint{font-size:10px}.lfg__panel{bottom:38px;left:12px}}",
+ "@media(max-width:700px){.lfg__heading{top:61px;left:14px}.lfg__buttons{left:12px;right:auto;top:12px}.lfg__svg{height:65vh;min-height:440px}.lfg__hint{font-size:10px}.lfg__selection{padding:8px 12px;gap:4px 12px}.lfg__identity{flex-basis:100%}}",
  "@media(prefers-reduced-motion:reduce){.lfg__buttons button{transition:none}}"
 ,
 '.lfg__node .touch-hit{fill:transparent!important;stroke:none!important;pointer-events:all}',
@@ -200,6 +202,7 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
  const state={expanded,members,loading,selected:old.selected||null,cleanup:()=>{}};
  target.__lifegenTree=state;
  target.innerHTML='<section class="lfg">'+
+  '<div class="lfg__toolbar">'+
   '<div class="lfg__heading"><b>' + treeControlIcon('focus') + ' Network map</b><small>Click a leader to reveal their connections</small></div>'+
   '<div class="lfg__buttons">'+
    '<button type="button" class="lfg__button--focus" data-action="focus" aria-label="Focus on a Network Leader" title="Focus on a Network Leader">' + treeControlIcon('focus') + ' <span>Focus</span></button>'+
@@ -207,10 +210,10 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
    '<button type="button" data-action="collapse" aria-label="Collapse all branches" title="Collapse all">' + treeControlIcon('reset') + '</button>'+
    '<button type="button" data-action="plus" aria-label="Zoom in" title="Zoom in">' + treeControlIcon('plus') + '</button>'+
    '<button type="button" data-action="minus" aria-label="Zoom out" title="Zoom out">' + treeControlIcon('minus') + '</button>'+
-  '</div><svg class="lfg__svg" aria-label="Interactive Lifegroup network: Network Leaders, Cell Leaders and Members"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg>'+
-  '<div class="lfg__panel" hidden></div><div class="lfg__blank" hidden></div>'+
-  '<span class="lfg__hint">Click profile to expand · Drag to move · Scroll to zoom</span></section>';
- const svg=target.querySelector('.lfg__svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__panel'),blank=target.querySelector('.lfg__blank');
+  '</div></div><div class="lfg__selection" role="region" aria-label="Selected person" hidden></div><div class="lfg__canvas"><svg class="lfg__svg" aria-label="Interactive Lifegroup network: Network Leaders, Cell Leaders and Members"><g class="scene"><g class="edges"></g><g class="nodes"></g></g></svg>'+
+  '<div class="lfg__blank" hidden></div>'+
+  '<span class="lfg__hint">Click profile to expand · Drag to move · Scroll to zoom</span></div></section>';
+ const svg=target.querySelector('.lfg__svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__selection'),blank=target.querySelector('.lfg__blank');
  let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
  let observer=null;
@@ -237,14 +240,15 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
    node.kind==='member'?'#/people/'+encodeURIComponent(node.record.id):'';
   panel.hidden=false;
   const socials=linksForNode(node);
-  panel.innerHTML='<strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connections':'')+'</p>'+
+  panel.innerHTML='<div class="lfg__identity"><strong>'+esc(node.name)+'</strong><p>'+esc(node.subtitle)+(node.count?' · '+node.count+' connection'+(node.count===1?'':'s'):'')+'</p>'+
+   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add New to connect one.</p>':'')+'</div><div class="lfg__actions">'+
    (socials.length?'<nav class="lfg__socials" aria-label="Social media profiles">'+socials.map(item=>
      '<a href="'+esc(item.url)+'" aria-label="'+esc(item.label)+'" title="'+esc(item.label)+'" target="_blank" rel="noopener noreferrer">'+socialIcon(item.glyph,17)+'</a>').join('')+'</nav>':'')+
-   (node.kind==='network'&&node.count===0?'<p>No Cell Leaders yet. Use Add New to connect one.</p>':'')+
-   (link?'<a href="'+link+'">Open details →</a>':'')+
+   (link?'<a class="lfg__details" href="'+link+'">Open details →</a>':'')+
    (typeof options.onRemove==='function'&&node.record?.is_active!==false?
-      '<div><button class="lfg__remove" type="button" data-remove-node aria-label="Remove '+esc(node.subtitle)+': '+esc(node.name)+'">'+
-      treeControlIcon('remove')+' Remove from Lifegroups</button></div>':'');
+      '<button class="lfg__remove" type="button" data-remove-node aria-label="Remove '+esc(node.subtitle)+': '+esc(node.name)+'">'+
+      treeControlIcon('remove')+' Remove</button>':'')+'</div>';
+  for(const el of nodeLayer.querySelectorAll('[data-key]'))el.toggleAttribute('data-selected',el.dataset.key===node.key);
   panel.querySelector('[data-remove-node]')?.addEventListener('click',event=>{
    event.preventDefault();
    const parent=layout.nodes.find(n=>n.key===node.parentKey);
