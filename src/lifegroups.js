@@ -1002,7 +1002,6 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
     const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
     if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
     const current=clean(p.extras?.discipleship_classification);
-    if(current===target)return {person_id:personId,classification:target,unchanged:true};
     const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
     const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
     if(target==='network_leader'){
@@ -1014,6 +1013,8 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
       throw httpError(409,'Cell Leader classification requires an active Cell and no active Network leadership.');
     if(['member','vip'].includes(target)&&(networks.length||cells.length))
       throw httpError(409,'Reassign active leadership relationships before changing this person to Member or VIP.');
+    // Even an unchanged classification must satisfy current leadership relationships.
+    if(current===target)return {person_id:personId,classification:target,unchanged:true};
     await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
       '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
     await logAction(client,actor,'people',personId,'discipleship_classification_changed',
