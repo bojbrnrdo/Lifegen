@@ -2,15 +2,15 @@ import {api} from '../api.js';
 import {icon,openModal,closeModal,withLoading,toast} from '../ui.js';
 import {fileToDataUrl,duplicateGuard} from './personForm.js';
 
-const modes=['network','cell','member'];
+const modes=['network','cell','member','vip'];
 const sexOf={boys:'male',girls:'female'};
-const headingOf={network:'Network Leader',cell:'Cell Leader',member:'Member'};
+const headingOf={network:'Network Leader',cell:'Cell Leader',member:'Member',vip:'VIP'};
 const svg=(key,size=18)=>icon(key,size).value;
 
 function panel(mode,initial){
  const label=headingOf[mode];
  const gender=mode==='network'?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
- const network=mode==='network'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
+ const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
  const cell=mode==='member'?'<label class="unified-add__field">Cell Leader<select data-field="cell" required disabled><option value="">Choose Cell Leader</option></select></label>':'';
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
  return '<section role="tabpanel" id="unified-'+mode+'" aria-labelledby="tab-'+mode+'" '+(mode===initial?'':'hidden')+'><form data-form="'+mode+'" novalidate>'+
@@ -26,10 +26,10 @@ function panel(mode,initial){
 /** Unified admin entry: children are People profiles, not login accounts. */
 export function createAddNewModal({initialTab='network',networkId=null,onSaved=()=>{}}={}){
  if(!modes.includes(initialTab))initialTab='network';
- const tabs=modes.map((mode,i)=>'<button type="button" role="tab" id="tab-'+mode+'" aria-controls="unified-'+mode+'" aria-selected="'+(mode===initialTab)+'" tabindex="'+(mode===initialTab?0:-1)+'" data-tab="'+mode+'">'+svg(['network','users','user'][i],18)+' '+(mode==='member'?'Members':headingOf[mode])+'</button>').join('');
+ const tabs=modes.map((mode,i)=>'<button type="button" role="tab" id="tab-'+mode+'" aria-controls="unified-'+mode+'" aria-selected="'+(mode===initialTab)+'" tabindex="'+(mode===initialTab?0:-1)+'" data-tab="'+mode+'">'+svg(['network','users','user','user'][i],18)+' '+headingOf[mode]+'</button>').join('');
  const modal=openModal({title:'Add New',wide:true,body:'<div class="unified-add"><div class="unified-add__tabs" role="tablist" aria-label="Add to discipleship tree">'+tabs+'</div>'+modes.map(m=>panel(m,initialTab)).join('')+'</div>',footer:'<button type="button" class="btn" data-close>Close</button>'});
  modal.querySelector('[data-close]').onclick=closeModal;
- const state={networkId:networkId?Number(networkId):null,networks:[],photos:{network:null,cell:null,member:null},busy:false,pending:{}};
+ const state={networkId:networkId?Number(networkId):null,networks:[],photos:{network:null,cell:null,member:null,vip:null},busy:false,pending:{}};
  const getForm=mode=>modal.querySelector('[data-form="'+mode+'"]');
  const error=(mode,message)=>{const target=getForm(mode).querySelector('[data-error]');target.textContent=message;target.hidden=false;};
  const clear=mode=>{getForm(mode).querySelector('[data-error]').hidden=true;};
@@ -39,7 +39,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
  };
  modal.querySelectorAll('[data-tab]').forEach(button=>{
   button.onclick=()=>setTab(button.dataset.tab);
-  button.onkeydown=e=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;e.preventDefault();const i=modes.indexOf(button.dataset.tab),j=e.key==='Home'?0:e.key==='End'?2:(i+(e.key==='ArrowRight'?1:2))%3;setTab(modes[j]);modal.querySelector('#tab-'+modes[j]).focus();};
+  button.onkeydown=e=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;e.preventDefault();const i=modes.indexOf(button.dataset.tab),j=e.key==='Home'?0:e.key==='End'?modes.length-1:(i+(e.key==='ArrowRight'?1:modes.length-1))%modes.length;setTab(modes[j]);modal.querySelector('#tab-'+modes[j]).focus();};
  });
  const findNetwork=id=>state.networks.find(n=>Number(n.id)===Number(id));
  async function loadCells(){
@@ -92,7 +92,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   getForm(mode).reset();state.photos[mode]=null;delete state.pending[mode];
   getForm(mode).querySelector('[data-photo-preview]').innerHTML=svg('user',28);
   const duplicates=getForm(mode).querySelector('[data-duplicate]');duplicates.hidden=true;delete duplicates.dataset.ack;
-  if(mode!=='network'&&state.networkId)getForm(mode).querySelector('[data-field=network]').value=String(state.networkId);
+  if(mode!=='network'&&mode!=='vip'&&state.networkId)getForm(mode).querySelector('[data-field=network]').value=String(state.networkId);
  }
  async function submit(mode){
   if(state.busy)return;
@@ -101,13 +101,13 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   const first=f.querySelector('[name=first_name]').value.trim(),last=f.querySelector('[name=last_name]').value.trim();
   if(!first||!last)return error(mode,'Enter first and last name.');
   if(!f.querySelector('[data-consent]').checked)return error(mode,'Confirm consent before saving.');
-  const network=mode==='network'?null:findNetwork(Number(f.querySelector('[data-field=network]').value));
-  if(mode!=='network'&&!network)return error(mode,'Choose an existing Network.');
-  const gender=mode==='network'?f.querySelector('[name=network_gender]:checked')?.value:network.gender;
-  if(!gender)return error(mode,'Select Gender.');
+  const network=mode==='network'||mode==='vip'?null:findNetwork(Number(f.querySelector('[data-field=network]').value));
+  if(mode!=='network'&&mode!=='vip'&&!network)return error(mode,'Choose an existing Network.');
+  const gender=mode==='network'?f.querySelector('[name=network_gender]:checked')?.value:mode==='vip'?null:network.gender;
+  if(mode!=='vip'&&!gender)return error(mode,'Select Gender.');
   const cellId=mode==='member'?Number(f.querySelector('[data-field=cell]').value):null;
   if(mode==='member'&&!cellId)return error(mode,'Choose a Cell Leader.');
-  const person={first_name:first,last_name:last,sex:sexOf[gender],photo:state.photos[mode],status:mode==='member'?'member':'leader',privacy_consent:true,registration_source:'staff'};
+  const person={first_name:first,last_name:last,...(gender?{sex:sexOf[gender]}:{}),photo:state.photos[mode],status:mode==='vip'?'first_timer':mode==='member'?'member':'leader',privacy_consent:true,registration_source:'staff'};
   for(const field of ['facebook_url','instagram_url','tiktok_url','x_url','youtube_url']){
    const value=f.querySelector('[name='+field+']').value.trim();if(value)person[field]=value;
   }
@@ -121,7 +121,11 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
     const created=pending?.person||await api.createPerson(person);
     if(!created?.id)throw new Error('Unable to save the person profile.');
     state.pending[mode]=pending||{fingerprint,person:created};
-    if(mode==='network'){
+    if(mode==='vip'){
+     reset(mode);
+     toast('VIP profile created. Assign a Cell through Needs Cell.');
+     onSaved({mode,person:created,needsAssignment:true});
+    }else if(mode==='network'){
      const result=state.pending[mode].network||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
      state.pending[mode].network=result;
      state.networkId=Number(result.id);
