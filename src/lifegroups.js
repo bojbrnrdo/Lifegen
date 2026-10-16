@@ -571,7 +571,7 @@ async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
     if (!group) throw httpError(404, 'Lifegroup not found.');
-    if (!group.is_active) throw httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.');
+    if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Lifegroup is inactive. Activate it before assigning members.') : httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.'));
     // Revalidate auto-placement eligibility under the group's row lock.
     // The recommendation list is advisory and may become stale before assignment.
     if (extra.auto_assign) {
