@@ -67,6 +67,7 @@ const routes = [
 ];
 
 let currentCleanup = null;
+let activeRouteHash = '';
 
 async function route(options = {}) {
   const live = options?.live === true; const oldY = window.scrollY;
@@ -81,6 +82,12 @@ async function route(options = {}) {
     return;
   }
 
+  if (!live && activeRouteHash && location.hash !== activeRouteHash &&
+      typeof window.__lifegenCanLeaveEditor === 'function' && !window.__lifegenCanLeaveEditor()) {
+    location.replace(activeRouteHash);
+    return;
+  }
+  activeRouteHash = location.hash;
   if (typeof currentCleanup === 'function') { try { currentCleanup(); } catch {} }
   currentCleanup = null;
   main.__liveReload = null;
