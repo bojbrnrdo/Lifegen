@@ -150,9 +150,12 @@ jobs:
         run: |
           echo "Checking for committed private keys..."
 
+          # Exclude only the dedicated local-loopback TLS test fixture.
+          # Do not reuse this key for any deployed service or production secret.
           if git grep -n -I -E \
             -- '-----BEGIN (RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----' \
-            -- ':!package-lock.json'; then
+            -- ':!package-lock.json' \
+            -- ':!tests/fixtures/loopback-test.key'; then
             echo "::error::Possible private key detected."
             exit 1
           fi
