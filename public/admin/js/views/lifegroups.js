@@ -405,6 +405,25 @@ export async function renderLifegroups({main, query}) {
       version:canvas.__lifegenReactVersion||0,
     },{
       manage:can('lifegroups:manage'),
+      canAttendance:can('attendance:view'),
+      onProfile:can('people:view')?async id=>{
+        try{
+          const p=await api.person(id);
+          const modal=openModal({
+            title:fullName(p),
+            wide:true,
+            body:html`<div class="profile-head">${raw(avatar(p,'lg'))}<div class="info"><strong>${fullName(p)}</strong><div class="small muted">${p.person_code||''}</div><div class="mt-1">${raw(statusBadge(p.status))}</div></div></div>
+              <dl class="dl mt-2">
+                <div><dt>Registered</dt><dd>${p.date_registered?fmtDate(p.date_registered):'—'}</dd></div>
+                <div><dt>Sunday attendance</dt><dd>${Number(p.sundays_attended||p.history?.filter(h=>h.status==='present').length||0)}</dd></div>
+                <div><dt>Preferred area</dt><dd>${p.preferred_area||'—'}</dd></div>
+                <div><dt>Preferred day</dt><dd>${p.preferred_day||'—'}</dd></div>
+              </dl>`.value,
+            footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a><button type="button" class="btn btn--primary" data-close-profile>Close</button>`.value
+          });
+          modal.querySelector('[data-close-profile]')?.addEventListener('click',closeModal);
+        }catch(error){toast(error.message||'Unable to open profile.','error');}
+      }:null,
       loadMembers:id=>api.lifegroup(id),
       loadProgress:id=>api.lifegroupProgress(id,12),
       loadProfile:id=>api.person(id),
