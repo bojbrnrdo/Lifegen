@@ -11,3 +11,10 @@ test('cross-network or unassigned Cell leadership is not valid for Network Leade
  assert.equal(hasOutOfNetworkCellLeadership([{id:4}],[{id:3,network_id:null}]),true);
  assert.equal(hasOutOfNetworkCellLeadership([],[{id:3,network_id:4}]),true);
 });
+
+test('auto-placement and Cell editing share the same in-network eligibility policy',()=>{
+ const leaderNetworks=[{id:4}];
+ assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:4}]),false);
+ assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:1}]),true);
+ assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:null}]),true);
+});
