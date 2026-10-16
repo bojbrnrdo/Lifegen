@@ -21,8 +21,8 @@ export async function renderAttendance({ main, query }) {
   let service = null;   // { id, present_count, ..., roster } — id is null until the first mark
   let filter = 'all';
   let search = '';
-  const scopeKind=query.person_id?'person':query.cell_id?'cell':query.network_id?'network':null;
-  const scopeId=Number(query.person_id||query.cell_id||query.network_id)||null;
+  const scopeKind=query.person_id!=null?'person':query.cell_id!=null?'cell':query.network_id!=null?'network':null;
+  const scopeId=scopeKind?Number(query[scopeKind+'_id']):null;
   let scopeIds=null,scopeLabel='';
   if(scopeKind&&Number.isSafeInteger(scopeId)&&scopeId>0){
     try{
