@@ -16,3 +16,15 @@ Inspected `pg_indexes` for `people`, `networks`, `lifegroups`, `lifegroup_member
 - The five incomplete groups remain business review items, not grounds for auto-deletion.
 
 **No production migration authorization implied.** Verify the full constraint catalog and run staging tests before proposing any DDL.
+
+## Confirmed database constraints (pg_constraint)
+- `lifegroups.network_id` references `networks.id` with `ON DELETE RESTRICT`; `lifegroups.leader_person_id` references People with `ON DELETE SET NULL`. Neither foreign key enforces whether parent Network is **active** or led.
+- `lifegroup_memberships.lifegroup_id` is restricted from deletion while referenced. Its `person_id` reference uses `ON DELETE CASCADE`: a hard-delete of a person can erase membership history. Prefer archive flows and verify deletion policies.
+- Active-membership uniqueness is provided by the partial unique **index**, not a named `pg_constraint`; do not mistake its absence from `pg_constraint` for missing protection.
+- Membership `role` can be `member`, `leader`, or `assistant`; `tier` can be `solid` or `new`. These are **not** the same as the primary four discipleship classifications.
+- `people.status` independently allows `first_timer`, `new_believer`, `regular`, `member`, `leader`, `volunteer`, `inactive`. Do **not** overwrite it as a substitute for the proposed four-way classification.
+- `vip_registrations.service_date` is constrained to Sundays when present, and review status is `new` or `reviewed`. The registration workflow must preserve these rules; any change to other worship days needs a separately approved schema decision.
+- The `vip_registrations.person_id` foreign key is `DEFERRABLE INITIALLY DEFERRED`, so test any staging transaction at commit, not only before commit.
+
+### Gaps not enforceable with the listed row checks alone
+The inspected constraints do not enforce a Network being active before its Cell is active, or require leaders on active Networks/Cells. These are currently guarded by application validation and should be covered in integration tests. Database-level enforcement would require a separately reviewed design, not an automatic check-constraint addition.
