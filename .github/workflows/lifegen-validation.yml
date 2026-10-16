@@ -21,6 +21,9 @@ jobs:
         run: npm run build
       - name: Check changed JavaScript syntax
         run: |
+          node --check src/dev-workspace.js
+          node --check public/admin/js/views/devWorkspace.js
+          node --check public/admin/js/app.js
           node --check src/app.js
           node --check src/public-api.js
           node --check src/lifegroups.js
@@ -34,6 +37,9 @@ jobs:
         run: node --test tests/lifegroup-match.test.mjs
       - name: Run deployment input security regression tests
         run: node --test tests/deployment-request-security.test.mjs
+
+      - name: Run developer workspace security tests
+        run: node --test tests/dev-workspace-security.test.mjs
 
       - name: Run People pagination regression tests
         run: node --test tests/people-pagination.test.mjs
