@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build && npm run db:migrate",
+  "buildCommand": "npm run build && if [ \"$VERCEL_ENV\" = \"production\" ]; then npm run db:migrate; else echo \"Skipping migrations for non-production build\"; fi",
   "functions": {
     "src/app.js": {
       "maxDuration": 60,
