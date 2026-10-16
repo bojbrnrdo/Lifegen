@@ -61,3 +61,6 @@ export function startLiveUpdates(){
  stopSync=()=>{stopped=true;source?.close();clearInterval(pollTimer);clearInterval(reconcileTimer);document.removeEventListener('visibilitychange',onVisible);};return stopSync;
 }
 
+
+// Developer workspace requests share the existing session and CSRF handling.
+export const devRequest=(path,{method='GET',body}={})=>request('/api/admin/dev/'+path,{method,body});

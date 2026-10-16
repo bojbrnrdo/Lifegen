@@ -17,6 +17,7 @@ import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegr
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
 import {renderDeveloper} from './views/developer.js';
+import {renderDevIDE,renderDevGit,renderDevPackaging} from './views/devWorkspace.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
@@ -59,6 +60,9 @@ const routes = [
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
   { path: /^\/deploy$/, view: renderDeployment, nav: 'deploy', perm: 'settings:manage' },
   { path: /^\/developer$/, view: renderDeveloper, nav: 'developer', perm: 'settings:manage' },
+  { path: /^\/dev\/ide$/, view: renderDevIDE, nav: 'dev-ide', perm: 'settings:manage' },
+  { path: /^\/dev\/git$/, view: renderDevGit, nav: 'dev-git', perm: 'settings:manage' },
+  { path: /^\/dev\/packaging$/, view: renderDevPackaging, nav: 'dev-packaging', perm: 'settings:manage' },
   { path: /^\/privacy$/, view: renderPrivacy, nav: 'settings' },
 ];
 
@@ -106,6 +110,8 @@ async function route(options = {}) {
 
 function setActiveNav(key) {
   document.querySelectorAll('#nav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === key));
+  const devMenu=document.getElementById('devMenu');
+  if(devMenu && key.startsWith('dev-')){devMenu.hidden=false;document.getElementById('devMenuToggle')?.setAttribute('aria-expanded','true');}
   const peopleMenu = document.getElementById('peopleMenu');
   if (peopleMenu && ['lifegroups', 'attendance', 'registrations'].includes(key)) {
     peopleMenu.hidden = false;
@@ -155,7 +161,7 @@ function renderShell() {
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
-        ${u.role_id==='admin' ? navLink('#/developer', 'developer', 'Developer', 'code') : ''}
+        ${u.role_id==='admin' ? `<div class="nav__people"><button type="button" class="nav__parent" id="devMenuToggle" aria-expanded="false" aria-controls="devMenu">${icon('code',19).value}<span>Dev</span><span class="nav__chevron" aria-hidden="true">▾</span></button><div class="nav__children" id="devMenu" hidden>${navLink('#/dev/ide','dev-ide','LifeIDE',null,true)}${navLink('#/dev/git','dev-git','Git',null,true)}${navLink('#/dev/packaging','dev-packaging','Packaging',null,true)}</div></div>` : ''}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
         <a class="nav__foot" href="#/privacy">Privacy &amp; Terms</a>
@@ -188,6 +194,8 @@ function renderShell() {
     menu.hidden = expanded;
     peopleToggle.setAttribute('aria-expanded', String(!expanded));
   });
+  const devToggle=document.getElementById('devMenuToggle');
+  devToggle?.addEventListener('click',()=>{const m=document.getElementById('devMenu');const open=devToggle.getAttribute('aria-expanded')==='true';m.hidden=open;devToggle.setAttribute('aria-expanded',String(!open));});
   refreshPendingBadge();
   const bar=document.createElement('div');bar.className='connection-bar';bar.id='connectionBar';bar.innerHTML=`<span class="connection-dot"></span><span id="connectionText">Connecting live updates…</span>${state.preview?'<span class="preview-tag">Demo · temporary local PostgreSQL, not Supabase</span>':state.hostedPreview?'<span class="preview-tag">Connected preview · Supabase PostgreSQL</span>':''}<a href="#" id="applyLiveUpdate" hidden>New updates — refresh view</a>`;
   document.getElementById('main').before(bar); startLiveUpdates();
