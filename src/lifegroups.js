@@ -523,6 +523,17 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
     if (!group) throw httpError(404, 'Lifegroup not found.');
     if (!group.is_active) throw httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.');
+    // Revalidate auto-placement eligibility under the group's row lock.
+    // The recommendation list is advisory and may become stale before assignment.
+    if (extra.auto_assign) {
+      if (group.is_demo || !group.leader_person_id)
+        throw httpError(409, 'Cell is not eligible for automatic assignment.');
+      const leaderNetwork = (await client.query(
+        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',
+        [group.leader_person_id]
+      )).rows[0];
+      if (leaderNetwork) throw httpError(409, 'Network Leader groups cannot receive automatic VIP members.');
+    }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
     const selectedSex = clean(extra.sex);
@@ -635,7 +646,7 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
   });
   for (const cell of candidates) {
     try {
-      const membership = await assignMember(cell.id,personId,{role:'member',tier:'new'},actor);
+      const membership = await assignMember(cell.id,personId,{role:'member',tier:'new',auto_assign:true},actor);
       return { assigned:true, lifegroup_id:cell.id, membership, already_assigned:Boolean(membership.unchanged) };
     } catch (error) {
       // Never mask authorization or validation faults; only skip a Cell lost to contention.
