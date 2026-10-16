@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
+import expressRateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import crypto from 'node:crypto';
@@ -26,6 +27,7 @@ const ADMIN_ASSET_VERSION='2.4.5';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
+const eventsLimiter=expressRateLimit({windowMs:15*60*1000,limit:120});
 app.disable('x-powered-by');if(process.env.VERCEL||process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||process.env.TRUST_PROXY==='true')app.set('trust proxy',1);
 app.use((req,res,next)=>{res.locals.nonce=crypto.randomBytes(16).toString('base64');next();});
 app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:['https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
@@ -64,8 +66,8 @@ app.post('/api/auth/admin-recovery',async(req,res)=>{
 });
 app.post('/api/auth/logout',requireStaff,async(req,res)=>{checkOrigin(req);checkCsrf(req);await query('DELETE FROM staff_sessions WHERE token_hash=$1',[req.actor.session_hash]);clearStaffCookie(req,res);res.json({});});
 app.post('/api/auth/password',requireStaff,async(req,res)=>{checkOrigin(req);checkCsrf(req);res.json(await changePassword(req.actor,req.body.current,req.body.next));});
-app.get('/api/events',requireStaff,async(req,res)=>res.json({revision:await revision()}));
-app.get('/api/events/stream',requireStaff,async(req,res)=>{requirePermission(req.actor,'dashboard:view');await streamEvents(req,res);});
+app.get('/api/events',eventsLimiter,requireStaff,async(req,res)=>res.json({revision:await revision()}));
+app.get('/api/events/stream',eventsLimiter,requireStaff,async(req,res)=>{requirePermission(req.actor,'dashboard:view');await streamEvents(req,res);});
 const methods={
  people:['people:view',false],person:['people:view',false],duplicates:['people:write',false],search:['people:view',false],
  calendarEvents:['dashboard:view',false],saveCalendarEvent:['calendar:manage',true],deleteCalendarEvent:['calendar:manage',true],
