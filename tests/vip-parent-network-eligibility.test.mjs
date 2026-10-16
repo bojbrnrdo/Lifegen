@@ -12,3 +12,11 @@ test('VIP assignment rechecks parent Network under transactional row lock',()=>{
  assert.match(body,/parentNetwork\.is_demo/);
  assert.match(body,/parentNetwork\.gender!==group\.gender/);
 });
+
+test('VIP placement verifies that the Cell Leader is unarchived and active',()=>{
+ const start=source.indexOf('async function assignMember(');
+ const end=source.indexOf('async function ',start+20);
+ const body=source.slice(start,end);
+ assert.match(body,/SELECT id FROM people WHERE id=\$1 AND archived_at IS NULL AND status<>\$2 FOR SHARE/);
+ assert.match(body,/if \(!activeLeader\)/);
+});
