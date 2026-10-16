@@ -418,10 +418,34 @@ export async function renderLifegroups({main, query}) {
                 <div><dt>Sunday attendance</dt><dd>${Number(p.sundays_attended||p.history?.filter(h=>h.status==='present').length||0)}</dd></div>
                 <div><dt>Preferred area</dt><dd>${p.preferred_area||'—'}</dd></div>
                 <div><dt>Preferred day</dt><dd>${p.preferred_day||'—'}</dd></div>
-              </dl>`.value,
+              </dl>
+              ${can('lifegroups:manage')?html`<div class="toolbar mt-2"><label class="grow">Classification
+                <select data-classification aria-label="Discipleship classification">
+                  <option value="">Choose classification…</option>
+                  <option value="vip">VIP</option><option value="member">Member</option>
+                  <option value="cell_leader">Cell Leader</option><option value="network_leader">Network Leader</option>
+                </select>
+              </label><button class="btn btn--primary" type="button" data-change-classification>Update</button></div>
+              <p class="small muted">Changing classification does not grant admin access or erase attendance history. Leadership roles require their corresponding active relationship.</p>`:''}`.value,
             footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a><button type="button" class="btn btn--primary" data-close-profile>Close</button>`.value
           });
           modal.querySelector('[data-close-profile]')?.addEventListener('click',closeModal);
+          const currentClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
+          const choice=modal.querySelector('[data-classification]');
+          if(choice)choice.value=currentClassification;
+          modal.querySelector('[data-change-classification]')?.addEventListener('click',async event=>{
+            const next=choice?.value;
+            if(!next)return toast('Choose a classification.','error');
+            const confirmed=await confirmDialog({title:'Change discipleship classification?',
+              message:'Update this People record to '+next.replaceAll('_',' ')+'? Attendance and membership history will remain available.',
+              confirmText:'Update'});
+            if(!confirmed)return;
+            await withLoading(event.currentTarget,async()=>{
+              try{await api.setDiscipleshipClassification(p.id,next,'Staff classification change');
+                toast('Classification updated.');await load(true);
+              }catch(error){toast(error.message||'Could not change classification.','error');}
+            });
+          });
         }catch(error){toast(error.message||'Unable to open profile.','error');}
       }:null,
       loadMembers:id=>api.lifegroup(id),
