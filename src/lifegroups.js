@@ -347,6 +347,7 @@ async function validateGroupReferences(client, data, groupId = null) {
   if (data.network_id) {
     const network = (await client.query('SELECT id,name,gender,is_active FROM networks WHERE id=$1', [data.network_id])).rows[0];
     if (!network) throw httpError(400, 'Selected network was not found.');
+    if (data.is_active && !network.is_active) throw httpError(409, 'Activate the selected Network before activating a Cell within it.');
     if (network.gender !== data.gender) throw httpError(400, `${network.name} is a ${network.gender} network; choose a ${data.gender} network.`);
   }
   if (groupId) {
