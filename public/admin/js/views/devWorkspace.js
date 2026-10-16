@@ -32,7 +32,7 @@ export async function renderDevGit({main}){
 export async function renderDevIDE({main,query={}}){
  main.innerHTML=heading('LifeIDE','Edit and commit repository source files from LIFEGEN — no production branch edits')+'<div class="card"><div class="card__body">Loading…</div></div>';
  const data=await api('status');
- main.innerHTML=heading('LifeIDE','Edit files on develop and feature branches. Every save creates a Git commit.')+offline(data)+
+ main.innerHTML=heading('LifeIDE','Browse develop; edit only feature/* or fix/* branches. Each save creates a commit.')+offline(data)+
  `<div class="card"><div class="card__body stack">
  <div class="form-grid"><div class="field"><label for="ideBranch">Branch</label><input id="ideBranch" value="${esc(query.branch||'develop')}" spellcheck="false"/></div>
  <div class="field"><label for="idePath">Repository file path</label><input id="idePath" value="${esc(query.path||'')}" placeholder="src/example.js" spellcheck="false"/></div></div>
@@ -47,7 +47,7 @@ export async function renderDevIDE({main,query={}}){
  el('ideOpen').onclick=async()=>{el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
   try{const branch=el('ideBranch').value.trim(),path=el('idePath').value.trim();
    const f=await api('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));
-   sha=f.sha;loadedBranch=branch;loadedPath=path;el('ideEditor').value=f.content;el('ideEditor').disabled=false;el('ideCommit').disabled=false;el('ideSave').disabled=false;el('ideMessage').textContent='Loaded '+path+' from '+branch;
+   sha=f.sha;loadedBranch=branch;loadedPath=path;el('ideEditor').value=f.content;el('ideEditor').disabled=!f.editable;el('ideCommit').disabled=!f.editable;el('ideSave').disabled=!f.editable;el('ideMessage').textContent='Loaded '+path+' from '+branch+(f.editable?'':' · read-only');
   }catch(e){el('ideMessage').textContent=e.message;}
  };
  el('ideSave').onclick=async()=>{
