@@ -61,6 +61,7 @@ const checkWrite=(req,res,next)=>{try{
  }catch(e){next(e);}};
 const deny=(res)=>res.status(400).json({error:'Only safe development branches and source-file paths are allowed.'});
 
+const packageRequests=new Map();
 export function registerDevWorkspace(app){
  app.get('/api/admin/dev/status',requireStaff,ensureAdmin,wrap(async(req,res)=>{
   const connected=await verified();
@@ -189,10 +190,15 @@ export function registerDevWorkspace(app){
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
-  await request(apiRoot+'/actions/workflows/lifegen-package.yml/dispatches',{
-   method:'POST',headers:{'content-type':'application/json'},
-   body:JSON.stringify({ref:branch})
-  });
+  const now=Date.now(),last=packageRequests.get(branch)||0;
+  if(now-last<60000)return res.status(429).json({error:'A package build was recently requested for this branch. Wait one minute before retrying.'});
+  packageRequests.set(branch,now);
+  try{
+   await request(apiRoot+'/actions/workflows/lifegen-package.yml/dispatches',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({ref:branch})
+   });
+  }catch(error){packageRequests.delete(branch);throw error;}
   res.status(202).json({ok:true,message:'Packaging workflow requested. Check GitHub Actions for the result.'});
  }));
 }
