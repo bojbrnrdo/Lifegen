@@ -302,7 +302,7 @@ export async function renderLifegroups({main, query}) {
  main.innerHTML=html`
  <section class="lifegroups-page">
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button type="button" class="btn" id="removeFromLifegroups" title="Remove Network, Cell Leader, or Member">${icon('trash',16)} Remove</button>`:''}</div></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
@@ -316,7 +316,7 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load(true)}));
- main.querySelector('#removeFromLifegroups')?.addEventListener('click',()=>openRemoveFromLifegroups({onRemoved:afterRemove}));
+
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
@@ -451,6 +451,7 @@ export async function renderLifegroups({main, query}) {
       loadMembers:id=>api.lifegroup(id),
       loadProgress:id=>api.lifegroupProgress(id,12),
       loadProfile:id=>api.person(id),
+      onClearSearch:()=>{filters.q='';const input=main.querySelector('#treeQ');if(input)input.value='';load();},
       onError:ex=>toast(ex.message||'Unable to load Lifegroup information.','error'),
       onRemove:selection=>removeContext?.({
         kind:selection.role==='cell'?'group':selection.role,
