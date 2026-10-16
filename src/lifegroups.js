@@ -989,11 +989,18 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
     if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
     const current=clean(p.extras?.discipleship_classification);
     if(current===target)return {person_id:personId,classification:target,unchanged:true};
-    const network=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
-    const cell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
-    if(target==='network_leader'&&!network)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
-    if(target==='cell_leader'&&(!cell||network))throw httpError(409,'Connect this person as Cell Leader, and resolve any active Network leadership first.');
-    if(['member','vip'].includes(target)&&(network||cell))throw httpError(409,'Reassign the active leadership relationship before changing this person to Member or VIP.');
+    const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    const networkIds=new Set(networks.map(n=>String(n.id)));
+    if(target==='network_leader'){
+      if(!networks.length)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+      if(cells.some(c=>!networkIds.has(String(c.network_id))))
+        throw httpError(409,'Network Leaders may only lead Cells within their own active Networks.');
+    }
+    if(target==='cell_leader'&&(!cells.length||networks.length))
+      throw httpError(409,'Cell Leader classification requires an active Cell and no active Network leadership.');
+    if(['member','vip'].includes(target)&&(networks.length||cells.length))
+      throw httpError(409,'Reassign active leadership relationships before changing this person to Member or VIP.');
     await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
       '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
     await logAction(client,actor,'people',personId,'discipleship_classification_changed',
