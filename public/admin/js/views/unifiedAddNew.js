@@ -12,10 +12,12 @@ function panel(mode,initial){
  const gender=(mode==='network'||mode==='vip')?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
  const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
  const cell=mode==='member'?'<label class="unified-add__field">Cell Leader<select data-field="cell" required disabled><option value="">Choose Cell Leader</option></select></label>':'';
+ const existingPerson='<label class="unified-add__field">Existing Person ID (optional)<input name="existing_person_id" type="number" min="1" placeholder="Reuse an existing profile"/><small>Find the Person ID in Lifegroups → All People. Leave blank to register someone new.</small></label>';
  const vipDetails=mode==='vip'?'<div class="unified-add__names"><label class="unified-add__field">Age<input name="age" type="number" min="1" max="120" required /></label><label class="unified-add__field">School / Institution<input name="school" maxlength="300" required /></label><label class="unified-add__field">Invited by<input name="inviter" maxlength="200" required /></label><label class="unified-add__field">Contact (optional)<input name="contact_number" type="tel" maxlength="40" /></label></div>':'';
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
  return '<section role="tabpanel" id="unified-'+mode+'" aria-labelledby="tab-'+mode+'" '+(mode===initial?'':'hidden')+'><form data-form="'+mode+'" novalidate>'+
  '<div class="alert alert--error" data-error role="alert" hidden></div>'+gender+network+cell+
+ existingPerson+
  '<div class="unified-add__identity"><label class="unified-add__photo"><span data-photo-preview class="unified-add__photo-preview">'+svg('user',28)+'</span><span class="unified-add__photo-action">'+svg('camera',15)+' Upload photo</span><input type="file" data-photo accept="image/jpeg,image/png,image/webp" aria-label="'+label+' profile picture"/></label>'+
  '<div class="unified-add__names"><label class="unified-add__field">First name<input name="first_name" required maxlength="120" placeholder="First name"/></label><label class="unified-add__field">Last name<input name="last_name" required maxlength="120" placeholder="Last name"/></label></div></div>'+
  vipDetails+
@@ -101,7 +103,8 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   clear(mode);
   const f=getForm(mode);
   const first=f.querySelector('[name=first_name]').value.trim(),last=f.querySelector('[name=last_name]').value.trim();
-  if(!first||!last)return error(mode,'Enter first and last name.');
+  const existingId=Number(f.querySelector('[name=existing_person_id]').value)||null;
+  if(!existingId&&(!first||!last))return error(mode,'Enter first and last name.');
   if(!f.querySelector('[data-consent]').checked)return error(mode,'Confirm consent before saving.');
   const network=mode==='network'||mode==='vip'?null:findNetwork(Number(f.querySelector('[data-field=network]').value));
   if(mode!=='network'&&mode!=='vip'&&!network)return error(mode,'Choose an existing Network.');
@@ -113,10 +116,10 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   for(const field of ['facebook_url','instagram_url','tiktok_url','x_url','youtube_url']){
    const value=f.querySelector('[name='+field+']').value.trim();if(value)person[field]=value;
   }
-  const fingerprint=JSON.stringify({person,networkId:network?.id||null,cellId});
+  const fingerprint=JSON.stringify({person,existingId,networkId:network?.id||null,cellId});
   const pending=state.pending[mode];
   if(pending&&pending.fingerprint!==fingerprint)return error(mode,'A profile was already saved. Retry its assignment before editing these details.');
-  if(!pending && !(await duplicateGuard(person,f.querySelector('[data-duplicate]'))))return;
+  if(!pending&&!existingId&&!(await duplicateGuard(person,f.querySelector('[data-duplicate]'))))return;
   state.busy=true;
   try{
    await withLoading(f.querySelector('[type=submit]'),async()=>{
@@ -126,7 +129,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
         school:f.querySelector('[name=school]').value.trim(),
         inviter:f.querySelector('[name=inviter]').value.trim(),
         contact_number:f.querySelector('[name=contact_number]').value.trim()||null,
-        idempotency_key:state.keys.vip,
+        idempotency_key:state.keys.vip,...(existingId?{existing_person_id:existingId}:{}) ,
       };
       if(!Number.isInteger(vipPayload.age)||vipPayload.age<1||vipPayload.age>120||!vipPayload.school||!vipPayload.inviter)
         return error(mode,'Enter a valid age, school and inviter.');
@@ -146,8 +149,9 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
       onSaved({mode,person:{id:Number(registration.person_id)},registration,assignment});
       return;
     }
-    const created=pending?.person||await api.createPerson(person);
+    const created=pending?.person||(existingId?await api.person(existingId):await api.createPerson(person));
     if(!created?.id)throw new Error('Unable to save the person profile.');
+    if(existingId&&created.sex!==person.sex)throw new Error('The existing person gender does not match this network or Cell.');
     state.pending[mode]=pending||{fingerprint,person:created};
     if(mode==='network'){
      const result=state.pending[mode].network||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
