@@ -3,11 +3,11 @@ import {createRoot} from 'react-dom/client';
 import {ReactFlow,ReactFlowProvider,Background,Controls,Handle,Position,MarkerType,useReactFlow} from '@xyflow/react';
 import dagre from 'dagre';
 import {Users,UserRound,Network,CalendarClock,AlertTriangle,Plus,ArrowRightLeft,CalendarDays,
- Search,X,ChevronDown,ChevronRight,Maximize2,Trash2,Phone,Mail,MapPin,Video,Clock} from 'lucide-react';
+ Search,X,Maximize2,Trash2,Phone,Mail,MapPin,Video,Clock} from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './map.css';
 
-const W=246,H=128;
+const W=190,H=202;
 const profiles=new WeakMap();
 function safePhoto(src){
  if(typeof src!=='string')return '';
@@ -23,15 +23,33 @@ function nodeAvatar({person}){
 }
 const Avatar=({person})=>nodeAvatar({person});
 const TreeNode=memo(({data})=>{
- const {entry,expanded,expandable,selected,toggle,alert}=data;
+ const {entry,expanded,expandable,selected,activate,alert}=data;
  const label=entry.role==='network'?'Network Leader':entry.role==='cell'?'Cell Leader':'Member';
- return <div className={'lg-r-node '+(selected?'lg-r-selected':'')} data-role={entry.role} aria-label={name(entry.person)+', '+label}>
+ const title=name(entry.person);
+ const onKeyDown=e=>{
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  e.preventDefault();
+  e.stopPropagation();
+  activate(entry);
+ };
+ return <div
+   className={'lg-r-node lg-r-node--'+entry.role+(selected?' lg-r-selected':'')}
+   data-role={entry.role}
+   role="button"
+   tabIndex={0}
+   aria-label={title+', '+label+(expandable?', '+(expanded?'expanded':'collapsed'):'')+'. Click to view details'+(expandable?' and '+(expanded?'collapse':'expand')+' connections':'')}
+   aria-expanded={expandable?expanded:undefined}
+   onClick={e=>{e.stopPropagation();activate(entry)}}
+   onKeyDown={onKeyDown}>
    <Handle type="target" position={Position.Top} isConnectable={false} className="lg-r-handle"/>
-   <div className="lg-r-node-head"><Avatar person={entry.person}/><div className="lg-r-identity"><strong title={name(entry.person)}>{name(entry.person)}</strong><span>{label}</span></div>
-    {expandable&&<button className="lg-r-toggle nodrag nopan" type="button" aria-label={(expanded?'Collapse ':'Expand ')+name(entry.person)} aria-expanded={expanded} onClick={e=>{e.stopPropagation();toggle(entry.id)}}>{expanded?<ChevronDown size={17}/>:<ChevronRight size={17}/>}</button>}</div>
+   <div className="lg-r-circle">
+    <Avatar person={entry.person}/>
+    <span className={'lg-r-status-dot '+(entry.active?'lg-r-status-dot--active':'lg-r-status-dot--inactive')} title={entry.active?'Active':'Inactive'}/>
+    {expandable&&<span className="lg-r-expand-indicator" aria-hidden="true">{expanded?'−':'+'}</span>}
+   </div>
+   <div className="lg-r-identity"><strong title={title}>{title}</strong><span>{label}</span></div>
    <div className="lg-r-badges">
     {entry.role!=='member'&&<span><Users size={12}/>{entry.count} {entry.role==='network'?'people':'members'}</span>}
-    <span className={entry.active?'lg-r-active':'lg-r-inactive'}><i/>{entry.active?'Active':'Inactive'}</span>
     {alert===true&&<span className="lg-r-warning" title="No submitted attendance report for this week"><AlertTriangle size={12}/> Report due</span>}
    </div>
    <Handle type="source" position={Position.Bottom} isConnectable={false} className="lg-r-handle"/>
@@ -139,13 +157,6 @@ function Dashboard({data,callbacks}){
  },[expanded,data.groups,addMembers,members]);
  const {rows,edges}=useMemo(()=>buildRows(data.networks,data.groups,members,expanded,allFilters),[data,members,expanded,search]);
  const rowsById=useMemo(()=>new Map(rows.map(r=>[r.id,r])),[rows]);
- const nodes=useMemo(()=>getLayout(rows,edges).map(n=>({
-  ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member',
-    selected:selected?.id===n.id,toggle,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
- })),[rows,edges,expanded,selected,toggle,reports]);
- const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
- useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
- useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase())&&r.role!=='member');if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
  const select=useCallback(async row=>{
   setSelected(row);setProfile(null);
   if(row.person.leader_person_id||row.role==='member'){
@@ -155,14 +166,27 @@ function Dashboard({data,callbacks}){
   if(row.role==='cell'&&!reports.has(row.groupId))callbacks.loadProgress(row.groupId)
    .then(report=>setReports(prev=>new Map(prev).set(row.groupId,report))).catch(()=>{});
  },[callbacks,reports]);
- const onNodeClick=useCallback((_evt,node)=>select(node.data.entry),[select]);
+ const activate=useCallback(row=>{
+  // A single click on the circle opens leader details AND reveals their
+  // connected Cells/Members. Clicking it again collapses that branch.
+  if(row.role!=='member')toggle(row.id);
+  select(row);
+ },[select,toggle]);
+ const nodes=useMemo(()=>getLayout(rows,edges).map(n=>({
+  ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member',
+    selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
+ })),[rows,edges,expanded,selected,activate,reports]);
+ const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
+ useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
+ useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase())&&r.role!=='member');if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
+
  return <div className="lg-r-shell">
   <div className="lg-r-tools"><div className="lg-r-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find Network or Cell Leader" aria-label="Search Lifegroups network"/></div>
    <span className="lg-r-count">{rows.filter(r=>r.role==='network').length} networks · {rows.filter(r=>r.role==='cell').length} cells · {rows.filter(r=>r.role==='member').length} visible members</span>
    <button onClick={fit} title="Center all visible people"><Maximize2 size={16}/> Fit map</button></div>
   <div className="lg-r-main">
    <div className="lg-r-canvas">
-    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={onNodeClick} proOptions={{hideAttribution:true}}
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} proOptions={{hideAttribution:true}}
      fitView minZoom={.03} maxZoom={2.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable
      onPaneClick={()=>{setSelected(null);setProfile(null)}} >
      <Background color="#c9e4d2" gap={22} size={1}/>
@@ -173,7 +197,7 @@ function Dashboard({data,callbacks}){
    <Panel selection={selected} profile={profile} progress={reports.get(selected?.groupId)} manage={callbacks.manage}
     onClose={()=>setSelected(null)} onAdd={callbacks.onAdd} onReassign={callbacks.onReassign} onRemove={callbacks.onRemove}/>
   </div>
-  <p className="lg-r-caption">Click a node for details · Use the chevron to expand · Drag to pan · Scroll to zoom</p>
+  <p className="lg-r-caption">Click a profile circle to expand or collapse · Drag to pan · Scroll to zoom</p>
  </div>;
 }
 export function mount(el,data,callbacks){
