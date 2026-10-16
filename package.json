@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "dev": "node scripts/serve.mjs",
-    "build": "node scripts/check.mjs",
+    "build": "npm run build:lifegroups && node scripts/check.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "supabase:bundle": "node scripts/bundle-supabase.mjs",
     "db:backup": "node scripts/backup.mjs",
@@ -22,7 +22,8 @@
     "test:vip-gift-integration": "node tests/vip-gift-integration.mjs",
     "test:community-integration": "node tests/community-board-integration.mjs",
     "assets:version": "node scripts/version-assets.mjs",
-    "video:add": "node scripts/add-video.mjs"
+    "video:add": "node scripts/add-video.mjs",
+    "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css"
   },
   "dependencies": {
     "compression": "1.8.1",
@@ -35,5 +36,13 @@
     "helmet": "8.1.0",
     "pg": "8.20.0",
     "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@xyflow/react": "^12.12.0",
+    "dagre": "^0.8.5",
+    "esbuild": "^0.25.12",
+    "lucide-react": "^0.468.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }

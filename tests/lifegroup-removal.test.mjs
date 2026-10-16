@@ -122,7 +122,7 @@ test('Lifegroups displays Remove alongside Add New; tree and detail pages also o
  assert.match(view,/id="removeNetwork"/);
  assert.match(view,/onRemoved:afterRemove/);
  assert.match(view,/__lifegenTree\?\.members\.clear\(\)/);
- assert.match(view,/onRemove:can\('lifegroups:manage'\)\?/);
+ assert.match(view,/const removeContext=can\('lifegroups:manage'\)\?/);
  assert.match(graph,/typeof options\.onRemove==='function'/);
  assert.match(graph,/data-remove-node/);
  assert.match(graph,/aria-label="Interactive Lifegroup network/);
