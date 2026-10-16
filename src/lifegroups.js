@@ -336,6 +336,14 @@ async function validateLeader(client, personId, gender, kind) {
 
 async function validateGroupReferences(client, data, groupId = null) {
   const leader = await validateLeader(client, data.leader_person_id, data.gender, 'Lifegroup');
+  if (data.is_active && data.leader_person_id) {
+    const leaderNetworks=(await client.query(
+      'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
+      [data.leader_person_id]
+    )).rows;
+    if (leaderNetworks.length && hasOutOfNetworkCellLeadership(leaderNetworks,[data]))
+      throw httpError(409,'A Network Leader may lead only Cells within their own active Network.');
+  }
   if (data.network_id) {
     const network = (await client.query('SELECT id,name,gender,is_active FROM networks WHERE id=$1', [data.network_id])).rows[0];
     if (!network) throw httpError(400, 'Selected network was not found.');
@@ -528,11 +536,12 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     if (extra.auto_assign) {
       if (group.is_demo || !group.leader_person_id)
         throw httpError(409, 'Cell is not eligible for automatic assignment.');
-      const leaderNetwork = (await client.query(
-        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',
+      const leaderNetworks = (await client.query(
+        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
-      )).rows[0];
-      if (leaderNetwork) throw httpError(409, 'Network Leader groups cannot receive automatic VIP members.');
+      )).rows;
+      if (hasOutOfNetworkCellLeadership(leaderNetworks,[group]) && leaderNetworks.length)
+        throw httpError(409, 'A Network Leader may receive VIPs only in a Cell belonging to their active Network.');
     }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
