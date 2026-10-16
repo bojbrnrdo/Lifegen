@@ -9,7 +9,7 @@ const svg=(key,size=18)=>icon(key,size).value;
 
 function panel(mode,initial){
  const label=headingOf[mode];
- const gender=mode==='network'?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
+ const gender=(mode==='network'||mode==='vip')?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
  const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
  const cell=mode==='member'?'<label class="unified-add__field">Cell Leader<select data-field="cell" required disabled><option value="">Choose Cell Leader</option></select></label>':'';
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
@@ -103,8 +103,8 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   if(!f.querySelector('[data-consent]').checked)return error(mode,'Confirm consent before saving.');
   const network=mode==='network'||mode==='vip'?null:findNetwork(Number(f.querySelector('[data-field=network]').value));
   if(mode!=='network'&&mode!=='vip'&&!network)return error(mode,'Choose an existing Network.');
-  const gender=mode==='network'?f.querySelector('[name=network_gender]:checked')?.value:mode==='vip'?null:network.gender;
-  if(mode!=='vip'&&!gender)return error(mode,'Select Gender.');
+  const gender=(mode==='network'||mode==='vip')?f.querySelector('[name=network_gender]:checked')?.value:network.gender;
+  if(!gender)return error(mode,'Select Gender.');
   const cellId=mode==='member'?Number(f.querySelector('[data-field=cell]').value):null;
   if(mode==='member'&&!cellId)return error(mode,'Choose a Cell Leader.');
   const person={first_name:first,last_name:last,...(gender?{sex:sexOf[gender]}:{}),photo:state.photos[mode],status:mode==='vip'?'first_timer':mode==='member'?'member':'leader',privacy_consent:true,registration_source:'staff'};
@@ -123,7 +123,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
     state.pending[mode]=pending||{fingerprint,person:created};
     if(mode==='vip'){
      reset(mode);
-     toast('VIP profile created. Assign a Cell through Needs Cell.');
+     toast('Person saved for VIP follow-up. Complete VIP registration and assign a Cell through Needs Cell.');
      onSaved({mode,person:created,needsAssignment:true});
     }else if(mode==='network'){
      const result=state.pending[mode].network||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
