@@ -239,7 +239,7 @@ async function customMethod(req,name,args) {
     }
     if(!existingId){
       const record=data.people.find(row=>Number(row.id)===Number(person.id));
-      if(record)record.discipleship_classification='vip';
+      if(record)record.extras={...(record.extras||{}),discipleship_classification:'vip'};
     }
     const fullName=[person.first_name,person.last_name].filter(Boolean).join(' ');
     const id=stateId(data,'vip_registrations'),recovery='LG-'+randomToken();
