@@ -205,7 +205,6 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
   '<div class="lfg__toolbar">'+
   '<div class="lfg__heading"><b>' + treeControlIcon('focus') + ' Network map</b><small>Click a leader to reveal their connections</small></div>'+
   '<div class="lfg__buttons">'+
-   '<button type="button" class="lfg__button--focus" data-action="focus" aria-label="Focus on a Network Leader" title="Focus on a Network Leader">' + treeControlIcon('focus') + ' <span>Focus</span></button>'+
    '<button type="button" data-action="fit" aria-label="Fit all people in the diagram" title="Fit all people">' + treeControlIcon('fit') + ' <span>Fit all</span></button>'+
    '<button type="button" data-action="collapse" aria-label="Collapse all branches" title="Collapse all">' + treeControlIcon('reset') + '</button>'+
    '<button type="button" data-action="plus" aria-label="Zoom in" title="Zoom in">' + treeControlIcon('plus') + '</button>'+
@@ -214,23 +213,28 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
   '<div class="lfg__blank" hidden></div>'+
   '<span class="lfg__hint">Click profile to expand · Drag to move · Scroll to zoom</span></div></section>';
  const svg=target.querySelector('.lfg__svg'),scene=svg.querySelector('.scene'),edgeLayer=svg.querySelector('.edges'),nodeLayer=svg.querySelector('.nodes'),panel=target.querySelector('.lfg__selection'),blank=target.querySelector('.lfg__blank');
- let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500},first=true;
+ let k=1,panX=20,panY=20,drag=null,layout={nodes:[],lines:[],height:450,width:500};
  let previousPositions=new Map(),previousEdges=new Set(),previousNodeSpecs=new Map(),previousPairSpecs=new Map(),animationFrame=0,cameraFrame=0;
  let observer=null;
  const reducedMotion=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  const updateTransform=()=>scene.setAttribute('transform','translate('+panX+','+panY+') scale('+k+')');
- function fit(fitAll=false){
+ function fit(){
+  if(cameraFrame){cancelAnimationFrame(cameraFrame);cameraFrame=0;}
   const width=svg.clientWidth||900,height=svg.clientHeight||550;
-  if(fitAll){
-   k=Math.max(.23,Math.min(1.13,(width-65)/layout.width,(height-78)/layout.height));
-   panX=(width-layout.width*k)/2;
-   panY=(height-layout.height*k)/2;
-  }else{
-   const root=layout.nodes.find(n=>n.kind==='network')||layout.nodes[0];
-   k=width<700?.95:width<1024?1.12:1.3;
-   panX=width/2-(root?.x||0)*k;
-   panY=(width<700?170:192)-(root?.y||0)*k;
-  }
+  // Never enforce a minimum zoom that clips a wide or deep hierarchy.
+  // Fit the actual drawn node extents rather than the generous layout
+  // margin. This keeps small trees readable and wide trees fully visible.
+  // Include avatar, labels and child-branch spacing in the bounds.
+  const nodes=layout.nodes;
+  const xMin=nodes.length?Math.min(...nodes.map(n=>n.x))-108:0;
+  const xMax=nodes.length?Math.max(...nodes.map(n=>n.x))+108:layout.width;
+  const yMin=nodes.length?Math.min(...nodes.map(n=>n.y))-40:0;
+  const yMax=nodes.length?Math.max(...nodes.map(n=>n.y))+91:layout.height;
+  const usableWidth=Math.max(1,width-(width<700?24:48));
+  const usableHeight=Math.max(1,height-(width<700?48:76));
+  k=Math.max(.01,Math.min(1.3,usableWidth/Math.max(1,xMax-xMin),usableHeight/Math.max(1,yMax-yMin)));
+  panX=width/2-(xMin+xMax)/2*k;
+  panY=height/2-(yMin+yMax)/2*k;
   updateTransform();
  }
  function details(node){
@@ -261,27 +265,7 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
    });
   });
  }
- function focusNode(key){
-  const n=layout.nodes.find(node=>node.key===key);
-  if(!n)return;
-  if(cameraFrame)cancelAnimationFrame(cameraFrame);
-  const width=svg.clientWidth||900,height=svg.clientHeight||550,mobile=width<700;
-  const targetK=mobile?.82:Math.max(.9,Math.min(k,1.12));
-  // Put the selected leader near the top CENTER, with room for children below.
-  const goalX=width/2-n.x*targetK;
-  const goalY=(mobile?170:195)-n.y*targetK;
-  if(reducedMotion){k=targetK;panX=goalX;panY=goalY;updateTransform();return;}
-  const old={k,panX,panY},started=performance.now();
-  function frame(now){
-   if(!svg.isConnected)return;
-   const t=hierarchyEasing((now-started)/470);
-   k=old.k+(targetK-old.k)*t;panX=old.panX+(goalX-old.panX)*t;panY=old.panY+(goalY-old.panY)*t;
-   updateTransform();
-   if(t<1)cameraFrame=requestAnimationFrame(frame);else cameraFrame=0;
-  }
-  cameraFrame=requestAnimationFrame(frame);
- }
- function draw(shouldFit=false,focusKey=null){
+ function draw(){
   if(animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;}
   const oldPos=new Map(previousPositions);
   const oldEdges=new Set(previousEdges);
@@ -359,7 +343,7 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
   }
   if(state.selected){const found=layout.nodes.find(n=>n.key===state.selected);if(found)details(found);else panel.hidden=true;}
   if(!layout.nodes.length){panel.hidden=true;blank.hidden=false;blank.innerHTML='<b>No Network Leaders found</b><p>Try another filter or select Add New to create a Network.</p>';}else blank.hidden=true;
-  if(first||shouldFit){fit();first=false;}
+  fit();
   const animate=oldPos.size>0&&!reducedMotion;
   if(!animate){
    paint(1);
@@ -392,16 +376,16 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
    el.addEventListener('click',activateNode);
    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activateNode();}});
   }
-  if(focusKey)focusNode(focusKey);
+
  }
  async function activate(node){
   details(node);
   if(node.kind==='member'){draw();return;}
-  if(expanded.has(node.key)){expanded.delete(node.key);draw(false,node.key);return;}
+  if(expanded.has(node.key)){expanded.delete(node.key);draw();return;}
   expanded.add(node.key);
-  draw(false,node.key);
+  draw();
   if(node.kind==='group'&&!members.has(node.key)&&!loading.has(node.key)){
-   loading.add(node.key);draw(false,node.key);
+   loading.add(node.key);draw();
    try{
     const response=await api.lifegroup(node.record.id);
     if(target.__lifegenTree!==state||!target.isConnected)return;
@@ -412,13 +396,12 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
     panel.hidden=false;panel.innerHTML='<strong>Unable to load members</strong><p>'+esc(error.message||'Please try again.')+'</p>';
    }finally{loading.delete(node.key);}
   }
-  if(target.__lifegenTree===state&&target.isConnected)draw(false,node.key);
+  if(target.__lifegenTree===state&&target.isConnected)draw();
  }
- target.querySelector('[data-action="focus"]').onclick=()=>fit(false);
- target.querySelector('[data-action="fit"]').onclick=()=>fit(true);
+ target.querySelector('[data-action="fit"]').onclick=()=>fit();
  target.querySelector('[data-action="collapse"]').onclick=()=>{
   expanded.clear();state.selected=null;panel.hidden=true;
-  draw(false,layout.nodes.find(n=>n.kind==='network')?.key);
+  draw();
  };
  const zoom=amount=>{if(cameraFrame)cancelAnimationFrame(cameraFrame);k=Math.max(.2,Math.min(3,k*amount));updateTransform();};
  target.querySelector('[data-action="plus"]').onclick=()=>zoom(1.25);
@@ -443,7 +426,7 @@ export async function renderHierarchy(target,networks,groups,filters={},options=
   if(cameraFrame)cancelAnimationFrame(cameraFrame);
   observer?.disconnect();
  };
- draw(true);
+ draw();
  if(typeof ResizeObserver!=='undefined'){
   let width=svg.clientWidth;
   observer=new ResizeObserver(()=>{

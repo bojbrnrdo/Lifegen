@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { hierarchyEasing, hierarchyCurve, buildLifegroupTree, arrangeLifegroupTree } from '../public/admin/js/views/hierarchy.js';
 
 const leader = {id:1,name:'Alpha',leader_name:'Network Leader',gender:'boys',is_active:true};
@@ -73,4 +74,19 @@ test('multiple Network Leaders stay top-aligned and have non-overlapping horizon
  assert.equal(layout.nodes.length,2);
  assert.equal(layout.nodes[0].y,layout.nodes[1].y);
  assert.ok(Math.abs(layout.nodes[0].x-layout.nodes[1].x)>=200);
+});
+
+
+test('tree always fits complete visible layout after loading or expanding/collapsing',()=>{
+ const source=readFileSync(new URL('../public/admin/js/views/hierarchy.js',import.meta.url),'utf8');
+ assert.match(source,/function fit\(\)/);
+ assert.match(source,/k=Math\.max\(\.01,Math\.min\(1\.3,usableWidth\/Math\.max\(1,xMax-xMin\),usableHeight\/Math\.max\(1,yMax-yMin\)\)\)/);
+ assert.doesNotMatch(source,/Math\.max\(\.23,Math\.min/,'A minimum zoom must not crop wide trees');
+ assert.doesNotMatch(source,/function focusNode\(/,'Selected node must not override Fit All');
+ assert.match(source,/if\(node\.kind==='member'\)\{draw\(\);return;\}/);
+ assert.match(source,/expanded\.add\(node\.key\);\s*draw\(\)/);
+ assert.match(source,/expanded\.delete\(node\.key\);draw\(\)/);
+ assert.match(source,/function draw\(\)\{[\s\S]*?\n  fit\(\)/);
+ assert.match(source,/observer=new ResizeObserver\(/);
+ assert.match(source,/target\.querySelector\('\[data-action="fit"\]'\)\.onclick=\(\)=>fit\(\)/);
 });
