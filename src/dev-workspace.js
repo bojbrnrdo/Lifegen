@@ -120,6 +120,13 @@ export function registerDevWorkspace(app){
   });
   res.status(201).json({number:created.number,url:created.html_url,state:created.state,draft:Boolean(created.draft)});
  }));
+ app.get('/api/admin/dev/package-runs',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
+  const result=await request(apiRoot+'/actions/workflows/lifegen-package.yml/runs?per_page=15');
+  res.set('Cache-Control','no-store').json({runs:(result.workflow_runs||[]).map(run=>({
+   id:run.id,branch:run.head_branch,status:run.status,conclusion:run.conclusion,
+   url:run.html_url,created_at:run.created_at
+  }))});
+ }));
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
