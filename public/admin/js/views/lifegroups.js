@@ -515,15 +515,15 @@ export async function renderLifegroups({main, query}) {
 
 /** In-page People directory: retain canonical People records and existing profile routes. */
 async function drawAllPeople(body) {
- body.innerHTML=html`<div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input type="search" id="allPeopleQ" placeholder="Search people by name or Person ID" aria-label="Search all People"/></div></div><div id="allPeopleResults" role="status"><div class="loading">Loading People…</div></div><div class="row row--between mt-2" id="allPeoplePager"></div>`;
- const result=body.querySelector('#allPeopleResults'),pager=body.querySelector('#allPeoplePager'),input=body.querySelector('#allPeopleQ');
+ body.innerHTML=html`<div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input type="search" id="allPeopleQ" placeholder="Search people by name or Person ID" aria-label="Search all People"/></div><label class="small">Status <select id="allPeopleStatus" aria-label="Filter people by status"><option value="all">All active records</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option><option value="first_timer">First timers</option><option value="member">Members</option><option value="leader">Leaders</option></select></label></div><div id="allPeopleResults" role="status"><div class="loading">Loading People…</div></div><div class="row row--between mt-2" id="allPeoplePager"></div>`;
+ const result=body.querySelector('#allPeopleResults'),pager=body.querySelector('#allPeoplePager'),input=body.querySelector('#allPeopleQ'),status=body.querySelector('#allPeopleStatus');
  let requestId=0,offset=0;
  const PAGE=50;
  async function load(){
   const version=++requestId,q=input.value.trim();
   result.innerHTML='<div class="loading">Loading People…</div>';pager.innerHTML='';
   try{
-   const page=await api.people({q,status:'all',paged:1,limit:PAGE,offset});
+   const page=await api.people({q,status:status.value,paged:1,limit:PAGE,offset});
    if(version!==requestId||!body.isConnected)return;
    const rows=Array.isArray(page)?page:page?.people||page?.rows||page?.items||[];
    const total=Array.isArray(page)?rows.length:Number(page?.total??rows.length);
@@ -534,6 +534,7 @@ async function drawAllPeople(body) {
   }catch(e){if(version===requestId)result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;}
  }
  input.addEventListener('input',debounce(()=>{offset=0;load();},250));
+ status.addEventListener('change',()=>{offset=0;load();});
  await load();
 }
 
