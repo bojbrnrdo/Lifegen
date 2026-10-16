@@ -314,15 +314,6 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
- if(name==='archivePerson'){
-  const personId=Number(args[0]);
-  if(!Number.isSafeInteger(personId)||personId<=0)throw httpError(400,'Invalid Person ID.');
-  const active=(await query(`SELECT
-    EXISTS(SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active) AS network_leader,
-    EXISTS(SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active) AS cell_leader`,[personId])).rows[0];
-  if(active.network_leader||active.cell_leader)
-   throw httpError(409,'Reassign active Network and Cell leadership before archiving this person.');
- }
  const groupResult=await handleLifegroupMethod(name,args,req.actor);
  const custom=groupResult===undefined?await customMethod(req,name,args):groupResult;
  let result=custom===undefined?await runDomain(name,args,req.actor,write):custom;
