@@ -3,14 +3,14 @@ import {requireStaff,checkOrigin,checkCsrf} from './auth.js';
 const repository='bojbrnrdo/Lifegen';
 const apiRoot='https://api.github.com/repos/'+repository;
 const token=()=>process.env.LIFEGEN_GITHUB_DEV_TOKEN||'';
-const allowedBranch=b=>/^(develop|feature\/[a-zA-Z0-9._-]{1,90}|fix\/[a-zA-Z0-9._-]{1,90})$/.test(b||'');
-const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
+export const allowedBranch=b=>/^(develop|feature\/[a-zA-Z0-9._-]{1,90}|fix\/[a-zA-Z0-9._-]{1,90})$/.test(b||'');
+export const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
   !p.startsWith('/')&&!p.includes('..')&&!p.includes('\\')&&
   /^[a-zA-Z0-9._/-]+$/.test(p)&&
   !/(^|\/)(\.env(?:\..*)?|\.git|node_modules|secrets?)(\/|$)/i.test(p)&&
   !/\.(pem|key|p12|pfx|crt)$/i.test(p);
-const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'');
-const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
+export const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'');
+export const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
  !/^(src\/(auth|db|deployment|dev-workspace)\.js|vercel\.json|package(-lock)?\.json)$/i.test(p);
 const enabled=()=>Boolean(token());
 const request=async(url,opts={})=>{
@@ -61,7 +61,10 @@ export function registerDevWorkspace(app){
   if(info.type!=='file'||info.size>200000)return res.status(400).json({error:'Only text files up to 200 KB can be edited.'});
   const raw=await request(apiRoot+'/git/blobs/'+info.sha);
   if(raw.encoding!=='base64')return res.status(400).json({error:'Unsupported file encoding'});
-  res.set('Cache-Control','no-store').json({path:file,branch,sha:info.sha,content:Buffer.from(raw.content,'base64').toString('utf8')});
+  const bytes=Buffer.from(raw.content,'base64');
+  const decoded=bytes.toString('utf8');
+  if(bytes.includes(0)||!Buffer.from(decoded,'utf8').equals(bytes))return res.status(415).json({error:'Binary and invalid UTF-8 files cannot be opened in LifeIDE.'});
+  res.set('Cache-Control','no-store').json({path:file,branch,sha:info.sha,content:decoded,editable:editableBranch(branch)&&editablePath(file)});
  }));
  app.put('/api/admin/dev/file',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const {branch,path:file,sha,content,message}=req.body||{};
