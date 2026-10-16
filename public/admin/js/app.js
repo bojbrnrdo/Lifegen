@@ -161,7 +161,7 @@ function renderShell() {
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
-        ${u.role_id==='admin' ? `<div class="nav__people"><button type="button" class="nav__parent" id="devMenuToggle" aria-expanded="false" aria-controls="devMenu">${icon('code',19).value}<span>Dev</span><span class="nav__chevron" aria-hidden="true">▾</span></button><div class="nav__children" id="devMenu" hidden>${navLink('#/dev/ide','dev-ide','MerchIDE',null,true)}${navLink('#/dev/git','dev-git','Git',null,true)}${navLink('#/dev/packaging','dev-packaging','Packaging',null,true)}</div></div>` : ''}
+        ${u.role_id==='admin' ? `<div class="nav__people"><button type="button" class="nav__parent" id="devMenuToggle" aria-expanded="false" aria-controls="devMenu">${icon('code',19).value}<span>Dev</span><span class="nav__chevron" aria-hidden="true">▾</span></button><div class="nav__children" id="devMenu" hidden>${navLink('#/dev/ide','dev-ide','LifeIDE',null,true)}${navLink('#/dev/git','dev-git','Git',null,true)}${navLink('#/dev/packaging','dev-packaging','Packaging',null,true)}</div></div>` : ''}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
         <a class="nav__foot" href="#/privacy">Privacy &amp; Terms</a>
