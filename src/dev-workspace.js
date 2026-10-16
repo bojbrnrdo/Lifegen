@@ -54,7 +54,7 @@ const ensureEnabled=async(req,res,next)=>{try{
  if(await verified())return next();
  return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side integration token.'});
  }catch(e){next(e);}};
-const writesAllowed=()=>process.env.VERCEL_ENV!=='production'&&process.env.LIFEGEN_DEV_WRITES_ENABLED==='true';
+export const writesAllowed=(env=process.env)=>env.VERCEL_ENV!=='production'&&env.NODE_ENV!=='production'&&env.LIFEGEN_DEV_WRITES_ENABLED==='true'&&env.VERCEL_ENV==='preview';
 const checkWrite=(req,res,next)=>{try{
  if(!writesAllowed())return res.status(403).json({error:'Developer Git writes are disabled on this environment. Enable them only in an isolated development deployment.'});
  checkOrigin(req);checkCsrf(req);next();
