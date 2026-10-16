@@ -13,7 +13,7 @@ export function recommendEligibleCells(groups,prefs={}) {
   area:normalize(prefs.area||prefs.preferred_area),
   category:normalize(prefs.category||prefs.preferred_category)};
  const priorityOrder=prefs.priority_order?validateVipPriorityOrder(prefs.priority_order):DEFAULT_VIP_PRIORITIES;
- const candidates=groups.filter(g=>g.is_active&&!g.leads_network&&g.leader_person_id&&
+ const candidates=groups.filter(g=>g.is_active&&g.leader_person_id&&
    Number(g.slots)>0&&!g.is_demo).map(g=>{
    const reasons=[];
    if(desired.day&&normalize(g.schedule_day)===desired.day)reasons.push('day');
