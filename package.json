@@ -26,7 +26,7 @@
     "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css"
   },
   "dependencies": {
-    "compression": "1.8.1",
+    "compression": "1.8.2",
     "cookie-parser": "1.4.7",
     "csv-parse": "7.0.3",
     "dotenv": "17.2.3",
