@@ -570,6 +570,12 @@ async function assignMember(groupId, personId, extra = {}, actor) {
         throw httpError(409,'Cell is not eligible for automatic VIP placement: its Network must be active, non-demo and gender-compatible.');
       if (group.is_demo || !group.leader_person_id)
         throw httpError(409, 'Cell is not eligible for automatic assignment.');
+      const activeLeader=(await client.query(
+        'SELECT id FROM people WHERE id=$1 AND archived_at IS NULL AND status<>$2 FOR SHARE',
+        [group.leader_person_id,'inactive']
+      )).rows[0];
+      if (!activeLeader)
+        throw httpError(409,'Cell Leader must be active and unarchived before automatic VIP placement.');
       const leaderNetworks = (await client.query(
         'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
