@@ -30,3 +30,8 @@ export function recommendEligibleCells(groups,prefs={}) {
    return Number(a.id)-Number(b.id);
  });
 }
+
+// Only explicit, Cell-local HTTP 409 conflicts can advance VIP placement.
+export function shouldRetryVipCell(error) {
+ return error?.status===409 && error.retryableVipCell===true;
+}

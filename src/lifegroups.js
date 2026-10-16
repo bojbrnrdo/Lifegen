@@ -1,4 +1,4 @@
-import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES } from './lifegroup-match.js';
+import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES,shouldRetryVipCell } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
 
@@ -720,7 +720,7 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
       return { assigned:true, lifegroup_id:cell.id, membership, already_assigned:Boolean(membership.unchanged) };
     } catch (error) {
       // Never mask authorization or validation faults; only skip a Cell lost to contention.
-      if (error.status !== 409 || error.retryableVipCell !== true) throw error;
+      if (!shouldRetryVipCell(error)) throw error;
       const nowActive = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
       if (nowActive) return {assigned:true,already_assigned:true,lifegroup_id:Number(nowActive.lifegroup_id)};
     }

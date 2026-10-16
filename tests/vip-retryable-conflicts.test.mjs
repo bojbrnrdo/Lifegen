@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {shouldRetryVipCell} from '../src/lifegroup-match.js';
 
 const source=readFileSync(new URL('../src/lifegroups.js',import.meta.url),'utf8');
 const assign=source.slice(source.indexOf('async function assignMember('),source.indexOf('/** Assign an ungrouped person'));
 const auto=source.slice(source.indexOf('async function autoAssignMember('),source.indexOf('async function leaveMember('));
 test('only explicitly tagged cell conflicts are retried during auto-assignment',()=>{
- assert.match(auto,/error\.status !== 409 \|\| error\.retryableVipCell !== true/);
+ assert.match(auto,/if \(!shouldRetryVipCell\(error\)\) throw error/);
  assert.match(source,/error\.retryableVipCell = true/);
 });
 test('cell eligibility failures and full capacity are tagged for alternate Cell selection',()=>{
@@ -24,4 +25,16 @@ test('person-specific validation is not marked as retryable',()=>{
 test('deactivated candidate Cell is retryable only in automatic placement',()=>{
  assert.match(assign,/if \(!group\.is_active\) throw \(extra\.auto_assign \? retryableVipCellConflict\(/);
  assert.match(assign,/ : httpError\(409, 'This Lifegroup is inactive\./);
+});
+
+test('retry decision rejects unrelated conflicts and malformed errors',()=>{
+ assert.equal(shouldRetryVipCell({status:409,retryableVipCell:true}),true);
+ assert.equal(shouldRetryVipCell({status:409,retryableVipCell:false}),false);
+ assert.equal(shouldRetryVipCell({status:409}),false);
+ assert.equal(shouldRetryVipCell({status:400,retryableVipCell:true}),false);
+ assert.equal(shouldRetryVipCell({status:403,retryableVipCell:true}),false);
+ assert.equal(shouldRetryVipCell({status:500,retryableVipCell:true}),false);
+ assert.equal(shouldRetryVipCell(null),false);
+ assert.equal(shouldRetryVipCell(undefined),false);
+ assert.equal(shouldRetryVipCell({status:'409',retryableVipCell:true}),false);
 });
