@@ -20,7 +20,7 @@ export async function renderDevGit({main}){
  </div></section><section class="card"><div class="card__header"><h2>Branch files</h2></div><div class="card__body stack">
  ${field}<button type="button" id="devBrowse" class="btn btn--primary" ${data.connected?'':'disabled'}>Browse files</button>
  <p id="devGitStatus" class="small muted" role="status"></p>
- <div id="devGitFiles" class="stack"></div>
+ <div class="field"><label for="devFileFilter">Filter files</label><input id="devFileFilter" type="search" placeholder="Search paths…" disabled/></div><div id="devGitFiles" class="stack"></div>
  </div></section></div>`;
  main.querySelector('#createDevBranch').onclick=async()=>{
   const name=main.querySelector('#newDevBranch').value.trim(),status=main.querySelector('#createBranchStatus');
@@ -29,12 +29,15 @@ export async function renderDevGit({main}){
    main.querySelector('#devBranch').value=result.name;
   }catch(error){status.textContent=error.message;}
  };
+ let listedFiles=[];
+ const filter=main.querySelector('#devFileFilter');
+ filter.oninput=()=>{const files=main.querySelector('#devGitFiles');files.replaceChildren();const term=filter.value.trim().toLowerCase();listedFiles.filter(f=>f.path.toLowerCase().includes(term)).slice(0,150).forEach(file=>{const a=document.createElement('a');a.href='#/dev/ide?branch='+encodeURIComponent(main.querySelector('#devBranch').value.trim())+'&path='+encodeURIComponent(file.path);a.textContent=file.path;a.className='small';files.append(a);});};
  main.querySelector('#devBrowse').onclick=async()=>{
   const status=main.querySelector('#devGitStatus'),files=main.querySelector('#devGitFiles');
   status.textContent='Loading files…';files.replaceChildren();
   try{const result=await api('tree?branch='+encodeURIComponent(main.querySelector('#devBranch').value.trim()));
+  listedFiles=result.files;filter.disabled=false;filter.oninput();
   status.textContent=result.files.length+' source files available'+(result.truncated?' (list truncated)':'');
-  result.files.slice(0,150).forEach(file=>{const a=document.createElement('a');a.href='#/dev/ide?branch='+encodeURIComponent(result.branch)+'&path='+encodeURIComponent(file.path);a.textContent=file.path;a.className='small';files.append(a);});
   }catch(e){status.textContent=e.message;}
  };
 }
