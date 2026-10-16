@@ -29,7 +29,20 @@ export async function renderDevGit({main}){
  <div class="field"><label for="prDescription">Review notes</label><textarea id="prDescription" rows="4" maxlength="4000" placeholder="What changed and what should reviewers test?"></textarea></div>
  <button type="button" id="createDraftPr" class="btn btn--primary" ${data.connected?'':'disabled'}>Create draft pull request</button>
  <p class="small muted" role="status" id="draftPrStatus"></p><div id="draftPrLink"></div>
- </div></section>`;
+ </div></section>
+ <section class="card mt-2"><div class="card__header"><h2>Open development pull requests</h2><button type="button" class="btn btn--sm" id="refreshDevPrs" ${data.connected?'':'disabled'}>Refresh</button></div>
+ <div class="card__body"><p class="small muted" id="devPrStatus" role="status">Load current review requests.</p><div class="stack" id="devPrList"></div></div></section>`;
+ const refreshPrs=async()=>{
+  const status=main.querySelector('#devPrStatus'),list=main.querySelector('#devPrList');status.textContent='Loading pull requests…';list.replaceChildren();
+  try{const result=await api('pull-requests');status.textContent=result.pulls.length+' open pull requests into develop';
+   result.pulls.forEach(pr=>{const row=document.createElement('div');row.className='row row--between';
+    const details=document.createElement('div');const title=document.createElement('a');title.href=pr.html_url;title.target='_blank';title.rel='noopener noreferrer';title.textContent='#'+pr.number+' · '+pr.title;
+    const sub=document.createElement('p');sub.className='small muted';sub.textContent=pr.branch+' → '+pr.base+(pr.draft?' · Draft':' · Ready for review');
+    details.append(title,sub);row.append(details);list.append(row);});
+  }catch(error){status.textContent=error.message;}
+ };
+ main.querySelector('#refreshDevPrs').onclick=refreshPrs;
+ if(data.connected)refreshPrs();
  main.querySelector('#createDevBranch').onclick=async()=>{
   const name=main.querySelector('#newDevBranch').value.trim(),status=main.querySelector('#createBranchStatus');
   status.textContent='Creating branch…';

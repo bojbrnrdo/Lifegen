@@ -93,6 +93,17 @@ export function registerDevWorkspace(app){
   });
   res.json({ok:true,commit:data.commit?.sha,sha:data.content?.sha});
  }));
+ app.get('/api/admin/dev/pull-requests',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
+  const branch=String(req.query.branch||'').trim();
+  if(branch&&!editableBranch(branch))return deny(res);
+  const params=new URLSearchParams({state:'open',base:'develop',per_page:'30',sort:'updated',direction:'desc'});
+  if(branch)params.set('head',repository.split('/')[0]+':'+branch);
+  const pulls=await request(apiRoot+'/pulls?'+params.toString());
+  res.set('Cache-Control','no-store').json({pulls:pulls.map(p=>({
+   number:p.number,title:p.title,html_url:p.html_url,draft:Boolean(p.draft),
+   branch:p.head?.ref||'',base:p.base?.ref||'',updated_at:p.updated_at||''
+  }))});
+ }));
  app.post('/api/admin/dev/pull-request',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const branch=String(req.body?.branch||'').trim();
   const title=String(req.body?.title||'').trim();
