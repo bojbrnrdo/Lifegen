@@ -4,6 +4,7 @@ import {devRequest} from '../api.js';
 const api=devRequest;
 const heading=(title,subtitle)=>`<div class="page-header"><div><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p></div></div>`;
 const offline=(data)=>!data.connected?'<div class="alert alert--info">GitHub integration is not yet configured on the server. Ask the administrator to configure LIFEGEN_GITHUB_DEV_TOKEN with repository Contents and Actions permissions. Never enter tokens in this page.</div>':'';
+const writeNotice=data=>data.connected&&!data.writesEnabled?'<div class="alert alert--info">GitHub is connected read-only. Git writes require an isolated development deployment and LIFEGEN_DEV_WRITES_ENABLED=true. Production always blocks Git writes.</div>':'';
 const field=`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="develop" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
 
 export async function renderDevGit({main}){
@@ -17,7 +18,7 @@ export async function renderDevGit({main}){
  <div class="row"><button type="button" id="checkDevConnection" class="btn btn--sm">Test GitHub connection</button></div>
  <p class="small muted" id="devConnectionResult" role="status">Connection has not been tested.</p>
  <div class="field"><label for="newDevBranch">New development branch</label><input id="newDevBranch" placeholder="feature/my-change" spellcheck="false"/></div>
- <button type="button" id="createDevBranch" class="btn" ${data.connected?'':'disabled'}>Create branch from develop</button>
+ <button type="button" id="createDevBranch" class="btn" ${data.writesEnabled?'':'disabled'}>Create branch from develop</button>
  <p class="small muted" role="status" id="createBranchStatus"></p>
  </div></section><section class="card"><div class="card__header"><h2>Branch files</h2></div><div class="card__body stack">
  ${field}<button type="button" id="devBrowse" class="btn btn--primary" ${data.connected?'':'disabled'}>Browse files</button>
@@ -29,7 +30,7 @@ export async function renderDevGit({main}){
  <div class="field"><label for="prBranch">Source branch</label><input id="prBranch" placeholder="feature/my-change" spellcheck="false"/></div>
  <div class="field"><label for="prTitle">Pull request title</label><input id="prTitle" maxlength="120" placeholder="feat: describe the change"/></div>
  <div class="field"><label for="prDescription">Review notes</label><textarea id="prDescription" rows="4" maxlength="4000" placeholder="What changed and what should reviewers test?"></textarea></div>
- <button type="button" id="createDraftPr" class="btn btn--primary" ${data.connected?'':'disabled'}>Create draft pull request</button>
+ <button type="button" id="createDraftPr" class="btn btn--primary" ${data.writesEnabled?'':'disabled'}>Create draft pull request</button>
  <p class="small muted" role="status" id="draftPrStatus"></p><div id="draftPrLink"></div>
  </div></section>
  <section class="card mt-2"><div class="card__header"><h2>Open development pull requests</h2><button type="button" class="btn btn--sm" id="refreshDevPrs" ${data.connected?'':'disabled'}>Refresh</button></div>
@@ -107,7 +108,7 @@ export async function renderDevIDE({main,query={}}){
  el('ideOpen').onclick=async()=>{el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
   try{const branch=el('ideBranch').value.trim(),path=el('idePath').value.trim();
    const f=await api('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));
-   sha=f.sha;loadedBranch=branch;loadedPath=path;savedContent=f.content;canEdit=Boolean(f.editable);el('ideEditor').value=f.content;el('ideEditor').disabled=!canEdit;el('ideCommit').disabled=!canEdit;updateSave();el('ideMessage').textContent='Loaded '+path+' from '+branch+(canEdit?' · ready to edit':' · read-only');
+   sha=f.sha;loadedBranch=branch;loadedPath=path;savedContent=f.content;canEdit=Boolean(f.editable)&&Boolean(data.writesEnabled);el('ideEditor').value=f.content;el('ideEditor').disabled=!canEdit||!data.writesEnabled;el('ideCommit').disabled=!canEdit||!data.writesEnabled;updateSave();el('ideMessage').textContent='Loaded '+path+' from '+branch+(canEdit?' · ready to edit':' · read-only');
   }catch(e){el('ideMessage').textContent=e.message;}
  };
  for(const id of ['ideEditor','ideCommit','ideBranch','idePath'])el(id).addEventListener('input',updateSave);
@@ -130,7 +131,7 @@ export async function renderDevPackaging({main}){
  main.innerHTML=heading('Packaging','Run the hosted CI build and download validated artifacts from GitHub Actions')+offline(data)+
  `<div class="card"><div class="card__body stack">
  <div class="field">${field}</div>
- <button type="button" class="btn btn--primary" id="runPackage" ${data.connected?'':'disabled'}>Start packaging</button>
+ <button type="button" class="btn btn--primary" id="runPackage" ${data.writesEnabled?'':'disabled'}>Start packaging</button>
  <p id="packageStatus" class="small muted" role="status">Packaging runs in GitHub Actions, not on the production web server.</p>
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/actions/workflows/lifegen-package.yml" target="_blank" rel="noopener noreferrer">View runs and download ZIP ↗</a>
  <div class="row row--between"><strong>Recent package builds</strong><button type="button" class="btn btn--sm" id="refreshPackageRuns" ${data.connected?'':'disabled'}>Refresh</button></div>
