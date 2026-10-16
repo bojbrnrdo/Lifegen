@@ -10,9 +10,8 @@ export async function renderReports({ main, query }) {
   if (query.view === 'lifegroups') { location.hash = '#/lifegroups?tab=progress'; return; }
   const years = await api.reportYears();
   const now = new Date();
-  // The report period is Month, Quarter, Year or Custom. Older links that still
-  // ask for mode=week open the month view instead of breaking.
-  const mode = query.mode === 'week' ? 'month' : query.mode || (query.year && !query.quarter && !query.month ? 'year' : query.quarter ? 'quarter' : query.from ? 'range' : 'month');
+  const mode = query.mode || (query.year && !query.quarter && !query.month ? 'year' : query.quarter ? 'quarter' : query.from ? 'range' : 'month');
+  const sunday = query.week && query.week.match(/^\d{4}-\d{2}-\d{2}$/) ? query.week : toISODate(lastSunday());
   const sel = {
     mode,
     year: Number(query.year) || now.getFullYear(),
@@ -20,6 +19,7 @@ export async function renderReports({ main, query }) {
     quarter: Number(query.quarter) || Math.floor(now.getMonth() / 3) + 1,
     from: query.from || toISODate(new Date(now.getFullYear(), now.getMonth() - 2, 1)),
     to: query.to || toISODate(lastSunday()),
+    week: sunday,
   };
 
   main.innerHTML = html`
@@ -42,7 +42,7 @@ export async function renderReports({ main, query }) {
     <div class="card mb-2"><div class="card__body">
       <div class="row row--between" style="gap:12px">
         <div class="segmented" id="modeSeg">
-          ${['month', 'quarter', 'year', 'range'].map((m) => html`<button data-m="${m}" class="${sel.mode === m ? 'active' : ''}">${m === 'range' ? 'Custom' : m[0].toUpperCase() + m.slice(1)}</button>`)}
+          ${['week', 'month', 'quarter', 'year', 'range'].map((m) => html`<button data-m="${m}" class="${sel.mode === m ? 'active' : ''}">${m === 'range' ? 'Custom' : m[0].toUpperCase() + m.slice(1)}</button>`)}
         </div>
         <div class="row" id="pickers"></div>
       </div>
@@ -56,11 +56,13 @@ export async function renderReports({ main, query }) {
   function drawPickers() {
     const m = sel.mode;
     pickers.innerHTML = html`
+      ${m === 'week' ? html`<input type="date" id="pWeek" value="${sel.week}" style="width:auto" aria-label="Sunday" />` : ''}
       ${m === 'month' ? html`<select id="pMonth" style="width:auto">${MONTHS.map((n, i) => html`<option value="${i + 1}" ${sel.month === i + 1 ? 'selected' : ''}>${n}</option>`)}</select>` : ''}
       ${m === 'quarter' ? html`<select id="pQuarter" style="width:auto">${[1, 2, 3, 4].map((q) => html`<option value="${q}" ${sel.quarter === q ? 'selected' : ''}>Q${q} (${MONTHS[(q - 1) * 3].slice(0, 3)}–${MONTHS[q * 3 - 1].slice(0, 3)})</option>`)}</select>` : ''}
-      ${m !== 'range' ? html`<select id="pYear" style="width:auto">${yearOpts(sel.year)}</select>` : ''}
+      ${m !== 'range' && m !== 'week' ? html`<select id="pYear" style="width:auto">${yearOpts(sel.year)}</select>` : ''}
       ${m === 'range' ? html`<input type="date" id="pFrom" value="${sel.from}" style="width:auto"/> <span class="muted">to</span> <input type="date" id="pTo" value="${sel.to}" style="width:auto"/>` : ''}`;
     pickers.querySelectorAll('select,input').forEach((el) => (el.onchange = () => {
+      if (el.id === 'pWeek') { const v = el.value; const d = v ? new Date(v + 'T12:00:00') : new Date(); sel.week = v && d.getDay() === 0 ? v : toISODate(lastSunday(d)); el.value = sel.week; }
       if (el.id === 'pMonth') sel.month = Number(el.value);
       if (el.id === 'pQuarter') sel.quarter = Number(el.value);
       if (el.id === 'pYear') sel.year = Number(el.value);
@@ -71,6 +73,7 @@ export async function renderReports({ main, query }) {
   }
 
   function params() {
+    if (sel.mode === 'week') return { from: sel.week, to: sel.week };
     if (sel.mode === 'month') return { year: sel.year, month: sel.month };
     if (sel.mode === 'quarter') return { year: sel.year, quarter: sel.quarter };
     if (sel.mode === 'year') return { year: sel.year };
