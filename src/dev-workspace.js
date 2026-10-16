@@ -32,9 +32,19 @@ const request=async(url,opts={})=>{
   signal:AbortSignal.timeout(15000)
  });
  const data=await response.json().catch(()=>({}));
- if(!response.ok)throw new Error(response.status===409?'Git conflict. Refresh the file and try again.':
-   response.status===403?'GitHub access denied or rate limited.':
-   'GitHub request failed ('+response.status+').');
+ if(!response.ok){
+  const code=response.status;
+  const guidance=code===401?'GitHub credentials are invalid or expired.':
+   code===403?'GitHub denied access, permissions are insufficient, or rate limits were reached.':
+   code===404?'Repository, branch, file or workflow was not found, or token access is missing.':
+   code===409?'GitHub detected a conflict. Refresh and retry.':
+   code===422?'GitHub rejected the request. Check names, required fields, and existing pull requests.':
+   code===429?'GitHub rate limit reached. Please retry later.':
+   code>=500?'GitHub is temporarily unavailable. Try again later.':
+   'GitHub request failed ('+code+').';
+  const error=new Error(guidance);
+  error.status=code;throw error;
+ }
  return data;
 };
 const wrap=fn=>async(req,res,next)=>{try{await fn(req,res);}catch(e){next(e);}};
