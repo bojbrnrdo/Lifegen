@@ -901,7 +901,20 @@ async function lifegroupMethod(name, args, actor) {
     if (!['male','female'].includes(sex)) return { prefs, groups: [] };
     const gender = sex === 'male' ? 'boys' : 'girls';
     let groups = await listGroups({ gender, status: 'active' });
-    groups = groups.filter((g) => g.slots == null || g.slots > 0).map((g) => ({ ...g, score: Number(g.schedule_day === prefs.day) + Number(g.category && prefs.category && g.category.toLowerCase() === String(prefs.category).toLowerCase()), reasons: [] }));
+    // Deterministic recommendations only; never mutate membership here.
+    // Allocation still requires the validated, transactional assignLifegroup path.
+    const wantedDay = clean(prefs.day || prefs.preferred_day)?.toLowerCase();
+    const wantedArea = clean(prefs.area || prefs.preferred_area)?.toLowerCase();
+    const wantedCategory = clean(prefs.category || prefs.preferred_category)?.toLowerCase();
+    groups = groups.filter((g) => !g.leads_network && g.leader_person_id && g.slots > 0)
+      .map((g) => {
+        const reasons = [];
+        if (wantedDay && String(g.schedule_day || '').toLowerCase() === wantedDay) reasons.push('day');
+        if (wantedArea && String(g.area || '').toLowerCase() === wantedArea) reasons.push('area');
+        if (wantedCategory && String(g.category || '').toLowerCase() === wantedCategory) reasons.push('category');
+        return { ...g, score: reasons.length, reasons };
+      })
+      .sort((a,b) => b.score-a.score || b.slots-a.slots || a.id-b.id);
     return { prefs, groups };
   }
   if (name === 'lifegroup') return getGroup(asId(args[0], 'group ID'));
