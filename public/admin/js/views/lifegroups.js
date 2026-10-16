@@ -311,6 +311,7 @@ export async function renderLifegroups({main, query}) {
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
  <div class="lifegroups-page__extras">
+ <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>All People</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
@@ -436,13 +437,36 @@ export async function renderLifegroups({main, query}) {
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
  main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
+ const allPeople=main.querySelector('#allPeoplePanel');
+ allPeople.addEventListener('toggle',()=>{if(allPeople.open&&!allPeople.dataset.loaded){allPeople.dataset.loaded='yes';drawAllPeople(main.querySelector('#allPeopleBody'));}});
  const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
  needs.addEventListener('toggle',()=>{if(needs.open&&!needs.dataset.loaded){needs.dataset.loaded='yes';drawNeeds(main.querySelector('#needsBody'));}});
  progress.addEventListener('toggle',()=>{if(progress.open&&!progress.dataset.loaded){progress.dataset.loaded='yes';drawProgressTab(main.querySelector('#progressBody'));}});
+ if(query.tab==='people')allPeople.open=true;
  if(query.tab==='needs')needs.open=true;
  if(query.tab==='progress')progress.open=true;
  main.__liveReload=()=>load(true);
  return load();
+}
+
+/** In-page People directory: retain canonical People records and existing profile routes. */
+async function drawAllPeople(body) {
+ body.innerHTML=html`<div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input type="search" id="allPeopleQ" placeholder="Search people by name or Person ID" aria-label="Search all People" /></div></div><div id="allPeopleResults" role="status"><div class="loading">Loading People…</div></div>`;
+ const result=body.querySelector('#allPeopleResults');
+ const input=body.querySelector('#allPeopleQ');
+ let requestId=0;
+ async function load(){
+  const version=++requestId,q=input.value.trim();
+  result.innerHTML='<div class="loading">Loading People…</div>';
+  try {
+   const response=await api.people({q,status:'all',limit:100});
+   if(version!==requestId||!body.isConnected)return;
+   const rows=Array.isArray(response)?response:response?.people||response?.rows||[];
+   result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${esc(p.person_code||'')}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`).join('')}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
+  }catch(e){if(version===requestId)result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;}
+ }
+ input.addEventListener('input',debounce(load,250));
+ await load();
 }
 
 async function drawNeeds(body) {
