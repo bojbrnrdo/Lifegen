@@ -141,7 +141,17 @@ export async function peopleList(params = {}) {
     SELECT * FROM person_rows ORDER BY ${order} LIMIT $5 OFFSET $6`;
   const {rows}=await query(sql,[...paramsSql,limit,offset]);
   const people=rows.map(mapPerson);
-  if(paged){const total=rows.length?num(rows[0]._total):0;return {rows:people,total,limit,offset,has_more:offset+people.length<total};}
+  if(paged){
+    // count(*) OVER() has no result row when OFFSET exceeds the last page.
+    // Count matching records separately only in this edge case so the UI can
+    // recover to the actual last page rather than incorrectly reporting zero.
+    let total=rows.length?num(rows[0]._total):0;
+    if(!rows.length&&offset>0){
+      const count=(await query(`SELECT count(*)::int AS total FROM people p WHERE ${where}`,paramsSql)).rows[0];
+      total=num(count?.total);
+    }
+    return {rows:people,total,limit,offset,has_more:offset+people.length<total};
+  }
   return people;
 }
 
