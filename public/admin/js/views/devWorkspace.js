@@ -30,9 +30,9 @@ export async function renderDevGit({main}){
 }
 
 export async function renderDevIDE({main,query={}}){
- main.innerHTML=heading('MerchIDE','Edit and commit repository source files from LIFEGEN — no production branch edits')+'<div class="card"><div class="card__body">Loading…</div></div>';
+ main.innerHTML=heading('LifeIDE','Edit and commit repository source files from LIFEGEN — no production branch edits')+'<div class="card"><div class="card__body">Loading…</div></div>';
  const data=await api('status');
- main.innerHTML=heading('MerchIDE','Edit files on develop and feature branches. Every save creates a Git commit.')+offline(data)+
+ main.innerHTML=heading('LifeIDE','Edit files on develop and feature branches. Every save creates a Git commit.')+offline(data)+
  `<div class="card"><div class="card__body stack">
  <div class="form-grid"><div class="field"><label for="ideBranch">Branch</label><input id="ideBranch" value="${esc(query.branch||'develop')}" spellcheck="false"/></div>
  <div class="field"><label for="idePath">Repository file path</label><input id="idePath" value="${esc(query.path||'')}" placeholder="src/example.js" spellcheck="false"/></div></div>
