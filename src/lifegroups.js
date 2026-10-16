@@ -933,7 +933,35 @@ async function networkDetail(id) {
   };
 }
 
+/** Church classification is distinct from attendance status and staff account permissions.
+ * Until a reviewed schema migration is approved, store it in existing People
+ * extras JSON and use audit_log for durable previous/current history.
+ */
+async function setDiscipleshipClassification(personId, requested, reason, actor) {
+  const target=clean(requested);
+  if(!['network_leader','cell_leader','member','vip'].includes(target))
+    throw httpError(400,'Choose Network Leader, Cell Leader, Member or VIP.');
+  const note=stringField(reason,'Reason',{max:500});
+  return transaction(async client=>{
+    const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
+    const current=clean(p.extras?.discipleship_classification);
+    if(current===target)return {person_id:personId,classification:target,unchanged:true};
+    const network=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    const cell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    if(target==='network_leader'&&!network)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+    if(target==='cell_leader'&&(!cell||network))throw httpError(409,'Connect this person as Cell Leader, and resolve any active Network leadership first.');
+    if(['member','vip'].includes(target)&&(network||cell))throw httpError(409,'Reassign the active leadership relationship before changing this person to Member or VIP.');
+    await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
+      '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
+    await logAction(client,actor,'people',personId,'discipleship_classification_changed',
+      {from:current,to:target,reason:note});
+    return {person_id:personId,previous_classification:current,classification:target,unchanged:false};
+  });
+}
+
 async function lifegroupMethod(name, args, actor) {
+  if (name === 'setDiscipleshipClassification') return setDiscipleshipClassification(asId(args[0],'person ID'),args[1],args[2]||null,actor);
   if (name === 'lifegroupOverview') return trackerOverview();
   if (name === 'lifegroups') return listGroups(args[0] || {});
   if (name === 'lifegroupOptions') return options();
