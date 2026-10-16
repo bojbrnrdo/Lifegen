@@ -9,7 +9,7 @@ const svg=(key,size=18)=>icon(key,size).value;
 
 function panel(mode,initial){
  const label=headingOf[mode];
- const gender=(mode==='network'||mode==='vip')?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
+ const gender=(mode==='network'||mode==='vip'||mode==='member')?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
  const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
  const cell=mode==='member'?'<label class="unified-add__field">Cell Leader<select data-field="cell" required disabled><option value="">Choose Cell Leader</option></select></label>':'';
  const existingPerson='<label class="unified-add__field">Existing Person ID (optional)<input name="existing_person_id" type="number" min="1" placeholder="Reuse an existing profile"/><small>Find the Person ID in Lifegroups → All People. Leave blank to register someone new.</small></label>';
@@ -107,11 +107,11 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
   if(!existingId&&(!first||!last))return error(mode,'Enter first and last name.');
   if(!f.querySelector('[data-consent]').checked)return error(mode,'Confirm consent before saving.');
   const network=mode==='network'||mode==='vip'?null:findNetwork(Number(f.querySelector('[data-field=network]').value));
-  if(mode!=='network'&&mode!=='vip'&&!network)return error(mode,'Choose an existing Network.');
-  const gender=(mode==='network'||mode==='vip')?f.querySelector('[name=network_gender]:checked')?.value:network.gender;
+  if(mode==='cell'&&!network)return error(mode,'Choose an existing Network.');
+  const gender=(mode==='network'||mode==='vip'||(mode==='member'&&!network))?f.querySelector('[name=network_gender]:checked')?.value:network.gender;
   if(!gender)return error(mode,'Select Gender.');
   const cellId=mode==='member'?Number(f.querySelector('[data-field=cell]').value):null;
-  if(mode==='member'&&!cellId)return error(mode,'Choose a Cell Leader.');
+  // Members without an eligible Cell may be saved for Needs Cell follow-up.
   const person={first_name:first,last_name:last,...(gender?{sex:sexOf[gender]}:{}),photo:state.photos[mode],status:mode==='vip'?'first_timer':mode==='member'?'member':'leader',privacy_consent:true,registration_source:'staff'};
   for(const field of ['facebook_url','instagram_url','tiktok_url','x_url','youtube_url']){
    const value=f.querySelector('[name='+field+']').value.trim();if(value)person[field]=value;
@@ -151,10 +151,11 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
     }
     const created=pending?.person||(existingId?await api.person(existingId):await api.createPerson(person));
     if(!created?.id)throw new Error('Unable to save the person profile.');
-    if(existingId&&created.sex!==person.sex)throw new Error('The existing person gender does not match this network or Cell.');
+    if(existingId&&created.sex&&created.sex!==person.sex)throw new Error('The existing person gender does not match this network or Cell.');
     state.pending[mode]=pending||{fingerprint,person:created};
     if(mode==='network'){
-     const result=state.pending[mode].network||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
+     const priorNetwork=state.networks.find(n=>Number(n.leader_person_id)===Number(created.id));
+     const result=state.pending[mode].network||priorNetwork||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
      state.pending[mode].network=result;
      state.networkId=Number(result.id);
      await loadNetworks();reset(mode);
@@ -162,7 +163,10 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
      state.busy=false;setTab('cell');
      onSaved({mode,person:created,network:result});
     }else if(mode==='cell'){
-     const result=state.pending[mode].group||await api.createLifegroup({name:(first+' '+last+' Cell').slice(0,120),gender,network_id:network.id,network_manual:true,leader_person_id:created.id,capacity:12});
+     const groups=existingId?await api.lifegroups({status:'all'}):[];
+     const priorCell=groups.find(g=>Number(g.leader_person_id)===Number(created.id)&&g.is_active);
+     if(priorCell&&Number(priorCell.network_id)!==Number(network.id))throw new Error('This Cell Leader already leads a Cell in another Network. Reassign them using Edit / Reassign.');
+     const result=state.pending[mode].group||priorCell||await api.createLifegroup({name:((created.first_name||first)+' '+(created.last_name||last)+' Cell').slice(0,120),gender,network_id:network.id,network_manual:true,leader_person_id:created.id,capacity:12});
      state.pending[mode].group=result;
      // Link this Cell Leader to the Network Leader team for existing reports.
      const team=await api.ensureNetworkLeaderGroup(network.id);
@@ -175,6 +179,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
      toast('Cell Leader added. Add Members when ready.');
      state.busy=false;setTab('member');onSaved({mode,person:created,group:result});
     }else{
+     if(!cellId){reset(mode);toast('Member saved to People to connect. Assign a Cell through Needs Cell.');onSaved({mode,person:created,needsAssignment:true});return;}
      const assigned=state.pending[mode].membership||await api.assignLifegroup(cellId,created.id,{role:'member',sex:sexOf[gender]});
      state.pending[mode].membership=assigned;
      reset(mode);toast('Member added.');onSaved({mode,person:created,membership:assigned});
