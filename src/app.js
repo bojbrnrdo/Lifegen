@@ -185,6 +185,26 @@ async function customMethod(req,name,args) {
  if(name==='giftTracker')return listGiftTracker();
  if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='setPersonStatus'&&args[1]==='inactive'){
+  const personId=validId(args[0]);
+  return transaction(async client=>{
+    const p=(await client.query('SELECT id,first_name,last_name,status,archived_at FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
+    const leaderNetwork=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    const leaderCell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    if(leaderNetwork||leaderCell)throw httpError(409,'Reassign active Network or Cell leadership before deactivating this person.');
+    const closed=(await client.query(`UPDATE lifegroup_memberships
+      SET left_at=GREATEST(joined_at,$2::date)
+      WHERE person_id=$1 AND left_at IS NULL RETURNING id,lifegroup_id`,[personId,today()])).rows;
+    for(const membership of closed)
+      await logAction(client,actor,'lifegroup_memberships',membership.id,'left_on_deactivation',{person_id:personId,lifegroup_id:membership.lifegroup_id});
+    if(p.status!=='inactive'){
+      await client.query("UPDATE people SET status='inactive',updated_at=now() WHERE id=$1",[personId]);
+      await logAction(client,actor,'people',personId,'deactivate',{previous_status:p.status,closed_memberships:closed.length});
+    }
+    return {id:personId,status:'inactive',closed_memberships:closed.length};
+  });
+ }
  if(name==='registerAdminVip'){
   requirePermission(actor,'people:write');
   const input=args[0]||{};
