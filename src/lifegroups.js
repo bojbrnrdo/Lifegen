@@ -336,9 +336,18 @@ async function validateLeader(client, personId, gender, kind) {
 
 async function validateGroupReferences(client, data, groupId = null) {
   const leader = await validateLeader(client, data.leader_person_id, data.gender, 'Lifegroup');
+  if (data.is_active && data.leader_person_id) {
+    const leaderNetworks=(await client.query(
+      'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
+      [data.leader_person_id]
+    )).rows;
+    if (leaderNetworks.length && hasOutOfNetworkCellLeadership(leaderNetworks,[data]))
+      throw httpError(409,'A Network Leader may lead only Cells within their own active Network.');
+  }
   if (data.network_id) {
     const network = (await client.query('SELECT id,name,gender,is_active FROM networks WHERE id=$1', [data.network_id])).rows[0];
     if (!network) throw httpError(400, 'Selected network was not found.');
+    if (data.is_active && !network.is_active) throw httpError(409, 'Activate the selected Network before activating a Cell within it.');
     if (network.gender !== data.gender) throw httpError(400, `${network.name} is a ${network.gender} network; choose a ${data.gender} network.`);
   }
   if (groupId) {
@@ -492,6 +501,10 @@ async function createNetworkStructure(body, actor) {
   });
 }
 
+export function canDeactivateNetwork(activeCellCount) {
+  return Number.isSafeInteger(activeCellCount) && activeCellCount === 0;
+}
+
 async function saveNetwork(body, actor, id = null) {
   return transaction(async (client) => {
     const existing = id ? (await client.query('SELECT * FROM networks WHERE id=$1 FOR UPDATE', [id])).rows[0] : null;
@@ -502,7 +515,30 @@ async function saveNetwork(body, actor, id = null) {
       const duplicate = (await client.query(`SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active AND id<>coalesce($2,0) LIMIT 1`, [data.leader_person_id,id])).rows[0];
       if (duplicate && data.is_active) throw httpError(409, `This person already leads ${duplicate.name}. A network leader can lead only one active network.`);
     }
+    if (data.is_active && data.leader_person_id) {
+      const leaderCells=(await client.query(
+        'SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',
+        [data.leader_person_id]
+      )).rows;
+      if (hasOutOfNetworkCellLeadership([{id:id||-1}],leaderCells))
+        throw httpError(409,'Assign the proposed Network Leader only after transferring their active Cells into this Network.');
+    }
     if (id) {
+      if (existing.is_active && !data.is_active) {
+        const activeCellCount=Number((await client.query(
+          'SELECT count(*)::int AS total FROM lifegroups WHERE network_id=$1 AND is_active',
+          [id]
+        )).rows[0].total);
+        if (!canDeactivateNetwork(activeCellCount))
+          throw httpError(409,'Transfer or deactivate all active Cells before deactivating their Network.');
+      }
+      if (existing.leader_person_id && (!data.is_active || Number(existing.leader_person_id)!==Number(data.leader_person_id))) {
+        const secondary=(await client.query(
+          'SELECT id FROM lifegroups WHERE network_id=$1 AND leader_person_id=$2 AND is_active LIMIT 1',
+          [id,existing.leader_person_id]
+        )).rows[0];
+        if (secondary) throw httpError(409,'Reassign the current Network Leader\'s Cell before changing or deactivating Network leadership.');
+      }
       const mismatch = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups WHERE network_id=$1 AND is_active AND gender<>$2`, [id,data.gender])).rows[0].n);
       if (mismatch) throw httpError(409, `Move the ${mismatch} mismatched Lifegroup(s) before changing this network's gender.`);
       await client.query(`UPDATE networks SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,notes=$5,is_active=$6,updated_at=now() WHERE id=$7`,
@@ -528,11 +564,12 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     if (extra.auto_assign) {
       if (group.is_demo || !group.leader_person_id)
         throw httpError(409, 'Cell is not eligible for automatic assignment.');
-      const leaderNetwork = (await client.query(
-        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',
+      const leaderNetworks = (await client.query(
+        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
-      )).rows[0];
-      if (leaderNetwork) throw httpError(409, 'Network Leader groups cannot receive automatic VIP members.');
+      )).rows;
+      if (hasOutOfNetworkCellLeadership(leaderNetworks,[group]) && leaderNetworks.length)
+        throw httpError(409, 'A Network Leader may receive VIPs only in a Cell belonging to their active Network.');
     }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
@@ -979,6 +1016,11 @@ async function networkDetail(id) {
  * Until a reviewed schema migration is approved, store it in existing People
  * extras JSON and use audit_log for durable previous/current history.
  */
+export function hasOutOfNetworkCellLeadership(networks,cells){
+ const ids=new Set(networks.map(n=>String(n.id)));
+ return cells.some(c=>!ids.has(String(c.network_id)));
+}
+
 async function setDiscipleshipClassification(personId, requested, reason, actor) {
   const target=clean(requested);
   if(!['network_leader','cell_leader','member','vip'].includes(target))
@@ -988,12 +1030,19 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
     const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
     if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
     const current=clean(p.extras?.discipleship_classification);
+    const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    if(target==='network_leader'){
+      if(!networks.length)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+      if(hasOutOfNetworkCellLeadership(networks,cells))
+        throw httpError(409,'Network Leaders may only lead Cells within their own active Networks.');
+    }
+    if(target==='cell_leader'&&(!cells.length||networks.length))
+      throw httpError(409,'Cell Leader classification requires an active Cell and no active Network leadership.');
+    if(['member','vip'].includes(target)&&(networks.length||cells.length))
+      throw httpError(409,'Reassign active leadership relationships before changing this person to Member or VIP.');
+    // Even an unchanged classification must satisfy current leadership relationships.
     if(current===target)return {person_id:personId,classification:target,unchanged:true};
-    const network=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
-    const cell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
-    if(target==='network_leader'&&!network)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
-    if(target==='cell_leader'&&(!cell||network))throw httpError(409,'Connect this person as Cell Leader, and resolve any active Network leadership first.');
-    if(['member','vip'].includes(target)&&(network||cell))throw httpError(409,'Reassign the active leadership relationship before changing this person to Member or VIP.');
     await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
       '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
     await logAction(client,actor,'people',personId,'discipleship_classification_changed',
