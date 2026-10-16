@@ -510,7 +510,22 @@ async function saveNetwork(body, actor, id = null) {
       const duplicate = (await client.query(`SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active AND id<>coalesce($2,0) LIMIT 1`, [data.leader_person_id,id])).rows[0];
       if (duplicate && data.is_active) throw httpError(409, `This person already leads ${duplicate.name}. A network leader can lead only one active network.`);
     }
+    if (data.is_active && data.leader_person_id) {
+      const leaderCells=(await client.query(
+        'SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',
+        [data.leader_person_id]
+      )).rows;
+      if (hasOutOfNetworkCellLeadership([{id:id||-1}],leaderCells))
+        throw httpError(409,'Assign the proposed Network Leader only after transferring their active Cells into this Network.');
+    }
     if (id) {
+      if (existing.leader_person_id && (!data.is_active || Number(existing.leader_person_id)!==Number(data.leader_person_id))) {
+        const secondary=(await client.query(
+          'SELECT id FROM lifegroups WHERE network_id=$1 AND leader_person_id=$2 AND is_active LIMIT 1',
+          [id,existing.leader_person_id]
+        )).rows[0];
+        if (secondary) throw httpError(409,'Reassign the current Network Leader\'s Cell before changing or deactivating Network leadership.');
+      }
       const mismatch = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups WHERE network_id=$1 AND is_active AND gender<>$2`, [id,data.gender])).rows[0].n);
       if (mismatch) throw httpError(409, `Move the ${mismatch} mismatched Lifegroup(s) before changing this network's gender.`);
       await client.query(`UPDATE networks SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,notes=$5,is_active=$6,updated_at=now() WHERE id=$7`,
