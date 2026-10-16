@@ -179,6 +179,17 @@ const READ_TABLES={
  person:['people','services','records'],
 };
 export const runDomain=(method,args=[],actor=null,write=false)=>withState(async({data,client})=>{
+ if(method==='archivePerson'){
+  const personId=Number(args[0]);
+  if(!Number.isSafeInteger(personId)||personId<=0)throw httpError(400,'Invalid Person ID.');
+  // Execute the role check inside the same transaction that persists archiving.
+  await client.query('SELECT id FROM people WHERE id=$1 FOR UPDATE',[personId]);
+  const roles=(await client.query(`SELECT
+    EXISTS(SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active) AS network_leader,
+    EXISTS(SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active) AS cell_leader`,[personId])).rows[0];
+  if(roles.network_leader||roles.cell_leader)
+   throw httpError(409,'Reassign active Network and Cell leadership before archiving this person.');
+ }
  const result=await domain[method](...args);
  // Attendance is one shared source of truth, including staff corrections/undo.
  if(write&&['mark','undoMark'].includes(method)){
