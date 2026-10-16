@@ -34,13 +34,48 @@ jobs:
         run: |
           npm run build
           npm test
-      - name: Create portable source package
+      - name: Create source package without secrets or test keys
+        shell: bash
         run: |
           mkdir -p dist
-          git archive --format=zip --output=dist/LIFEGEN-source.zip HEAD
+          python3 - <<'PY'
+          import subprocess, pathlib, zipfile, hashlib, json, os
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\\0')
+          excluded_suffixes = ('.pem', '.key', '.p12', '.pfx', '.crt')
+          selected = []
+          for name in paths:
+              if not name:
+                  continue
+              parts = pathlib.PurePosixPath(name).parts
+              if ('.env' in parts or 'node_modules' in parts or
+                  any(part == '.git' or part == 'secrets' for part in parts) or
+                  any(part.startswith('.env.') for part in parts) or
+                  name.lower().endswith(excluded_suffixes)):
+                  continue
+              path = pathlib.Path(name)
+              if path.is_symlink() or not path.is_file():
+                  continue
+              selected.append(name)
+          with zipfile.ZipFile('dist/LIFEGEN-source.zip', 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+              for name in sorted(selected):
+                  archive.write(name)
+          archive_path = pathlib.Path('dist/LIFEGEN-source.zip')
+          digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+          pathlib.Path('dist/SHA256SUMS.txt').write_text(f'{digest}  LIFEGEN-source.zip\\n')
+          pathlib.Path('dist/package-manifest.json').write_text(json.dumps({
+              'commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
+              'branch': os.environ.get('GITHUB_REF_NAME', ''),
+              'file_count': len(selected),
+              'sha256': digest,
+          }, indent=2) + '\\n')
+          print(f'Packed {len(selected)} tracked files; SHA-256: {digest}')
+          PY
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: lifegen-source-${{ github.ref_name }}
-          path: dist/LIFEGEN-source.zip
+          path: |
+            dist/LIFEGEN-source.zip
+            dist/SHA256SUMS.txt
+            dist/package-manifest.json
           retention-days: 7
