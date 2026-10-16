@@ -82,6 +82,11 @@ export function registerDevWorkspace(app){
   if(typeof content!=='string'||Buffer.byteLength(content)>200000||
    !/^[a-f0-9]{40}$/.test(String(sha||''))||typeof message!=='string'||message.trim().length<8||message.length>160)
    return res.status(400).json({error:'Invalid edit, blob SHA, or commit message.'});
+  const current=await request(apiRoot+'/contents/'+file.split('/').map(encodeURIComponent).join('/')+'?ref='+encodeURIComponent(branch));
+  if(current.sha!==sha)return res.status(409).json({error:'The file changed on GitHub. Reopen it before saving.'});
+  const currentBlob=await request(apiRoot+'/git/blobs/'+sha);
+  if(currentBlob.encoding==='base64'&&Buffer.from(currentBlob.content,'base64').equals(Buffer.from(content,'utf8')))
+   return res.status(409).json({error:'No changes detected. Edit the file before committing.'});
   const data=await request(apiRoot+'/contents/'+file.split('/').map(encodeURIComponent).join('/'),{
    method:'PUT',headers:{'content-type':'application/json'},
    body:JSON.stringify({branch,sha,message:message.trim(),content:Buffer.from(content,'utf8').toString('base64')})
