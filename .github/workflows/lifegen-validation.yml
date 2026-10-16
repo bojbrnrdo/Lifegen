@@ -58,3 +58,6 @@ jobs:
 
       - name: Verify Archive Restore history preservation
         run: node --test tests/person-archive-restore-history.test.mjs
+
+      - name: Verify server-side People API permissions
+        run: node --test tests/people-api-permissions.test.mjs
