@@ -1,0 +1,210 @@
+
+name: LIFEGEN - Security and Hardening
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  schedule:
+    - cron: "30 2 * * 1"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ============================================
+  # 1. CODEQL SECURITY ANALYSIS
+  # ============================================
+
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:javascript-typescript
+
+  # ============================================
+  # 2. DEPENDENCY VULNERABILITY AUDIT
+  # ============================================
+
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Audit Dependencies
+        run: npm audit --audit-level=high
+
+  # ============================================
+  # 3. TYPESCRIPT AND BUILD VALIDATION
+  # ============================================
+
+  build-validation:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run TypeScript Check
+        run: |
+          if npm run | grep -q ' typecheck'; then
+            npm run typecheck
+          elif [ -f tsconfig.json ]; then
+            npx --no-install tsc --noEmit
+          else
+            echo "No root TypeScript check configured."
+          fi
+
+      - name: Build Application
+        run: npm run build
+
+  # ============================================
+  # 4. REPOSITORY HYGIENE
+  # ============================================
+
+  repository-hygiene:
+    name: Repository Hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check Tracked Environment Files
+        shell: bash
+        run: |
+          echo "Checking for tracked environment files..."
+
+          if git ls-files | grep -E '(^|/)\.env($|\.(local|development|production|test)$)'; then
+            echo "::error::Sensitive environment files are tracked."
+            exit 1
+          fi
+
+          echo "No prohibited environment files tracked."
+
+      - name: Check for Private Keys
+        shell: bash
+        run: |
+          echo "Checking for committed private keys..."
+
+          # Dedicated non-production loopback TLS test fixture.
+          # Never reuse this key in production.
+          if git grep -n -I -E \
+            -- '-----BEGIN (RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----' \
+            -- ':!package-lock.json' \
+            -- ':!tests/fixtures/loopback-test.key'; then
+
+            echo "::error::Possible private key detected."
+            exit 1
+          fi
+
+          echo "No unexpected private key headers detected."
+
+  # ============================================
+  # 5. FINAL SECURITY STATUS
+  # ============================================
+
+  security-status:
+    name: Security Status
+    runs-on: ubuntu-latest
+
+    if: always()
+
+    needs:
+      - codeql
+      - dependency-audit
+      - build-validation
+      - repository-hygiene
+
+    steps:
+      - name: Validate Security Results
+        env:
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          AUDIT_RESULT: ${{ needs.dependency-audit.result }}
+          BUILD_RESULT: ${{ needs.build-validation.result }}
+          HYGIENE_RESULT: ${{ needs.repository-hygiene.result }}
+
+        shell: bash
+        run: |
+          echo "CodeQL: $CODEQL_RESULT"
+          echo "Dependency Audit: $AUDIT_RESULT"
+          echo "Build: $BUILD_RESULT"
+          echo "Repository Hygiene: $HYGIENE_RESULT"
+
+          for result in \
+            "$CODEQL_RESULT" \
+            "$AUDIT_RESULT" \
+            "$BUILD_RESULT" \
+            "$HYGIENE_RESULT"; do
+
+            if [ "$result" != "success" ]; then
+              echo "::error::Security validation failed."
+              exit 1
+            fi
+
+          done
+
+          echo "All security checks passed."
