@@ -113,7 +113,8 @@ export async function peopleList(params = {}) {
   const status=cleanText(params.status)||'active',q=cleanText(params.q),sort=cleanText(params.sort);
   const paged=params.paged===1||params.paged==='1';
   const limit=paged?Math.min(Math.max(Number(params.limit)||1000,1),2000):(params.limit?Math.max(1,Math.min(Number(params.limit)||2000,2000)):2000);
-  const offset=Math.max(0,Number(params.offset)||0);
+  const requestedOffset=Number(params.offset);
+  const offset=Number.isSafeInteger(requestedOffset)&&requestedOffset>=0?requestedOffset:0;
   const qDigits=digits(q),pattern=q?`%${q}%`:null,phonePattern=qDigits.length>=3?`%${qDigits}%`:null;
   const whereStatus=status==='archived'?`p.archived_at IS NOT NULL AND $1::text='archived'`:`p.archived_at IS NULL AND ($1::text='all' OR ($1::text='active' AND p.status<>'inactive') OR ($1::text='inactive' AND p.status='inactive') OR p.status=$1::text)`;
   const where= `${whereStatus}
