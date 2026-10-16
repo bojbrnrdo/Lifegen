@@ -45,6 +45,16 @@ export function registerDevWorkspace(app){
    readOnly:!enabled()
   });
  }));
+ app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
+  const name=String(req.body?.name||'').trim();
+  if(!editableBranch(name))return res.status(400).json({error:'Branch names must start with feature/ or fix/.'});
+  const base=await request(apiRoot+'/git/ref/heads/develop');
+  const result=await request(apiRoot+'/git/refs',{
+   method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({ref:'refs/heads/'+name,sha:base.object.sha})
+  });
+  res.status(201).json({name,sha:result.object?.sha});
+ }));
  app.get('/api/admin/dev/tree',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
   const branch=String(req.query.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
