@@ -109,11 +109,16 @@ export async function peopleSearch(value, extra = {}) {
   return {people:rows.map(mapPerson)};
 }
 
+export function safePeoplePageOffset(value) {
+  const offset=Number(value);
+  return Number.isSafeInteger(offset)&&offset>=0?offset:0;
+}
+
 export async function peopleList(params = {}) {
   const status=cleanText(params.status)||'active',q=cleanText(params.q),sort=cleanText(params.sort);
   const paged=params.paged===1||params.paged==='1';
   const limit=paged?Math.min(Math.max(Number(params.limit)||1000,1),2000):(params.limit?Math.max(1,Math.min(Number(params.limit)||2000,2000)):2000);
-  const offset=Math.max(0,Number(params.offset)||0);
+  const offset=safePeoplePageOffset(params.offset);
   const qDigits=digits(q),pattern=q?`%${q}%`:null,phonePattern=qDigits.length>=3?`%${qDigits}%`:null;
   const whereStatus=status==='archived'?`p.archived_at IS NOT NULL AND $1::text='archived'`:`p.archived_at IS NULL AND ($1::text='all' OR ($1::text='active' AND p.status<>'inactive') OR ($1::text='inactive' AND p.status='inactive') OR p.status=$1::text)`;
   const where= `${whereStatus}
@@ -141,7 +146,17 @@ export async function peopleList(params = {}) {
     SELECT * FROM person_rows ORDER BY ${order} LIMIT $5 OFFSET $6`;
   const {rows}=await query(sql,[...paramsSql,limit,offset]);
   const people=rows.map(mapPerson);
-  if(paged){const total=rows.length?num(rows[0]._total):0;return {rows:people,total,limit,offset,has_more:offset+people.length<total};}
+  if(paged){
+    // count(*) OVER() has no result row when OFFSET exceeds the last page.
+    // Count matching records separately only in this edge case so the UI can
+    // recover to the actual last page rather than incorrectly reporting zero.
+    let total=rows.length?num(rows[0]._total):0;
+    if(!rows.length&&offset>0){
+      const count=(await query(`SELECT count(*)::int AS total FROM people p WHERE ${where}`,paramsSql)).rows[0];
+      total=num(count?.total);
+    }
+    return {rows:people,total,limit,offset,has_more:offset+people.length<total};
+  }
   return people;
 }
 
