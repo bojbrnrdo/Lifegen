@@ -143,6 +143,8 @@ export async function logAction(client,actor,entity,id,action,details={}) {
 export async function flushState(client,before,after,actor) {
  for(const t of DELETE_ORDER) {
   const ids=new Set(after[t].map(r=>r.id)); const removed=before[t].filter(r=>!ids.has(r.id));
+  if(t==='people' && removed.length)
+   throw httpError(409,'People records cannot be permanently deleted through state synchronization. Archive them instead.');
   if(removed.length) {
    await client.query(`DELETE FROM "${t}" WHERE id=ANY($1::bigint[])`,[removed.map(r=>r.id)]);
    for(const r of removed) await logAction(client,actor,t,r.id,'delete');
