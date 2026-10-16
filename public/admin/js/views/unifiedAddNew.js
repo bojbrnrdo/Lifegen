@@ -28,13 +28,30 @@ function panel(mode,initial){
 }
 
 /** Unified admin entry: children are People profiles, not login accounts. */
-export function createAddNewModal({initialTab='network',networkId=null,onSaved=()=>{}}={}){
+export function createAddNewModal({initialTab='network',networkId=null,personId=null,onSaved=()=>{}}={}){
  if(!modes.includes(initialTab))initialTab='network';
  const tabs=modes.map((mode,i)=>'<button type="button" role="tab" id="tab-'+mode+'" aria-controls="unified-'+mode+'" aria-selected="'+(mode===initialTab)+'" tabindex="'+(mode===initialTab?0:-1)+'" data-tab="'+mode+'">'+svg(['network','users','user','user'][i],18)+' '+headingOf[mode]+'</button>').join('');
  const modal=openModal({title:'Add New',wide:true,body:'<div class="unified-add"><div class="unified-add__tabs" role="tablist" aria-label="Add to discipleship tree">'+tabs+'</div>'+modes.map(m=>panel(m,initialTab)).join('')+'</div>',footer:'<button type="button" class="btn" data-close>Close</button>'});
  modal.querySelector('[data-close]').onclick=closeModal;
  const state={networkId:networkId?Number(networkId):null,networks:[],photos:{network:null,cell:null,member:null,vip:null},busy:false,pending:{},keys:{vip:crypto.randomUUID().replaceAll('-','')}};
  const getForm=mode=>modal.querySelector('[data-form="'+mode+'"]');
+ if(personId){
+   const form=getForm(initialTab);
+   form.querySelector('[name=existing_person_id]').value=String(personId);
+   api.person(personId).then(p=>{
+     form.querySelector('[name=first_name]').value=p.first_name||'';
+     form.querySelector('[name=last_name]').value=p.last_name||'';
+     if(p.sex==='male'||p.sex==='female'){
+       const opt=form.querySelector('[name=network_gender][value="'+(p.sex==='male'?'boys':'girls')+'"]');
+       if(opt)opt.checked=true;
+     }
+     if(initialTab==='vip')for(const field of ['age','school','inviter','contact_number']){
+       const input=form.querySelector('[name='+field+']');
+       if(input&&p[field]!=null)input.value=String(p[field]);
+     }
+   }).catch(e=>{const box=form.querySelector('[data-error]');box.textContent=e.message;box.hidden=false;});
+ }
+
  const error=(mode,message)=>{const target=getForm(mode).querySelector('[data-error]');target.textContent=message;target.hidden=false;};
  const clear=mode=>{getForm(mode).querySelector('[data-error]').hidden=true;};
  const setTab=mode=>{
