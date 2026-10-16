@@ -6,6 +6,11 @@ on:
 permissions:
   contents: read
 
+# Serialize package builds for the same branch across GitHub-hosted runners.
+concurrency:
+  group: lifegen-package-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   package:
     runs-on: ubuntu-latest
