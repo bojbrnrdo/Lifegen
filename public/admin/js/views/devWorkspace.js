@@ -55,21 +55,25 @@ export async function renderDevIDE({main,query={}}){
  <div class="field"><label for="ideCommit">Commit message</label><input id="ideCommit" placeholder="feat: describe change" maxlength="160" disabled/></div>
  <button type="button" class="btn btn--primary" id="ideSave" disabled>Commit changes</button>
  </div></div>`;
- let sha='',loadedBranch='',loadedPath='';
+ let sha='',loadedBranch='',loadedPath='',savedContent='',canEdit=false;
+ const updateSave=()=>{const message=el('ideCommit').value.trim();el('ideSave').disabled=!canEdit||!sha||el('ideEditor').value===savedContent||message.length<8||loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim();};
  const el=id=>main.querySelector('#'+id);
  el('ideOpen').onclick=async()=>{el('ideMessage').textContent='Loading…';el('ideSave').disabled=true;el('ideEditor').disabled=true;el('ideCommit').disabled=true;
   try{const branch=el('ideBranch').value.trim(),path=el('idePath').value.trim();
    const f=await api('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));
-   sha=f.sha;loadedBranch=branch;loadedPath=path;el('ideEditor').value=f.content;el('ideEditor').disabled=!f.editable;el('ideCommit').disabled=!f.editable;el('ideSave').disabled=!f.editable;el('ideMessage').textContent='Loaded '+path+' from '+branch+(f.editable?'':' · read-only');
+   sha=f.sha;loadedBranch=branch;loadedPath=path;savedContent=f.content;canEdit=Boolean(f.editable);el('ideEditor').value=f.content;el('ideEditor').disabled=!canEdit;el('ideCommit').disabled=!canEdit;updateSave();el('ideMessage').textContent='Loaded '+path+' from '+branch+(canEdit?' · ready to edit':' · read-only');
   }catch(e){el('ideMessage').textContent=e.message;}
  };
+ for(const id of ['ideEditor','ideCommit','ideBranch','idePath'])el(id).addEventListener('input',updateSave);
  el('ideSave').onclick=async()=>{
   if(loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim()){el('ideMessage').textContent='Reopen the file after changing branch or path.';return;}
+  if(!canEdit||el('ideEditor').value===savedContent){el('ideMessage').textContent='No changes to commit.';return;}
+  if(el('ideCommit').value.trim().length<8){el('ideMessage').textContent='Enter a descriptive commit message of at least 8 characters.';return;}
   if(!confirm('Commit the edits to '+loadedBranch+'?'))return;
   el('ideSave').disabled=true;el('ideMessage').textContent='Committing…';
   try{const result=await api('file',{method:'PUT',body:{branch:loadedBranch,path:loadedPath,sha,content:el('ideEditor').value,message:el('ideCommit').value.trim()}});
-   sha=result.sha;el('ideMessage').textContent='Committed: '+result.commit.slice(0,12);
-  }catch(e){el('ideMessage').textContent=e.message;}finally{el('ideSave').disabled=false;}
+   sha=result.sha;savedContent=el('ideEditor').value;el('ideCommit').value='';el('ideMessage').textContent='Committed: '+result.commit.slice(0,12);
+  }catch(e){el('ideMessage').textContent=e.message;}finally{updateSave();}
  };
  if(query.path&&data.connected)el('ideOpen').click();
 }
