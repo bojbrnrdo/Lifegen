@@ -157,6 +157,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
      const priorNetwork=state.networks.find(n=>Number(n.leader_person_id)===Number(created.id));
      const result=state.pending[mode].network||priorNetwork||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
      state.pending[mode].network=result;
+     await api.setDiscipleshipClassification(created.id,'network_leader','Registered or reconnected as Network Leader');
      state.networkId=Number(result.id);
      await loadNetworks();reset(mode);
      toast('Network Leader added. Add Cell Leaders when ready.');
@@ -171,6 +172,7 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
      // Link this Cell Leader to the Network Leader team for existing reports.
      const team=await api.ensureNetworkLeaderGroup(network.id);
      await api.assignLifegroup(team.lifegroup_id,created.id,{role:'leader',sex:sexOf[gender]});
+     await api.setDiscipleshipClassification(created.id,'cell_leader','Registered or reconnected as Cell Leader');
      state.networkId=Number(network.id);
      reset(mode);
      getForm('member').querySelector('[data-field=network]').value=String(state.networkId);
@@ -179,9 +181,10 @@ export function createAddNewModal({initialTab='network',networkId=null,onSaved=(
      toast('Cell Leader added. Add Members when ready.');
      state.busy=false;setTab('member');onSaved({mode,person:created,group:result});
     }else{
-     if(!cellId){reset(mode);toast('Member saved to People to connect. Assign a Cell through Needs Cell.');onSaved({mode,person:created,needsAssignment:true});return;}
+     if(!cellId){await api.setDiscipleshipClassification(created.id,'member','Member awaiting Cell assignment');reset(mode);toast('Member saved to People to connect. Assign a Cell through Needs Cell.');onSaved({mode,person:created,needsAssignment:true});return;}
      const assigned=state.pending[mode].membership||await api.assignLifegroup(cellId,created.id,{role:'member',sex:sexOf[gender]});
      state.pending[mode].membership=assigned;
+     await api.setDiscipleshipClassification(created.id,'member','Member assigned to Cell');
      reset(mode);toast('Member added.');onSaved({mode,person:created,membership:assigned});
     }
    });
