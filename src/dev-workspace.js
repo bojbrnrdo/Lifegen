@@ -74,6 +74,22 @@ export function registerDevWorkspace(app){
    writesEnabled:connected&&writesAllowed()
   });
  }));
+ app.get('/api/admin/dev/readiness',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  const configured=enabled();
+  const connected=configured?await verified():false;
+  const isPreview=process.env.VERCEL_ENV==='preview'&&process.env.NODE_ENV!=='production';
+  const explicitWrites=process.env.LIFEGEN_DEV_WRITES_ENABLED==='true';
+  res.set('Cache-Control','no-store').json({
+   checks:[
+    {id:'preview',label:'Isolated Vercel preview environment',ready:isPreview},
+    {id:'token',label:'Server-side GitHub token configured',ready:configured},
+    {id:'repository',label:'GitHub develop branch accessible',ready:connected},
+    {id:'writes',label:'Developer writes explicitly enabled',ready:explicitWrites&&isPreview}
+   ],
+   canBrowse:connected,canWrite:connected&&writesAllowed(),
+   note:'Database isolation and GitHub write permissions require separate verification. This check does not modify GitHub or Supabase.'
+  });
+ }));
  app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const name=String(req.body?.name||'').trim();
   if(!editableBranch(name))return res.status(400).json({error:'Branch names must start with feature/ or fix/.'});
