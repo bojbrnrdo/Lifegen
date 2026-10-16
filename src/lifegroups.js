@@ -979,6 +979,11 @@ async function networkDetail(id) {
  * Until a reviewed schema migration is approved, store it in existing People
  * extras JSON and use audit_log for durable previous/current history.
  */
+export function hasOutOfNetworkCellLeadership(networks,cells){
+ const ids=new Set(networks.map(n=>String(n.id)));
+ return cells.some(c=>!ids.has(String(c.network_id)));
+}
+
 async function setDiscipleshipClassification(personId, requested, reason, actor) {
   const target=clean(requested);
   if(!['network_leader','cell_leader','member','vip'].includes(target))
@@ -991,10 +996,9 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
     if(current===target)return {person_id:personId,classification:target,unchanged:true};
     const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
     const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
-    const networkIds=new Set(networks.map(n=>String(n.id)));
     if(target==='network_leader'){
       if(!networks.length)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
-      if(cells.some(c=>!networkIds.has(String(c.network_id))))
+      if(hasOutOfNetworkCellLeadership(networks,cells))
         throw httpError(409,'Network Leaders may only lead Cells within their own active Networks.');
     }
     if(target==='cell_leader'&&(!cells.length||networks.length))
