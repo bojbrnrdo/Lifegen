@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p dist
           python3 - <<'PY'
-          import subprocess, pathlib, zipfile, hashlib, json
+          import subprocess, pathlib, zipfile, hashlib, json, os
           paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\\0')
           excluded_suffixes = ('.pem', '.key', '.p12', '.pfx', '.crt')
           selected = []
@@ -64,7 +64,7 @@ jobs:
           pathlib.Path('dist/SHA256SUMS.txt').write_text(f'{digest}  LIFEGEN-source.zip\\n')
           pathlib.Path('dist/package-manifest.json').write_text(json.dumps({
               'commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
-              'branch': subprocess.check_output(['git','branch','--show-current'], text=True).strip(),
+              'branch': os.environ.get('GITHUB_REF_NAME', ''),
               'file_count': len(selected),
               'sha256': digest,
           }, indent=2) + '\\n')
