@@ -520,6 +520,13 @@ async function saveNetwork(body, actor, id = null) {
         throw httpError(409,'Assign the proposed Network Leader only after transferring their active Cells into this Network.');
     }
     if (id) {
+      if (existing.is_active && !data.is_active) {
+        const activeCell=(await client.query(
+          'SELECT id FROM lifegroups WHERE network_id=$1 AND is_active LIMIT 1',
+          [id]
+        )).rows[0];
+        if (activeCell) throw httpError(409,'Transfer or deactivate all active Cells before deactivating their Network.');
+      }
       if (existing.leader_person_id && (!data.is_active || Number(existing.leader_person_id)!==Number(data.leader_person_id))) {
         const secondary=(await client.query(
           'SELECT id FROM lifegroups WHERE network_id=$1 AND leader_person_id=$2 AND is_active LIMIT 1',
