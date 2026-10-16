@@ -43,6 +43,28 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Apply LIFEGEN schema to temporary PostgreSQL
         run: npm run db:migrate
+      - name: Verify migrations can be rerun without duplicating schema changes
+        run: |
+          node --input-type=module -e "
+          import pg from 'pg';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await client.connect();
+          const count=await client.query('SELECT COUNT(*)::int AS n FROM public.schema_migrations');
+          await client.end();
+          process.stdout.write(String(count.rows[0].n));
+          " > /tmp/lifegen-migrations-before
+          npm run db:migrate
+          node --input-type=module -e "
+          import pg from 'pg';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await client.connect();
+          const count=await client.query('SELECT COUNT(*)::int AS n FROM public.schema_migrations');
+          await client.end();
+          const {readFileSync}=await import('node:fs');
+          const before=Number(readFileSync('/tmp/lifegen-migrations-before','utf8'));
+          if(count.rows[0].n !== before)throw Error('Migration ledger changed on rerun');
+          console.log('Migrations idempotent:',count.rows[0].n);
+          "
       - name: Verify schema migration ledger
         run: |
           node --input-type=module -e "
