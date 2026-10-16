@@ -4,7 +4,7 @@ import {flushState} from '../src/db.js';
 
 test('state sync fails closed before issuing SQL for a missing People row',async()=>{
  const people=[{id:7,first_name:'Retain'}];
- const before={people,records:[],audit:[],services:[]};
+ const before={people,records:[{id:3,person_id:7}],audit:[{id:4,person_id:7}],services:[]};
  const after={people:[],records:[],audit:[],services:[]};
  const sql=[];
  const client={query:async(...args)=>{sql.push(args);return {rows:[]};}};
