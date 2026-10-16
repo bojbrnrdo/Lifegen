@@ -33,3 +33,10 @@ test('Git writes are fail-closed outside explicitly enabled preview deployments'
  assert.equal(writesAllowed({VERCEL_ENV:'development',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
  assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),true);
 });
+
+test('Vercel build never executes a database migration',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
+ assert.equal(config.buildCommand,'npm run build');
+ assert.doesNotMatch(config.buildCommand,/migrat|db:|supabase/i);
+});
