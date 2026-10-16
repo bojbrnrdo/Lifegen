@@ -41,3 +41,6 @@ Ran `docs/sql/lifegen-classification-backfill-preview.sql` against the productio
 | 6 | Member | Active membership; verify registration history before backfill |
 
 The preview suggests **three candidate records**, but it does **not** authorize automatic updates. Explicitly confirm all classifications before a write migration; in particular, missing VIP registration history should not be interpreted as definitive evidence that someone is not a VIP.
+
+## Guarded migration proposal
+A rollback-only SQL rehearsal has been added at `docs/sql/lifegen-classification-staging-dry-run.sql`. It intentionally stops when an active dual Network/Cell leader exists, changes only unambiguous leaders in the transaction, and always `ROLLBACK`s. It does not automatically classify Members or VIPs. **Do not execute against production.** The script cannot complete against the present data until the dual-leadership conflict is resolved by an authorized administrator.
