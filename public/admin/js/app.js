@@ -16,6 +16,7 @@ import { renderPerson } from './views/person.js';
 import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
+import {renderDeveloper} from './views/developer.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
@@ -57,6 +58,7 @@ const routes = [
   { path: /^\/community$/, view: renderCommunity, nav: 'community', perm: 'settings:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
   { path: /^\/deploy$/, view: renderDeployment, nav: 'deploy', perm: 'settings:manage' },
+  { path: /^\/developer$/, view: renderDeveloper, nav: 'developer', perm: 'settings:manage' },
   { path: /^\/privacy$/, view: renderPrivacy, nav: 'settings' },
 ];
 
@@ -153,6 +155,7 @@ function renderShell() {
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
+        ${u.role_id==='admin' ? navLink('#/developer', 'developer', 'Developer', 'code') : ''}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
         <a class="nav__foot" href="#/privacy">Privacy &amp; Terms</a>

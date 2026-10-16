@@ -1,7 +1,7 @@
 name: LIFEGEN validation
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
     branches: [feature/people-workflows-reorganization, feature/people-workflows-release-validation]
 permissions:
