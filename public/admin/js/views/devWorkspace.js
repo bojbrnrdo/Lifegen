@@ -1,14 +1,7 @@
 import {esc} from '../ui.js';
-import {state} from '../app.js';
+import {devRequest} from '../api.js';
 
-const api=async(path,options={})=>{
- const response=await fetch('/api/admin/dev/'+path,{credentials:'same-origin',
-  headers:{accept:'application/json',...(options.body?{'content-type':'application/json','x-csrf-token':state.user?.csrf_token||''}:{})},
-  ...options});
- const data=await response.json().catch(()=>({}));
- if(!response.ok)throw new Error(data.error||data.message||'Request failed');
- return data;
-};
+const api=devRequest;
 const heading=(title,subtitle)=>`<div class="page-header"><div><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p></div></div>`;
 const offline=(data)=>!data.connected?'<div class="alert alert--info">GitHub integration is not yet configured on the server. Ask the administrator to configure LIFEGEN_GITHUB_DEV_TOKEN with repository Contents and Actions permissions. Never enter tokens in this page.</div>':'';
 const field=`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="develop" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
@@ -61,7 +54,7 @@ export async function renderDevIDE({main,query={}}){
   if(loadedBranch!==el('ideBranch').value.trim()||loadedPath!==el('idePath').value.trim()){el('ideMessage').textContent='Reopen the file after changing branch or path.';return;}
   if(!confirm('Commit the edits to '+loadedBranch+'?'))return;
   el('ideSave').disabled=true;el('ideMessage').textContent='Committing…';
-  try{const result=await api('file',{method:'PUT',body:JSON.stringify({branch:loadedBranch,path:loadedPath,sha,content:el('ideEditor').value,message:el('ideCommit').value.trim()})});
+  try{const result=await api('file',{method:'PUT',body:{branch:loadedBranch,path:loadedPath,sha,content:el('ideEditor').value,message:el('ideCommit').value.trim()}});
    sha=result.sha;el('ideMessage').textContent='Committed: '+result.commit.slice(0,12);
   }catch(e){el('ideMessage').textContent=e.message;}finally{el('ideSave').disabled=false;}
  };
@@ -79,7 +72,7 @@ export async function renderDevPackaging({main}){
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/actions/workflows/lifegen-package.yml" target="_blank" rel="noopener noreferrer">View runs and download ZIP ↗</a>
  </div></div>`;
  main.querySelector('#runPackage').onclick=async()=>{const status=main.querySelector('#packageStatus');if(!confirm('Start a package build for this development branch?'))return;
-  try{const result=await api('package',{method:'POST',body:JSON.stringify({branch:main.querySelector('#devBranch').value.trim()})});status.textContent=result.message;}
+  try{const result=await api('package',{method:'POST',body:{branch:main.querySelector('#devBranch').value.trim()}});status.textContent=result.message;}
   catch(e){status.textContent=e.message;}
  };
 }
