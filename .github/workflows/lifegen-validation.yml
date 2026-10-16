@@ -49,3 +49,6 @@ jobs:
 
       - name: Run People deletion protection tests
         run: node --test tests/person-hard-delete-guard.test.mjs
+
+      - name: Run state synchronization People retention tests
+        run: node --test tests/people-state-sync-protection.test.mjs
