@@ -549,9 +549,22 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
+      if (tier === 'solid' && current.tier !== 'solid') {
+        const solidCount = Number((await client.query(
+          "SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'",[groupId]
+        )).rows[0].n);
+        if (solidCount >= SOLID_TARGET) throw httpError(409, 'Closed cell is already at its six-member target.');
+      }
+      const changed = current.role !== role || current.tier !== tier;
       if (sex !== person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
-      await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
-      return { unchanged: true };
+      if (changed) {
+        await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
+        await logAction(client, actor, 'lifegroup_memberships', current.id, 'role_or_tier_change', {
+          person_id: personId, lifegroup_id: groupId,
+          previous_role: current.role, role, previous_tier: current.tier, tier,
+        });
+      }
+      return { unchanged: !changed && sex === person.sex };
     }
     if (current && !asBool(extra.confirm_move) && !asBool(extra.force_move)) {
       throw httpError(409, `This person is currently in ${current.group_name}. Confirm the move to continue.`, { current_group: current.group_name, current_group_id: Number(current.lifegroup_id) });
