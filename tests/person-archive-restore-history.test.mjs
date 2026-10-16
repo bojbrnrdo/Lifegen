@@ -27,3 +27,22 @@ test('archive and restore preserve People attendance and audit history',async()=
   assert.equal(state.dirty,true);
  });
 });
+
+test('repeated archive and restore do not mutate records or audit history',async()=>{
+ const data={people:[{id:11,first_name:'Synthetic',last_name:'Person',archived_at:null}],services:[],records:[{id:5,person_id:11}],audit:[{id:6,person_id:11}]};
+ const state={data,dirty:false};
+ await domainContext.run(state,async()=>{
+  await domain.archivePerson(11);
+  state.dirty=false;
+  const archivedAt=data.people[0].archived_at;
+  await domain.archivePerson(11);
+  assert.equal(data.people[0].archived_at,archivedAt);
+  assert.equal(state.dirty,false);
+  await domain.restorePerson(11);
+  state.dirty=false;
+  await domain.restorePerson(11);
+  assert.equal(state.dirty,false);
+  assert.equal(data.records.length,1);
+  assert.equal(data.audit.length,1);
+ });
+});
