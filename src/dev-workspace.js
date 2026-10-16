@@ -55,6 +55,20 @@ export function registerDevWorkspace(app){
   });
   res.status(201).json({name,sha:result.object?.sha});
  }));
+ app.get('/api/admin/dev/connection-check',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  if(!enabled())return res.json({connected:false,reason:'not_configured',repository});
+  try{
+   const project=await request(apiRoot);
+   const branch=await request(apiRoot+'/git/ref/heads/develop');
+   return res.json({connected:true,repository:project.full_name||repository,
+    canReadDevelop:Boolean(branch.object?.sha),permissionsVerified:false,
+    note:'Repository read access verified. Write and Actions permissions must be validated separately.'});
+  }catch(error){
+   return res.status(503).json({connected:false,reason:'connection_failed',
+    message:'GitHub connection test failed. Check token access, expiry and repository permissions.'});
+  }
+ }));
  app.get('/api/admin/dev/tree',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
   const branch=String(req.query.branch||'develop');
   if(!allowedBranch(branch))return deny(res);

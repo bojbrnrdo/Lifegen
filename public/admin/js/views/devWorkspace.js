@@ -14,6 +14,8 @@ export async function renderDevGit({main}){
  <p><b>${esc(data.repository)}</b></p><p class="small muted">Deployed environment: ${esc(data.environment)} · Commit: ${esc(data.commit||'Not available')}</p>
  <p class="small muted">Working branch: ${esc(data.branch||'Not available')}</p>
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/pulls" target="_blank" rel="noopener noreferrer">View pull requests ↗</a>
+ <div class="row"><button type="button" id="checkDevConnection" class="btn btn--sm">Test GitHub connection</button></div>
+ <p class="small muted" id="devConnectionResult" role="status">Connection has not been tested.</p>
  <div class="field"><label for="newDevBranch">New development branch</label><input id="newDevBranch" placeholder="feature/my-change" spellcheck="false"/></div>
  <button type="button" id="createDevBranch" class="btn" ${data.connected?'':'disabled'}>Create branch from develop</button>
  <p class="small muted" role="status" id="createBranchStatus"></p>
@@ -43,6 +45,13 @@ export async function renderDevGit({main}){
  };
  main.querySelector('#refreshDevPrs').onclick=refreshPrs;
  if(data.connected)refreshPrs();
+ main.querySelector('#checkDevConnection').onclick=async()=>{
+  const status=main.querySelector('#devConnectionResult');
+  status.textContent='Checking GitHub repository access…';
+  try{const result=await api('connection-check');
+   status.textContent=result.connected?'Connected to '+result.repository+' · develop readable · write access not yet verified':'Not connected: '+(result.reason||'unknown');
+  }catch(error){status.textContent='Connection failed: '+error.message;}
+ };
  main.querySelector('#createDevBranch').onclick=async()=>{
   const name=main.querySelector('#newDevBranch').value.trim(),status=main.querySelector('#createBranchStatus');
   status.textContent='Creating branch…';
