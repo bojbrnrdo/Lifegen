@@ -501,6 +501,10 @@ async function createNetworkStructure(body, actor) {
   });
 }
 
+export function canDeactivateNetwork(activeCellCount) {
+  return Number.isSafeInteger(activeCellCount) && activeCellCount === 0;
+}
+
 async function saveNetwork(body, actor, id = null) {
   return transaction(async (client) => {
     const existing = id ? (await client.query('SELECT * FROM networks WHERE id=$1 FOR UPDATE', [id])).rows[0] : null;
@@ -521,11 +525,12 @@ async function saveNetwork(body, actor, id = null) {
     }
     if (id) {
       if (existing.is_active && !data.is_active) {
-        const activeCell=(await client.query(
-          'SELECT id FROM lifegroups WHERE network_id=$1 AND is_active LIMIT 1',
+        const activeCellCount=Number((await client.query(
+          'SELECT count(*)::int AS total FROM lifegroups WHERE network_id=$1 AND is_active',
           [id]
-        )).rows[0];
-        if (activeCell) throw httpError(409,'Transfer or deactivate all active Cells before deactivating their Network.');
+        )).rows[0].total);
+        if (!canDeactivateNetwork(activeCellCount))
+          throw httpError(409,'Transfer or deactivate all active Cells before deactivating their Network.');
       }
       if (existing.leader_person_id && (!data.is_active || Number(existing.leader_person_id)!==Number(data.leader_person_id))) {
         const secondary=(await client.query(
