@@ -61,3 +61,6 @@ jobs:
 
       - name: Verify server-side People API permissions
         run: node --test tests/people-api-permissions.test.mjs
+
+      - name: Verify active leader archive guard
+        run: node --test tests/archived-leadership-guard.test.mjs
