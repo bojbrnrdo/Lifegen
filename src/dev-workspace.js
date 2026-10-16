@@ -13,6 +13,15 @@ export const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'
 export const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
  !/^(src\/(auth|db|deployment|dev-workspace)\.js|vercel\.json|package(-lock)?\.json)$/i.test(p);
 const enabled=()=>Boolean(token());
+let connectionCache={token:'',expires:0,connected:false};
+const verified=async()=>{
+ const key=token();if(!key)return false;
+ if(connectionCache.token===key&&Date.now()<connectionCache.expires)return connectionCache.connected;
+ try{const ref=await request(apiRoot+'/git/ref/heads/develop');
+  connectionCache={token:key,expires:Date.now()+60000,connected:Boolean(ref.object?.sha)};
+ }catch{connectionCache={token:key,expires:Date.now()+15000,connected:false};}
+ return connectionCache.connected;
+};
 const request=async(url,opts={})=>{
  const response=await fetch(url,{
   ...opts,
@@ -30,19 +39,23 @@ const request=async(url,opts={})=>{
 };
 const wrap=fn=>async(req,res,next)=>{try{await fn(req,res);}catch(e){next(e);}};
 const ensureAdmin=(req,res,next)=>req.actor?.role_id==='admin'?next():res.status(403).json({error:'Administrator access required'});
-const ensureEnabled=(req,res,next)=>enabled()?next():res.status(503).json({error:'Developer Git integration is not connected. Configure LIFEGEN_GITHUB_DEV_TOKEN on the server.'});
+const ensureEnabled=async(req,res,next)=>{try{
+ if(await verified())return next();
+ return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side integration token.'});
+ }catch(e){next(e);}};
 const checkWrite=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
 const deny=(res)=>res.status(400).json({error:'Only safe development branches and source-file paths are allowed.'});
 
 export function registerDevWorkspace(app){
  app.get('/api/admin/dev/status',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  const connected=await verified();
   res.set('Cache-Control','no-store').json({
-   connected:enabled(),
+   connected,
    repository,
    environment:process.env.VERCEL_ENV||'local',
    branch:process.env.VERCEL_GIT_COMMIT_REF||'',
    commit:(process.env.VERCEL_GIT_COMMIT_SHA||'').slice(0,12),
-   readOnly:!enabled()
+   readOnly:!connected
   });
  }));
  app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
