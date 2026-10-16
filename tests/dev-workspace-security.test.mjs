@@ -18,3 +18,9 @@ test('protect security and deployment infrastructure from browser edits',()=>{
  for(const path of ['.github/workflows/codeql.yml','src/auth.js','src/db.js','src/deployment.js','src/dev-workspace.js','vercel.json','package.json','package-lock.json'])assert.equal(editablePath(path),false,path);
  assert.equal(editablePath('public/admin/js/views/dashboard.js'),true);
 });
+
+test('hide credential stores, SSH keys and database backups from the IDE',()=>{
+ for(const path of ['.npmrc','.aws/credentials','.ssh/id_ed25519','config/.netrc','secrets.json','config/credentials.json','data/backup.sqlite','data/backup.db','keys/signing.asc','certs/chain.p8','config/service-account.json']){
+  assert.equal(allowedPath(path),false,path);
+ }
+});

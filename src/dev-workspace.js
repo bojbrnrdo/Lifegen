@@ -8,7 +8,8 @@ export const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
   !p.startsWith('/')&&!p.includes('..')&&!p.includes('\\')&&
   /^[a-zA-Z0-9._/-]+$/.test(p)&&
   !/(^|\/)(\.env(?:\..*)?|\.git|node_modules|secrets?)(\/|$)/i.test(p)&&
-  !/\.(pem|key|p12|pfx|crt)$/i.test(p);
+  !/\.(pem|key|p12|pfx|crt|p8|p7b|jks|keystore|asc|gpg|age|sqlite|sqlite3|db|bak)$/i.test(p)&&
+  !/(^|\/)(id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|credentials(\.[^/]*)?|secrets?(\.[^/]*)?|service[-_]?account(\.[^/]*)?|token(s)?\.[^/]+|\.npmrc|\.pypirc|\.netrc|\.htpasswd|\.aws|\.ssh|\.kube)(\/|$)/i.test(p);
 export const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'');
 export const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
  !/^(src\/(auth|db|deployment|dev-workspace)\.js|vercel\.json|package(-lock)?\.json)$/i.test(p);
