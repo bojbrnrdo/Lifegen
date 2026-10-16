@@ -610,7 +610,7 @@ async function saveVipAssignmentPolicy(input,actor){
  let order;
  try{order=validateVipPriorityOrder(input);}catch{throw httpError(400,'Choose each VIP assignment priority exactly once.');}
  await transaction(async client=>{
-   await client.query("INSERT INTO settings(key,value) VALUES('vip_assignment_priority',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[order.join(',')]);
+   await client.query("INSERT INTO settings(key,value) VALUES('vip_assignment_priority',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[JSON.stringify(order)]);
    await logAction(client,actor,'settings',null,'vip_assignment_priority_changed',{priority_order:order});
  });
  return {priority_order:order};
