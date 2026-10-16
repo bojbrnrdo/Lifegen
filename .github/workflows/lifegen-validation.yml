@@ -52,3 +52,6 @@ jobs:
 
       - name: Run state synchronization People retention tests
         run: node --test tests/people-state-sync-protection.test.mjs
+
+      - name: Verify Person profile permissions
+        run: node --test tests/person-profile-permissions.test.mjs
