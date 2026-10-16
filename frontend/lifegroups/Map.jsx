@@ -108,7 +108,7 @@ function getLayout(rows,edges){
  * Only show information that helps administrators navigate the hierarchy;
  * personal contact fields remain in the dedicated People profile.
  */
-function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,relations,onChoose,relationsLoading}){
+function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,manage,canAttendance,relations,onChoose,relationsLoading}){
  if(!selection)return null;
  const {person,role,groupId,active,count}=selection;
  const label=role==='network'?'Network Leader':role==='cell'?'Cell Leader':'Member';
@@ -125,8 +125,8 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,rela
   <div className="lg-r-panel-actions">
    {manage&&role==='cell'&&<button type="button" onClick={()=>onAdd(selection)}><Plus size={15}/> Add Member</button>}
    {manage&&role!=='member'&&<button type="button" onClick={()=>onReassign(selection)}><ArrowRightLeft size={15}/> Edit / Reassign</button>}
-   {groupId&&<a href={'#/lifegroups/'+groupId}><CalendarDays size={15}/> View Attendance</a>}
-   {(role==='member'?person.id:person.leader_person_id)&&<a href={'#/people/'+(role==='member'?person.id:person.leader_person_id)}><UserRound size={15}/> View Full Profile</a>}
+   {canAttendance&&<a href={'#/attendance?'+(role==='network'?'network_id='+person.id:role==='cell'?'cell_id='+groupId:'person_id='+person.id)}><CalendarDays size={15}/> View Attendance</a>}
+   {onProfile&&(role==='member'?person.id:person.leader_person_id)&&<button type="button" onClick={()=>onProfile(role==='member'?person.id:person.leader_person_id)}><UserRound size={15}/> View Full Profile</button>}
    {manage&&active&&<button className="lg-r-danger" type="button" onClick={()=>onRemove(selection)}><Trash2 size={15}/> Remove from Lifegroups</button>}
   </div>
  </aside>;
@@ -225,7 +225,7 @@ function Dashboard({data,callbacks}){
     </ReactFlow>
     {rows.length===0&&<div className="lg-r-empty">No Networks match these filters.</div>}
    </div>
-   <Panel selection={selected} progress={reports.get(selected?.groupId)} manage={callbacks.manage}
+   <Panel selection={selected} progress={reports.get(selected?.groupId)} manage={callbacks.manage} canAttendance={callbacks.canAttendance} onProfile={callbacks.onProfile}
     relations={relations} onChoose={chooseRelation}
     relationsLoading={selected?.role==='cell'&&loading.has(selected.groupId)}
     onClose={()=>setSelected(null)} onAdd={callbacks.onAdd} onReassign={callbacks.onReassign} onRemove={callbacks.onRemove}/>
