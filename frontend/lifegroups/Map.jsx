@@ -137,9 +137,8 @@ function Dashboard({data,callbacks}){
  const [members,setMembers]=useState(()=>new Map());
  const [reports,setReports]=useState(()=>new Map());
  const [selected,setSelected]=useState(null);
- const [search,setSearch]=useState('');
  const [loading,setLoading]=useState(new Set());
- const allFilters={...data.filters,q:search||data.filters.q||''};
+ const allFilters={...data.filters};
  const toggle=useCallback(id=>setExpanded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next}),[]);
  const addMembers=useCallback(async g=>{
   if(members.has(g.id)||loading.has(g.id))return;
@@ -154,7 +153,7 @@ function Dashboard({data,callbacks}){
  useEffect(()=>{const opened=new Set([...expanded].filter(id=>id.startsWith('c')));
   for(const id of opened){const g=data.groups.find(g=>'c'+g.id===id);if(g&&!members.has(g.id))addMembers(g);}
  },[expanded,data.groups,addMembers,members]);
- const {rows,edges}=useMemo(()=>buildRows(data.networks,data.groups,members,expanded,allFilters),[data,members,expanded,search]);
+ const {rows,edges}=useMemo(()=>buildRows(data.networks,data.groups,members,expanded,allFilters),[data,members,expanded]);
  const rowsById=useMemo(()=>new Map(rows.map(r=>[r.id,r])),[rows]);
  const select=useCallback(row=>{
   setSelected(row);
@@ -200,19 +199,19 @@ function Dashboard({data,callbacks}){
   });
   // A detail photo click should navigate even if the current search
   // is hiding the destination node.
-  setSearch('');
+  callbacks.onClearSearch?.();
   select(item);
- },[data.groups,select]);
+ },[data.groups,select,callbacks]);
  const nodes=useMemo(()=>getLayout(rows,edges).map(n=>({
   ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member',
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
  useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
- useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase()));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
+ useEffect(()=>{const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf]);
 
  return <div className="lg-r-shell">
-  <div className="lg-r-tools"><div className="lg-r-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leaders, members or Person ID" aria-label="Search Lifegroups people"/></div>
+  <div className="lg-r-tools">
    <span className="lg-r-count">{rows.filter(r=>r.role==='network').length} networks · {rows.filter(r=>r.role==='cell').length} cells · {rows.filter(r=>r.role==='member').length} visible members</span>
    <button onClick={fit} title="Center all visible people"><Maximize2 size={16}/> Fit map</button></div>
   <div className="lg-r-main">
