@@ -49,3 +49,6 @@ jobs:
 
       - name: Verify VIP parent Network eligibility
         run: node --test tests/vip-parent-network-eligibility.test.mjs
+
+      - name: Test VIP retryable Cell conflicts
+        run: node --test tests/vip-retryable-conflicts.test.mjs
