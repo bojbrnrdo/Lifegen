@@ -1,5 +1,12 @@
 import { api } from '../api.js';
 import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
+// React Flow map is code-split and loaded only on the Lifegroups page.
+let lifegroupsReact=null;
+async function loadReactLifegroups(){
+ if(!lifegroupsReact)lifegroupsReact=import('/admin/react-lifegroups.js').catch(e=>{lifegroupsReact=null;throw e;});
+ return lifegroupsReact;
+}
+
 import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
 import { createFourFieldNetwork } from './networkFourField.js';
@@ -315,8 +322,7 @@ export async function renderLifegroups({main, query}) {
  main.querySelector('#treeStatus').value=filters.status;
  const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
  function afterRemove(){
-  // Membership caches are reused by the animated SVG tree. Invalidate all
-  // cached members after an archive, including nested Network removals.
+  // Both the legacy SVG cache and the React data model must reload.
   canvas.__lifegenTree?.members.clear();
   canvas.__lifegenTree?.loading.clear();
   if(canvas.__lifegenTree)canvas.__lifegenTree.selected=null;
@@ -361,7 +367,10 @@ export async function renderLifegroups({main, query}) {
  async function load(force=false){
   const seq=++sequence;
   if(!cache||force){
-   canvas.innerHTML='<div class="loading">Loading discipleship tree…</div>';
+   // React owns this mount point after first render; clearing it manually
+   // would desynchronize React DOM and make Refresh/Remove appear broken.
+   if(!canvas.__lifegenReactVersion&&!canvas.hasAttribute('data-react-mounted'))
+     canvas.innerHTML='<div class="loading">Loading Lifegroups network…</div>';
    try{
     const [groups,nets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]);
     if(seq!==sequence||!main.contains(canvas))return;
@@ -383,10 +392,45 @@ export async function renderLifegroups({main, query}) {
    (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
   summary.hidden=Boolean(filters.q);
   summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
-  await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:can('lifegroups:manage')?
-    ({kind,networkId,groupId,personId})=>openRemoveFromLifegroups({
-      initialTab:kind==='group'?'cell':kind,networkId,groupId,personId,onRemoved:afterRemove,
-    }):null});
+  const removeContext=can('lifegroups:manage')?({kind,networkId,groupId,personId})=>
+    openRemoveFromLifegroups({initialTab:kind==='group'?'cell':kind,
+      networkId,groupId,personId,onRemoved:afterRemove}):null;
+  try {
+    const {mount}=await loadReactLifegroups();
+    if(seq!==sequence||!main.contains(canvas))return;
+    if(force)canvas.__lifegenReactVersion=(canvas.__lifegenReactVersion||0)+1;
+    mount(canvas,{
+      networks:cache.nets,groups:cache.groups,filters:{...filters,q:filters.q},
+      version:canvas.__lifegenReactVersion||0,
+    },{
+      manage:can('lifegroups:manage'),
+      loadMembers:id=>api.lifegroup(id),
+      loadProgress:id=>api.lifegroupProgress(id,12),
+      loadProfile:id=>api.person(id),
+      onError:ex=>toast(ex.message||'Unable to load Lifegroup information.','error'),
+      onRemove:selection=>removeContext?.({
+        kind:selection.role==='cell'?'group':selection.role,
+        networkId:selection.role==='network'?selection.person.id:
+          selection.role==='cell'?selection.person.network_id:
+          cache.groups.find(g=>g.id===selection.groupId)?.network_id,
+        groupId:selection.role==='network'?null:selection.groupId,
+        personId:selection.role==='member'?selection.person.id:null,
+      }),
+      onAdd:selection=>createAddNewModal({
+        initialTab:'member',networkId:selection.person.network_id,onSaved:()=>load(true),
+      }),
+      onReassign:selection=>{
+        if(selection.role==='network')networkForm(selection.person,()=>load(true));
+        else if(selection.role==='cell')groupForm(selection.person,()=>load(true));
+      },
+    });
+    canvas.setAttribute('data-react-mounted','true');
+  }catch(error){
+    // Keep the existing working SVG dashboard available if the React bundle
+    // fails to load (old deployments, blocked assets, or network errors).
+    console.error('React Lifegroups map unavailable, using SVG fallback',error);
+    await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:removeContext});
+  }
  }
  main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
