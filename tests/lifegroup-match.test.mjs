@@ -26,3 +26,21 @@ test('priority validation rejects duplicates and unknown keys',()=>{
  assert.throws(()=>validateVipPriorityOrder(['day','area','category','random']));
  assert.deepEqual(validateVipPriorityOrder('day,area,category,capacity'),['day','area','category','capacity']);
 });
+
+test('equally ranked cells have stable ID ordering regardless of input order',()=>{
+ const base={is_active:true,leads_network:false,leader_person_id:5,slots:3,is_demo:false};
+ const cells=[{...base,id:31},{...base,id:7},{...base,id:19}];
+ assert.deepEqual(recommendEligibleCells(cells).map(c=>c.id),[7,19,31]);
+ assert.deepEqual(recommendEligibleCells([...cells].reverse()).map(c=>c.id),[7,19,31]);
+});
+test('single preference does not accidentally award matches for blank fields',()=>{
+ const base={is_active:true,leads_network:false,leader_person_id:5,slots:2,is_demo:false};
+ const cells=[{...base,id:1,schedule_day:'sun'},{...base,id:2,schedule_day:'mon',slots:10}];
+ assert.deepEqual(recommendEligibleCells(cells,{day:'sun'}).map(c=>c.id),[1,2]);
+ assert.deepEqual(recommendEligibleCells(cells,{}).map(c=>c.id),[2,1]);
+});
+test('capacity and inactive filters reject zero and negative free slots',()=>{
+ const base={is_active:true,leads_network:false,leader_person_id:5,is_demo:false};
+ const cells=[{...base,id:1,slots:-1},{...base,id:2,slots:0},{...base,id:3,slots:1}];
+ assert.deepEqual(recommendEligibleCells(cells).map(c=>c.id),[3]);
+});
