@@ -17,6 +17,8 @@ export async function renderDevGit({main}){
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/pulls" target="_blank" rel="noopener noreferrer">View pull requests ↗</a>
  <div class="row"><button type="button" id="checkDevConnection" class="btn btn--sm">Test GitHub connection</button></div>
  <p class="small muted" id="devConnectionResult" role="status">Connection has not been tested.</p>
+ <div class="row"><button type="button" id="checkDevReadiness" class="btn btn--sm">Check setup readiness</button></div>
+ <div class="stack small" id="devReadinessResult" role="status"></div>
  <div class="field"><label for="newDevBranch">New development branch</label><input id="newDevBranch" placeholder="feature/my-change" spellcheck="false"/></div>
  <button type="button" id="createDevBranch" class="btn" ${data.writesEnabled?'':'disabled'}>Create branch from develop</button>
  <p class="small muted" role="status" id="createBranchStatus"></p>
@@ -46,6 +48,14 @@ export async function renderDevGit({main}){
  };
  main.querySelector('#refreshDevPrs').onclick=refreshPrs;
  if(data.connected)refreshPrs();
+ main.querySelector('#checkDevReadiness').onclick=async()=>{
+  const list=main.querySelector('#devReadinessResult');
+  list.replaceChildren();list.textContent='Checking development environment…';
+  try{const result=await api('readiness');list.replaceChildren();
+   result.checks.forEach(check=>{const row=document.createElement('p');row.textContent=(check.ready?'✓ ':'○ ')+check.label;list.append(row);});
+   const note=document.createElement('p');note.className='small muted';note.textContent=result.note;list.append(note);
+  }catch(error){list.textContent=error.message;}
+ };
  main.querySelector('#checkDevConnection').onclick=async()=>{
   const status=main.querySelector('#devConnectionResult');
   status.textContent='Checking GitHub repository access…';
