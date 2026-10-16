@@ -180,7 +180,7 @@ publicRouter.post('/registrations',async(req,res)=>{
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}
   const parts=name.split(' ');const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age,...(birthdate?{birthdate}:{}),...(gender?{sex:gender}:{}),school,inviter,contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true});
   const record=data.people.find(row=>Number(row.id)===Number(p.id));
-  if(record)record.discipleship_classification='vip';
+  if(record)record.extras={...(record.extras||{}),discipleship_classification:'vip'};
   const id=stateId(data,'vip_registrations');const recovery='LG-'+randomToken();
   // Attribute this registration to the Sunday service the fullscreen
   // announcement is showing. Safe to check-then-insert: every write runs inside
