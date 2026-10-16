@@ -554,6 +554,12 @@ async function saveNetwork(body, actor, id = null) {
   });
 }
 
+export function eligibleVipAssignmentCell(group,network,leader) {
+  return Boolean(group?.is_active && !group.is_demo && group.leader_person_id &&
+    network?.is_active && !network.is_demo && network.gender===group.gender &&
+    leader?.id && !leader.archived_at && leader.status!=='inactive');
+}
+
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
@@ -566,16 +572,14 @@ async function assignMember(groupId, personId, extra = {}, actor) {
         'SELECT id,is_active,gender,is_demo FROM networks WHERE id=$1 FOR SHARE',
         [group.network_id]
       )).rows[0];
-      if (!parentNetwork || !parentNetwork.is_active || parentNetwork.is_demo || parentNetwork.gender!==group.gender)
-        throw httpError(409,'Cell is not eligible for automatic VIP placement: its Network must be active, non-demo and gender-compatible.');
-      if (group.is_demo || !group.leader_person_id)
-        throw httpError(409, 'Cell is not eligible for automatic assignment.');
+      if (!group.leader_person_id)
+        throw httpError(409,'Cell requires an assigned leader before automatic VIP placement.');
       const activeLeader=(await client.query(
-        'SELECT id FROM people WHERE id=$1 AND archived_at IS NULL AND status<>$2 FOR SHARE',
-        [group.leader_person_id,'inactive']
+        'SELECT id,archived_at,status FROM people WHERE id=$1 FOR SHARE',
+        [group.leader_person_id]
       )).rows[0];
-      if (!activeLeader)
-        throw httpError(409,'Cell Leader must be active and unarchived before automatic VIP placement.');
+      if (!eligibleVipAssignmentCell(group,parentNetwork,activeLeader))
+        throw httpError(409,'Cell, parent Network and Cell Leader must all be eligible for automatic VIP placement.');
       const leaderNetworks = (await client.query(
         'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
