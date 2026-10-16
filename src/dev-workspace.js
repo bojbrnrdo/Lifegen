@@ -9,6 +9,9 @@ const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
   /^[a-zA-Z0-9._/-]+$/.test(p)&&
   !/(^|\/)(\.env(?:\..*)?|\.git|node_modules|secrets?)(\/|$)/i.test(p)&&
   !/\.(pem|key|p12|pfx|crt)$/i.test(p);
+const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'');
+const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
+ !/^(src\/(auth|db|deployment|dev-workspace)\.js|vercel\.json|package(-lock)?\.json)$/i.test(p);
 const enabled=()=>Boolean(token());
 const request=async(url,opts={})=>{
  const response=await fetch(url,{
@@ -46,7 +49,8 @@ export function registerDevWorkspace(app){
   const branch=String(req.query.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
   const ref=await request(apiRoot+'/git/ref/heads/'+encodeURIComponent(branch));
-  const tree=await request(apiRoot+'/git/trees/'+ref.object.sha+'?recursive=1');
+  const commit=await request(apiRoot+'/git/commits/'+ref.object.sha);
+  const tree=await request(apiRoot+'/git/trees/'+commit.tree.sha+'?recursive=1');
   res.set('Cache-Control','no-store').json({branch,truncated:Boolean(tree.truncated),
    files:(tree.tree||[]).filter(x=>x.type==='blob'&&allowedPath(x.path)).slice(0,2000).map(x=>({path:x.path,size:x.size}))});
  }));
@@ -61,7 +65,7 @@ export function registerDevWorkspace(app){
  }));
  app.put('/api/admin/dev/file',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const {branch,path:file,sha,content,message}=req.body||{};
-  if(!allowedBranch(branch)||!allowedPath(file))return deny(res);
+  if(!editableBranch(branch)||!editablePath(file))return res.status(403).json({error:'Editing is limited to feature/fix branches and non-sensitive source files. Use a reviewed pull request for protected changes.'});
   if(typeof content!=='string'||Buffer.byteLength(content)>200000||
    !/^[a-f0-9]{40}$/.test(String(sha||''))||typeof message!=='string'||message.trim().length<8||message.length>160)
    return res.status(400).json({error:'Invalid edit, blob SHA, or commit message.'});
