@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {allowedBranch,allowedPath,editableBranch,editablePath} from '../src/dev-workspace.js';
+import {allowedBranch,allowedPath,editableBranch,editablePath,writesAllowed} from '../src/dev-workspace.js';
 
 test('only development branches can be browsed',()=>{
  for(const name of ['develop','feature/lifeide','fix/editor-123'])assert.equal(allowedBranch(name),true);
@@ -17,4 +17,26 @@ test('reject sensitive and traversing paths',()=>{
 test('protect security and deployment infrastructure from browser edits',()=>{
  for(const path of ['.github/workflows/codeql.yml','src/auth.js','src/db.js','src/deployment.js','src/dev-workspace.js','vercel.json','package.json','package-lock.json'])assert.equal(editablePath(path),false,path);
  assert.equal(editablePath('public/admin/js/views/dashboard.js'),true);
+});
+
+test('hide credential stores, SSH keys and database backups from the IDE',()=>{
+ for(const path of ['.npmrc','.aws/credentials','.ssh/id_ed25519','config/.netrc','secrets.json','config/credentials.json','data/backup.sqlite','data/backup.db','keys/signing.asc','certs/chain.p8','config/service-account.json']){
+  assert.equal(allowedPath(path),false,path);
+ }
+});
+
+test('Git writes are fail-closed outside explicitly enabled preview deployments',()=>{
+ assert.equal(writesAllowed({VERCEL_ENV:'production',NODE_ENV:'production',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'production',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'production',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'false'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'development',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),true);
+});
+
+test('Vercel build never executes a database migration',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
+ assert.equal(config.buildCommand,'npm run build');
+ assert.doesNotMatch(config.buildCommand,/migrat|db:|supabase/i);
 });

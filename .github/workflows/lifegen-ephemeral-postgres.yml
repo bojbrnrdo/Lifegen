@@ -1,0 +1,79 @@
+name: LIFEGEN ephemeral PostgreSQL schema check
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate-temporary-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lifegen_test
+          POSTGRES_PASSWORD: temporary_ci_only
+          POSTGRES_DB: lifegen_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lifegen_test -d lifegen_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://lifegen_test:temporary_ci_only@localhost:5432/lifegen_ci
+      DATABASE_DIRECT_URL: postgres://lifegen_test:temporary_ci_only@localhost:5432/lifegen_ci
+      NODE_ENV: test
+      VERCEL_ENV: preview
+      LIFEGEN_DEV_WRITES_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Apply LIFEGEN schema to temporary PostgreSQL
+        run: npm run db:migrate
+      - name: Verify migrations can be rerun without duplicating schema changes
+        run: |
+          node --input-type=module -e "
+          import pg from 'pg';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await client.connect();
+          const count=await client.query('SELECT COUNT(*)::int AS n FROM public.schema_migrations');
+          await client.end();
+          process.stdout.write(String(count.rows[0].n));
+          " > /tmp/lifegen-migrations-before
+          npm run db:migrate
+          node --input-type=module -e "
+          import pg from 'pg';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await client.connect();
+          const count=await client.query('SELECT COUNT(*)::int AS n FROM public.schema_migrations');
+          await client.end();
+          const {readFileSync}=await import('node:fs');
+          const before=Number(readFileSync('/tmp/lifegen-migrations-before','utf8'));
+          if(count.rows[0].n !== before)throw Error('Migration ledger changed on rerun');
+          console.log('Migrations idempotent:',count.rows[0].n);
+          "
+      - name: Verify schema migration ledger
+        run: |
+          node --input-type=module -e "
+          import pg from 'pg';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await client.connect();
+          try {
+            const result=await client.query(\"SELECT COUNT(*)::int AS count FROM public.schema_migrations\");
+            if(result.rows[0].count < 1)throw Error('No migration history recorded');
+            console.log('Ephemeral schema applied:', result.rows[0].count,'migrations');
+          } finally { await client.end(); }
+          "
