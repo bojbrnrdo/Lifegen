@@ -93,6 +93,22 @@ export function registerDevWorkspace(app){
   });
   res.json({ok:true,commit:data.commit?.sha,sha:data.content?.sha});
  }));
+ app.post('/api/admin/dev/pull-request',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
+  const branch=String(req.body?.branch||'').trim();
+  const title=String(req.body?.title||'').trim();
+  const description=String(req.body?.description||'').trim();
+  if(!editableBranch(branch)||title.length<8||title.length>120||description.length>4000)
+   return res.status(400).json({error:'Choose a feature/fix branch and provide a descriptive pull request title.'});
+  // Confirm branch exists and differs from develop before requesting a review.
+  await request(apiRoot+'/git/ref/heads/'+encodeURIComponent(branch));
+  const diff=await request(apiRoot+'/compare/develop...'+encodeURIComponent(branch));
+  if((diff.ahead_by||0)<1)return res.status(409).json({error:'This branch has no new commits relative to develop.'});
+  const created=await request(apiRoot+'/pulls',{
+   method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({head:branch,base:'develop',title,body:description,draft:true})
+  });
+  res.status(201).json({number:created.number,url:created.html_url,state:created.state,draft:Boolean(created.draft)});
+ }));
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
