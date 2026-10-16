@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {hasOutOfNetworkCellLeadership} from '../src/lifegroups.js';
+import {hasOutOfNetworkCellLeadership,canDeactivateNetwork} from '../src/lifegroups.js';
 
 test('a Network Leader may also lead a Cell in their own active Network',()=>{
  assert.equal(hasOutOfNetworkCellLeadership([{id:4}],[{id:3,network_id:4}]),false);
@@ -17,4 +17,10 @@ test('auto-placement and Cell editing share the same in-network eligibility poli
  assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:4}]),false);
  assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:1}]),true);
  assert.equal(hasOutOfNetworkCellLeadership(leaderNetworks,[{id:3,network_id:null}]),true);
+});
+
+test('Network deactivation is forbidden while active Cells remain',()=>{
+ assert.equal(canDeactivateNetwork(0),true);
+ for(const activeCount of [1,2,12,-1,NaN,Infinity,'0',null])
+  assert.equal(canDeactivateNetwork(activeCount),false);
 });
