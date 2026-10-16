@@ -126,17 +126,18 @@ export async function renderDevPackaging({main}){
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/actions/workflows/lifegen-package.yml" target="_blank" rel="noopener noreferrer">View runs and download ZIP ↗</a>
  <div class="row row--between"><strong>Recent package builds</strong><button type="button" class="btn btn--sm" id="refreshPackageRuns" ${data.connected?'':'disabled'}>Refresh</button></div>
  <p class="small muted" id="packageRunsStatus" role="status"></p>
+ <p class="small muted">Successful runs contain downloadable artifacts on their GitHub run page. Verify SHA256SUMS.txt against LIFEGEN-source.zip before using a package when the integrity files are available.</p>
  <div id="packageRunsList" class="stack"></div>
  </div></div>`;
  const refreshRuns=async()=>{const status=main.querySelector('#packageRunsStatus'),list=main.querySelector('#packageRunsList');status.textContent='Loading package runs…';list.replaceChildren();
   try{const result=await api('package-runs');status.textContent=result.runs.length+' recent package runs';
-   result.runs.forEach(run=>{const row=document.createElement('div');row.className='row row--between';const a=document.createElement('a');a.href=run.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=(run.branch||'Unknown branch')+' · '+(run.conclusion||run.status||'Unknown');const when=document.createElement('span');when.className='small muted';when.textContent=run.created_at?new Date(run.created_at).toLocaleString():'';row.append(a,when);list.append(row);});
+   result.runs.forEach(run=>{const row=document.createElement('div');row.className='row row--between';const a=document.createElement('a');a.href=run.url;a.target='_blank';a.rel='noopener noreferrer';const resultLabel=run.conclusion||run.status||'Unknown';a.textContent=(run.branch||'Unknown branch')+' · '+resultLabel+(run.conclusion==='success'?' · Open artifacts ↗':' · View run ↗');const when=document.createElement('span');when.className='small muted';when.textContent=run.created_at?new Date(run.created_at).toLocaleString():'';row.append(a,when);list.append(row);});
   }catch(error){status.textContent=error.message;}
  };
  main.querySelector('#refreshPackageRuns').onclick=refreshRuns;
  if(data.connected)refreshRuns();
  main.querySelector('#runPackage').onclick=async()=>{const status=main.querySelector('#packageStatus');if(!confirm('Start a package build for this development branch?'))return;
-  try{const result=await api('package',{method:'POST',body:{branch:main.querySelector('#devBranch').value.trim()}});status.textContent=result.message;}
+  try{const result=await api('package',{method:'POST',body:{branch:main.querySelector('#devBranch').value.trim()}});status.textContent=result.message+' The run may take a moment to appear.';await refreshRuns();}
   catch(e){status.textContent=e.message;}
  };
 }
