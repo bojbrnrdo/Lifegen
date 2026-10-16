@@ -141,6 +141,10 @@ export async function logAction(client,actor,entity,id,action,details={}) {
  await client.query('INSERT INTO audit_log(actor_id,actor_name,entity,entity_id,action,details) VALUES($1,$2,$3,$4,$5,$6)',[actor?.id||null,actor?.display_name||'Migration / system',entity,id==null?null:String(id),action,JSON.stringify(details)]);
 }
 export async function flushState(client,before,after,actor) {
+ // Reject dangerous People removals before touching any related tables.
+ const retainedPersonIds=new Set(after.people.map(person=>person.id));
+ if(before.people.some(person=>!retainedPersonIds.has(person.id)))
+  throw httpError(409,'People records cannot be permanently deleted through state synchronization. Archive them instead.');
  for(const t of DELETE_ORDER) {
   const ids=new Set(after[t].map(r=>r.id)); const removed=before[t].filter(r=>!ids.has(r.id));
   if(removed.length) {
@@ -175,6 +179,17 @@ const READ_TABLES={
  person:['people','services','records'],
 };
 export const runDomain=(method,args=[],actor=null,write=false)=>withState(async({data,client})=>{
+ if(method==='archivePerson'){
+  const personId=Number(args[0]);
+  if(!Number.isSafeInteger(personId)||personId<=0)throw httpError(400,'Invalid Person ID.');
+  // Execute the role check inside the same transaction that persists archiving.
+  await client.query('SELECT id FROM people WHERE id=$1 FOR UPDATE',[personId]);
+  const roles=(await client.query(`SELECT
+    EXISTS(SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active) AS network_leader,
+    EXISTS(SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active) AS cell_leader`,[personId])).rows[0];
+  if(roles.network_leader||roles.cell_leader)
+   throw httpError(409,'Reassign active Network and Cell leadership before archiving this person.');
+ }
  const result=await domain[method](...args);
  // Attendance is one shared source of truth, including staff corrections/undo.
  if(write&&['mark','undoMark'].includes(method)){

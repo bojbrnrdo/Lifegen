@@ -46,3 +46,21 @@ jobs:
 
       - name: Run dual leadership policy tests
         run: node --test tests/dual-leadership-policy.test.mjs
+
+      - name: Run People deletion protection tests
+        run: node --test tests/person-hard-delete-guard.test.mjs
+
+      - name: Run state synchronization People retention tests
+        run: node --test tests/people-state-sync-protection.test.mjs
+
+      - name: Verify Person profile permissions
+        run: node --test tests/person-profile-permissions.test.mjs
+
+      - name: Verify Archive Restore history preservation
+        run: node --test tests/person-archive-restore-history.test.mjs
+
+      - name: Verify server-side People API permissions
+        run: node --test tests/people-api-permissions.test.mjs
+
+      - name: Verify active leader archive guard
+        run: node --test tests/archived-leadership-guard.test.mjs
