@@ -1527,3 +1527,13 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lf-remove__footer-note{display:flex;align-items:center;gap:8px;margin:0;color:#6d8273;font-size:.79rem}
 .lf-remove__footer-note svg{color:#378254;flex:none}
 @media(max-width:620px){.lf-remove__tabs button{flex-direction:column;gap:5px;font-size:.73rem}.lf-remove__fields{grid-template-columns:1fr}.lf-remove__submit{justify-self:stretch;justify-content:center}}
+
+/* ---- Community board — prayer wall post moderation --------------------- */
+.badge--request{background:var(--green-100,#dcfce7);color:#1b5e20}
+.badge--testimony{background:#e8f0e9;color:#2e7d32}
+.badge--praise{background:var(--amber-100,#fef3c7);color:#8a6215}
+.cboard__post{min-width:260px;max-width:560px}
+.cboard__post p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.cboard tr.cboard--hidden .cboard__post p{color:var(--ink-400);font-style:italic}
+.cboard .row-actions{white-space:nowrap}
+@media(max-width:720px){.cboard__post{min-width:200px}}

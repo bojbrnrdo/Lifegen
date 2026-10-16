@@ -647,20 +647,77 @@ function postHTML(p, i) {
     return `<article class="post ${rot} ${p.fresh?"post-new":""}" data-id="${esc(id)}" data-type="${esc(p.type)}">\n    ${tape}\n    <div class="post-head">\n      <span class="badge badge-${"prayer"===p.type?"request":p.type}"><i data-lucide="${meta.icon}"></i>${meta.label}</span>\n      <span class="post-time">${timeAgo(p.created_at)}</span>\n    </div>\n    <p class="post-text">${esc(p.content).replace(/\n/g,"<br>")}</p>\n    <div class="post-foot">\n      ${name}\n      <button class="amen-btn ${isVoted?"voted":""}" data-amen="${esc(id)}" aria-label="I prayed for this">\n        <i data-lucide="heart-handshake"></i><span>${isVoted?"Amen":"Pray"}</span><b>${amenCount}</b>\n      </button>\n    </div>\n  </article>`
 }
 
-function renderWall() {
-    const wall = $("prayerWall"),
+/* ---- Community board carousel -------------------------------------------
+   Filtered posts are chunked into visible groups (3 / 2 / 1 cards per row by
+   viewport). Cards inside one group stretch to the tallest message in THAT
+   group with the author + Pray footer pinned to the bottom; the stage only
+   ever matches the group on screen, so short posts stay compact and one long
+   message grows just its own group. Buttons, dots, keyboard arrows and swipe
+   navigate between groups and re-measure the stage height as they go. */
+const wallBreaks = [window.matchMedia("(min-width:1025px)"), window.matchMedia("(min-width:641px)")];
+let wallIndex = 0,
+    wallGroupSize = 0,
+    wallRO = null;
+
+function wallCardsPerGroup() {
+    return wallBreaks[0].matches ? 3 : wallBreaks[1].matches ? 2 : 1
+}
+
+function wallSync(animate = true) {
+    const stage = $("wallStage"),
+        track = $("wallTrack"),
+        controls = $("wallControls"),
+        slides = qsa(".wall-slide", track);
+    if (!slides.length) return stage.style.height = "", void(controls.hidden = !0);
+    wallIndex = Math.min(Math.max(wallIndex, 0), slides.length - 1), track.style.transform = "translateX(" + -100 * wallIndex + "%)", slides.forEach((s, i) => {
+        const active = i === wallIndex;
+        s.classList.toggle("is-active", active), active ? (s.removeAttribute("inert"), s.setAttribute("aria-hidden", "false")) : (s.setAttribute("inert", ""), s.setAttribute("aria-hidden", "true"))
+    });
+    const h = Math.ceil(slides[wallIndex].getBoundingClientRect().height);
+    h && stage.style.height !== h + "px" && (animate || stage.classList.add("no-anim"), stage.style.height = h + "px", animate || requestAnimationFrame(() => stage.classList.remove("no-anim"))), controls.hidden = slides.length < 2, $("wallPrev").disabled = 0 === wallIndex, $("wallNext").disabled = wallIndex === slides.length - 1, $("wallCounter").textContent = wallIndex + 1 + " / " + slides.length, qsa(".wall-dot", $("wallDots")).forEach((d, i) => d.setAttribute("aria-current", i === wallIndex ? "true" : "false"))
+}
+
+function wallGo(i) {
+    wallIndex = i, wallSync(!0)
+}
+
+function wallRenderDots(count) {
+    $("wallDots").innerHTML = Array.from({
+        length: count
+    }, (_, i) => `<button class="wall-dot" type="button" data-group="${i}" aria-label="Show group ${i+1} of ${count}"></button>`).join("")
+}
+
+function wallObserveSlides() {
+    window.ResizeObserver && (wallRO && wallRO.disconnect(), wallRO = new ResizeObserver(() => {
+        // Content reflow (fonts, resize, rotation) changes a group's height —
+        // re-measure without animating so nothing flickers.
+        requestAnimationFrame(() => wallSync(!1))
+    }), qsa(".wall-slide", $("wallTrack")).forEach(s => wallRO.observe(s)))
+}
+
+function renderWall(keepIndex = false) {
+    const track = $("wallTrack"),
         list = posts.filter(p => "all" === filter || p.type === filter);
     $("countAll").textContent = posts.length, ["prayer", "testimony", "praise"].forEach(t => {
         $("count-" + t).textContent = posts.filter(p => p.type === t).length
-    }), wall.innerHTML = list.length ? list.map((p, i) => postHTML(p, i)).join("") : '<div class="wall-empty"><i data-lucide="leaf"></i><p>Nothing here yet — your word could be the first.</p></div>', posts.forEach(p => p.fresh = !1), renderIcons()
+    });
+    const size = wallCardsPerGroup();
+    wallGroupSize = size;
+    if (!list.length) track.innerHTML = '<div class="wall-empty"><i data-lucide="leaf"></i><p>Nothing here yet — your word could be the first.</p></div>', wallRenderDots(0), $("wallControls").hidden = !0, $("wallStage").style.height = "";
+    else {
+        const groups = [];
+        for (let i = 0; i < list.length; i += size) groups.push(list.slice(i, i + size));
+        track.innerHTML = groups.map((g, gi) => `<div class="wall-slide" role="group" aria-roledescription="slide" aria-label="Group ${gi+1} of ${groups.length}">${g.map((p, i) => postHTML(p, gi * size + i)).join("")}</div>`).join(""), wallRenderDots(groups.length), keepIndex || (wallIndex = 0), renderIcons(), wallSync(!1), wallObserveSlides()
+    }
+    posts.forEach(p => p.fresh = !1), renderIcons()
 }
-async function loadPosts() {
+async function loadPosts(keepIndex) {
     try {
         posts = await DB.listPosts()
     } catch (e) {
         return console.error("loadPosts failed:", e), void toast("Could not load community posts: " + e.message, "alert-triangle")
     }
-    renderWall()
+    renderWall(!!keepIndex)
 }
 const form = $("prayerForm"),
     pfText = $("pfText"),
@@ -747,8 +804,38 @@ qsa(".seg-btn").forEach(b => b.addEventListener("click", () => {
         p && t && (t.textContent = timeAgo(p.created_at))
     })
 }, 6e4), document.addEventListener("visibilitychange", () => {
-    "visible" === document.visibilityState && (getDevice() && getDevice().token && !$("vip-attendance-dashboard").hidden && loadVipAttendance(), loadPosts())
+    "visible" === document.visibilityState && (getDevice() && getDevice().token && !$("vip-attendance-dashboard").hidden && loadVipAttendance(), loadPosts(!0))
 }), restoreDraft(), syncVipDashboardState(), loadPosts(), scheduleMidnightRefresh();
+// Community board browsing controls: arrows, dots, keyboard and swipe all move
+// between visible groups; wallSync re-measures the stage for the new group.
+$("wallPrev").addEventListener("click", () => wallGo(wallIndex - 1)), $("wallNext").addEventListener("click", () => wallGo(wallIndex + 1)), $("wallDots").addEventListener("click", e => {
+    const d = e.target.closest(".wall-dot");
+    d && wallGo(Number(d.dataset.group))
+}), $("prayerWall").addEventListener("keydown", e => {
+    "ArrowLeft" === e.key ? (e.preventDefault(), wallGo(wallIndex - 1)) : "ArrowRight" === e.key ? (e.preventDefault(), wallGo(wallIndex + 1)) : "Home" === e.key ? (e.preventDefault(), wallGo(0)) : "End" === e.key && (e.preventDefault(), wallGo(1e9))
+}), (() => {
+    const stage = $("wallStage");
+    let x0 = 0, y0 = 0, id = null, swiped = !1;
+    stage.addEventListener("pointerdown", e => {
+        ("mouse" === e.pointerType && 0 !== e.button) || (id = e.pointerId, x0 = e.clientX, y0 = e.clientY, swiped = !1)
+    }), stage.addEventListener("pointerup", e => {
+        if (null === id || e.pointerId !== id) return;
+        id = null;
+        const dx = e.clientX - x0, dy = e.clientY - y0;
+        Math.abs(dx) > 48 && Math.abs(dx) > 1.35 * Math.abs(dy) && (swiped = !0, wallGo(wallIndex + (dx < 0 ? 1 : -1)))
+    }), stage.addEventListener("pointercancel", () => id = null), stage.addEventListener("click", e => {
+        swiped && (e.preventDefault(), e.stopPropagation(), swiped = !1)
+    }, !0)
+})(), (() => {
+    // Re-chunk when the breakpoint changes (3 / 2 / 1 cards per group); on an
+    // ordinary resize just re-measure the current group — no re-render.
+    const onResize = debounceFn(() => {
+        wallCardsPerGroup() !== wallGroupSize ? renderWall(!0) : wallSync(!1)
+    }, 150);
+    window.addEventListener("resize", onResize), window.addEventListener("orientationchange", onResize), wallBreaks.forEach(mq => {
+        mq.addEventListener ? mq.addEventListener("change", onResize) : mq.addListener && mq.addListener(onResize)
+    })
+})();
 try {
     window.history.replaceState({
         view: "home"
