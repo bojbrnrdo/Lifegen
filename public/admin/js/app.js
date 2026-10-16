@@ -138,7 +138,7 @@ function renderShell() {
       </a>
       <nav class="nav" id="nav">
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        <div class="nav__people">
+        ${(can('lifegroups:view')||can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
           <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
             ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
           </button>
@@ -147,7 +147,7 @@ function renderShell() {
             ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check', true) : ''}
             ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
           </div>
-        </div>
+        </div>`:''}
         ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
