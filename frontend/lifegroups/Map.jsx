@@ -105,22 +105,6 @@ function getLayout(rows,edges){
  * Only show information that helps administrators navigate the hierarchy;
  * personal contact fields remain in the dedicated People profile.
  */
-function RelationshipGallery({title,people,emptyText,onChoose,loading=false}){
- return <section className="lg-r-relations" aria-label={title}>
-  <div className="lg-r-relations-head"><h3>{title}</h3><span>{people.length}</span></div>
-  {loading?<p className="lg-r-relations-empty" role="status">Loading Members…</p>:
-   people.length?<div className="lg-r-relation-grid">
-    {people.map(item=><button key={item.id} type="button" className="lg-r-relation-avatar"
-      aria-label={'View '+name(item.person)+' — '+(item.role==='cell'?'Cell Leader':item.role==='member'?'Member':'Network Leader')}
-      title={name(item.person)}
-      onClick={()=>onChoose(item)}>
-      <Avatar person={item.person}/><span className={'lg-r-relation-status '+(item.active?'is-active':'is-inactive')} aria-hidden="true"/>
-      <span className="lg-r-relation-tooltip" aria-hidden="true">{name(item.person)}</span>
-     </button>)}
-   </div>:<p className="lg-r-relations-empty">{emptyText}</p>}
-  {people.length>0&&<p className="lg-r-relations-hint">Hover for name · Tap a photo to open</p>}
- </section>;
-}
 function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,relations,onChoose,relationsLoading}){
  if(!selection)return null;
  const {person,role,groupId,active,count}=selection;
@@ -135,14 +119,11 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,rela
    {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'people':'members'}</span>}
   </div>
   {role==='cell'&&progress&&<p className="lg-r-panel-attendance"><CalendarClock size={15}/>{progress.met_this_week?'Attendance submitted this week':'Weekly attendance not submitted'}</p>}
-  <RelationshipGallery key={selection.id} title={relationTitle} people={relations} emptyText={emptyText}
-    loading={relationsLoading} onChoose={onChoose}/>
   <div className="lg-r-panel-actions">
    {manage&&role==='cell'&&<button type="button" onClick={()=>onAdd(selection)}><Plus size={15}/> Add Member</button>}
    {manage&&role!=='member'&&<button type="button" onClick={()=>onReassign(selection)}><ArrowRightLeft size={15}/> Edit / Reassign</button>}
    {groupId&&<a href={'#/lifegroups/'+groupId}><CalendarDays size={15}/> View Attendance</a>}
-   {role==='network'&&<a href={'#/networks/'+person.id}><Network size={15}/> Open Network</a>}
-   {role==='member'&&<a href={'#/people/'+person.id}><UserRound size={15}/> Open Person</a>}
+   {(role==='member'?person.id:person.leader_person_id)&&<a href={'#/people/'+(role==='member'?person.id:person.leader_person_id)}><UserRound size={15}/> View Full Profile</a>}
    {manage&&active&&<button className="lg-r-danger" type="button" onClick={()=>onRemove(selection)}><Trash2 size={15}/> Remove from Lifegroups</button>}
   </div>
  </aside>;
