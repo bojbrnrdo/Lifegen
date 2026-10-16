@@ -86,16 +86,28 @@ export async function renderDevGit({main}){
    const link=document.createElement('a');link.href=result.url;link.textContent='Open pull request #'+result.number+' ↗';link.target='_blank';link.rel='noopener noreferrer';link.className='btn';output.append(link);
   }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
  };
- let listedFiles=[];
+ let listedFiles=[],listedBranch='',browseSequence=0;
  const filter=main.querySelector('#devFileFilter');
- filter.oninput=()=>{const files=main.querySelector('#devGitFiles');files.replaceChildren();const term=filter.value.trim().toLowerCase();listedFiles.filter(f=>f.path.toLowerCase().includes(term)).slice(0,150).forEach(file=>{const a=document.createElement('a');a.href='#/dev/ide?branch='+encodeURIComponent(main.querySelector('#devBranch').value.trim())+'&path='+encodeURIComponent(file.path);a.textContent=file.path;a.className='small';files.append(a);});};
+ const files=main.querySelector('#devGitFiles'),status=main.querySelector('#devGitStatus');
+ const clearListing=()=>{listedFiles=[];listedBranch='';files.replaceChildren();filter.disabled=true;};
+ main.querySelector('#devBranch').addEventListener('input',()=>{++browseSequence;clearListing();status.textContent='Branch changed. Browse files again to load this branch.';});
+ filter.oninput=()=>{
+  files.replaceChildren();const term=filter.value.trim().toLowerCase();
+  listedFiles.filter(f=>f.path.toLowerCase().includes(term)).slice(0,150).forEach(file=>{
+   const a=document.createElement('a');
+   a.href='#/dev/ide?branch='+encodeURIComponent(listedBranch)+'&path='+encodeURIComponent(file.path);
+   a.textContent=file.path;a.className='small';files.append(a);
+  });
+ };
  main.querySelector('#devBrowse').onclick=async()=>{
-  const status=main.querySelector('#devGitStatus'),files=main.querySelector('#devGitFiles');
-  status.textContent='Loading files…';files.replaceChildren();
-  try{const result=await api('tree?branch='+encodeURIComponent(main.querySelector('#devBranch').value.trim()));
-  listedFiles=result.files;filter.disabled=false;filter.oninput();
-  status.textContent=result.files.length+' source files available'+(result.truncated?' (list truncated)':'');
-  }catch(e){status.textContent=e.message;}
+  const branch=main.querySelector('#devBranch').value.trim(),sequence=++browseSequence;
+  clearListing();status.textContent='Loading files for '+branch+'…';
+  try{
+   const result=await api('tree?branch='+encodeURIComponent(branch));
+   if(sequence!==browseSequence)return;
+   listedBranch=branch;listedFiles=result.files;filter.disabled=false;filter.oninput();
+   status.textContent=result.files.length+' source files from '+branch+(result.truncated?' (list truncated)':'');
+  }catch(e){if(sequence===browseSequence)status.textContent=e.message;}
  };
 }
 
