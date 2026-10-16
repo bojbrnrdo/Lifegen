@@ -515,21 +515,25 @@ export async function renderLifegroups({main, query}) {
 
 /** In-page People directory: retain canonical People records and existing profile routes. */
 async function drawAllPeople(body) {
- body.innerHTML=html`<div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input type="search" id="allPeopleQ" placeholder="Search people by name or Person ID" aria-label="Search all People" /></div></div><div id="allPeopleResults" role="status"><div class="loading">Loading People…</div></div>`;
- const result=body.querySelector('#allPeopleResults');
- const input=body.querySelector('#allPeopleQ');
- let requestId=0;
+ body.innerHTML=html`<div class="toolbar"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input type="search" id="allPeopleQ" placeholder="Search people by name or Person ID" aria-label="Search all People"/></div></div><div id="allPeopleResults" role="status"><div class="loading">Loading People…</div></div><div class="row row--between mt-2" id="allPeoplePager"></div>`;
+ const result=body.querySelector('#allPeopleResults'),pager=body.querySelector('#allPeoplePager'),input=body.querySelector('#allPeopleQ');
+ let requestId=0,offset=0;
+ const PAGE=50;
  async function load(){
   const version=++requestId,q=input.value.trim();
-  result.innerHTML='<div class="loading">Loading People…</div>';
-  try {
-   const response=await api.people({q,status:'all',limit:100});
+  result.innerHTML='<div class="loading">Loading People…</div>';pager.innerHTML='';
+  try{
+   const page=await api.people({q,status:'all',paged:1,limit:PAGE,offset});
    if(version!==requestId||!body.isConnected)return;
-   const rows=Array.isArray(response)?response:response?.people||response?.rows||[];
+   const rows=Array.isArray(page)?page:page?.people||page?.rows||page?.items||[];
+   const total=Array.isArray(page)?rows.length:Number(page?.total??rows.length);
    result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${esc(p.person_code||'')}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`).join('')}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
+   pager.innerHTML=html`<span class="small muted">Showing ${rows.length?offset+1:0}–${offset+rows.length} of ${total}</span><div class="row"><button class="btn btn--sm" type="button" data-prev ${offset===0?'disabled':''}>Previous</button><button class="btn btn--sm" type="button" data-next ${offset+rows.length>=total?'disabled':''}>Next</button></div>`;
+   pager.querySelector('[data-prev]').onclick=()=>{offset=Math.max(0,offset-PAGE);load();};
+   pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
   }catch(e){if(version===requestId)result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;}
  }
- input.addEventListener('input',debounce(load,250));
+ input.addEventListener('input',debounce(()=>{offset=0;load();},250));
  await load();
 }
 
