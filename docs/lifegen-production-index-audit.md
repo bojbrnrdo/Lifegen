@@ -28,3 +28,8 @@ Inspected `pg_indexes` for `people`, `networks`, `lifegroups`, `lifegroup_member
 
 ### Gaps not enforceable with the listed row checks alone
 The inspected constraints do not enforce a Network being active before its Cell is active, or require leaders on active Networks/Cells. These are currently guarded by application validation and should be covered in integration tests. Database-level enforcement would require a separately reviewed design, not an automatic check-constraint addition.
+
+## Expanded People deletion impact (verified foreign keys)
+Hard deletion of a Person invokes `ON DELETE CASCADE` on `lifegroup_memberships`, `lifegroup_meeting_attendance`, `records` (service attendance), `vip_registrations`, and `vip_gift_handouts`. Network/Cell leadership foreign keys instead set the leader ID to NULL, potentially leaving leaderless active structures. `audit.person_id` also becomes NULL, reducing person-level audit traceability. These are **database-enforced effects**, regardless of UI permission checks.
+
+**Safety requirement:** Retain archive/restore as normal business flows; do not authorize irreversible Person hard deletion solely because the People tab has a delete action. Review the actual backend deletion handler and data-retention policy before changing its behavior. Use `docs/sql/lifegen-person-deletion-impact-preview.sql` for a read-only, per-person preflight; the example person ID is a placeholder, not a live deletion target. No migration is authorized.
