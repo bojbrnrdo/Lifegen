@@ -307,6 +307,7 @@ export async function renderLifegroups({main, query}) {
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
+ <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
@@ -477,7 +478,22 @@ export async function renderLifegroups({main, query}) {
     await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:removeContext});
   }
  }
- main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
+ let peopleSearchSeq=0;
+ async function searchPeople(){
+   const box=main.querySelector('#treePeopleMatches'),q=filters.q.trim(),seq=++peopleSearchSeq;
+   if(!can('people:view')||q.length<2){box.hidden=true;box.innerHTML='';return;}
+   box.hidden=false;box.innerHTML='<div class="loading">Searching People…</div>';
+   try{
+     const rows=await api.people({q,status:'all',limit:15});
+     if(seq!==peopleSearchSeq||!main.contains(box))return;
+     box.innerHTML=rows.length?html`<section class="card mb-2"><div class="card__body" style="padding:12px 16px">
+       <b>Matching People</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">
+       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`).join('')}
+       </div></div></section>`:html`<p class="small muted mb-2">No matching People records. Try a different name or Person ID.</p>`;
+   }catch(e){if(seq===peopleSearchSeq)box.innerHTML=html`<p class="small muted">${e.message||'Search unavailable.'}</p>`;}
+ }
+ main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();searchPeople();},200));
+ if(filters.q)searchPeople();
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
  main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
