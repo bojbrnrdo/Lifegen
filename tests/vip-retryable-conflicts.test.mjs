@@ -20,3 +20,8 @@ test('person-specific validation is not marked as retryable',()=>{
  assert.match(assign,/throw httpError\(409, 'Active leaders require manual review before Cell assignment\.'/);
  assert.ok(assign.includes('does not match this ${group.gender} Lifegroup.'), 'Gender mismatch remains an untagged person validation error');
 });
+
+test('deactivated candidate Cell is retryable only in automatic placement',()=>{
+ assert.match(assign,/if \(!group\.is_active\) throw \(extra\.auto_assign \? retryableVipCellConflict\(/);
+ assert.match(assign,/ : httpError\(409, 'This Lifegroup is inactive\./);
+});
