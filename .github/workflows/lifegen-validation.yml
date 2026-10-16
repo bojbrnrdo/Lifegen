@@ -34,3 +34,6 @@ jobs:
         run: node --test tests/lifegroup-match.test.mjs
       - name: Run deployment input security regression tests
         run: node --test tests/deployment-request-security.test.mjs
+
+      - name: Run People pagination regression tests
+        run: node --test tests/people-pagination.test.mjs
