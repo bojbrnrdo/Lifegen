@@ -560,6 +560,13 @@ export function eligibleVipAssignmentCell(group,network,leader) {
     leader?.id && !leader.archived_at && leader.status!=='inactive');
 }
 
+// Only cell-specific, retryable placement conflicts may advance the VIP matcher.
+function retryableVipCellConflict(message) {
+  const error = httpError(409, message);
+  error.retryableVipCell = true;
+  return error;
+}
+
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
@@ -573,19 +580,19 @@ async function assignMember(groupId, personId, extra = {}, actor) {
         [group.network_id]
       )).rows[0];
       if (!group.leader_person_id)
-        throw httpError(409,'Cell requires an assigned leader before automatic VIP placement.');
+        throw retryableVipCellConflict('Cell requires an assigned leader before automatic VIP placement.');
       const activeLeader=(await client.query(
         'SELECT id,archived_at,status FROM people WHERE id=$1 FOR SHARE',
         [group.leader_person_id]
       )).rows[0];
       if (!eligibleVipAssignmentCell(group,parentNetwork,activeLeader))
-        throw httpError(409,'Cell, parent Network and Cell Leader must all be eligible for automatic VIP placement.');
+        throw retryableVipCellConflict('Cell, parent Network and Cell Leader must all be eligible for automatic VIP placement.');
       const leaderNetworks = (await client.query(
         'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
       )).rows;
       if (hasOutOfNetworkCellLeadership(leaderNetworks,[group]) && leaderNetworks.length)
-        throw httpError(409, 'A Network Leader may receive VIPs only in a Cell belonging to their active Network.');
+        throw retryableVipCellConflict('A Network Leader may receive VIPs only in a Cell belonging to their active Network.');
     }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
@@ -647,11 +654,11 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const leaderGroup = group.leader_person_id && (await client.query('SELECT id FROM networks WHERE id=$1 AND leader_person_id=$2 AND is_active', [group.network_id,group.leader_person_id])).rows[0];
     if (leaderGroup) {
       const leaders = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (leaders >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409, 'Network has reached its 12 Cell Leader limit.');
+      if (leaders >= NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Network has reached its 12 Cell Leader limit.') : httpError(409, 'Network has reached its 12 Cell Leader limit.'));
     }
     if (!leaderGroup) {
       const members = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (members >= CELL_MEMBER_LIMIT) throw httpError(409, 'Cell Leader has reached the 12-member limit.');
+      if (members >= CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Cell Leader has reached the 12-member limit.') : httpError(409, 'Cell Leader has reached the 12-member limit.'));
     }
     if (tier === 'solid') {
       const solid = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
@@ -713,7 +720,7 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
       return { assigned:true, lifegroup_id:cell.id, membership, already_assigned:Boolean(membership.unchanged) };
     } catch (error) {
       // Never mask authorization or validation faults; only skip a Cell lost to contention.
-      if (error.status !== 409) throw error;
+      if (error.status !== 409 || error.retryableVipCell !== true) throw error;
       const nowActive = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
       if (nowActive) return {assigned:true,already_assigned:true,lifegroup_id:Number(nowActive.lifegroup_id)};
     }
