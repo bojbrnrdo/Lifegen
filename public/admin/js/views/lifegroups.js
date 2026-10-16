@@ -527,11 +527,13 @@ async function drawAllPeople(body) {
    if(version!==requestId||!body.isConnected)return;
    const rows=Array.isArray(page)?page:page?.people||page?.rows||page?.items||[];
    const total=Array.isArray(page)?rows.length:Number(page?.total??rows.length);
+   if(!Number.isFinite(total)||total<0)throw new Error('Invalid directory result. Please retry.');
+   if(offset>0&&rows.length===0){offset=total>0?Math.floor((total-1)/PAGE)*PAGE:0;return load();}
    result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${esc(p.person_code||'')}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`).join('')}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
    pager.innerHTML=html`<span class="small muted">Showing ${rows.length?offset+1:0}–${offset+rows.length} of ${total}</span><div class="row"><button class="btn btn--sm" type="button" data-prev ${offset===0?'disabled':''}>Previous</button><button class="btn btn--sm" type="button" data-next ${offset+rows.length>=total?'disabled':''}>Next</button></div>`;
    pager.querySelector('[data-prev]').onclick=()=>{offset=Math.max(0,offset-PAGE);load();};
    pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
-  }catch(e){if(version===requestId)result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;}
+  }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
  }
  input.addEventListener('input',debounce(()=>{offset=0;load();},250));
  status.addEventListener('change',()=>{offset=0;load();});
