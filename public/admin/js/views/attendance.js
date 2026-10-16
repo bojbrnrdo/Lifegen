@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { can, state } from '../app.js';
 import { html, raw, icon, avatar, fullName, statusBadge, classBadge, fmtDate, fmtTime, toISODate, lastSunday, isSundayStr, addDays, toast, openModal, closeModal, confirmDialog, promptDialog, withLoading, emptyState, debounce } from '../ui.js';
 import { personFormHtml, bindPhotoPicker, collectPerson, duplicateGuard } from './personForm.js';
+import { meetingForm } from './progress.js';
 
 /**
  * Sunday attendance — built to be the fastest screen in the system.
@@ -20,6 +21,24 @@ export async function renderAttendance({ main, query }) {
   let service = null;   // { id, present_count, ..., roster } — id is null until the first mark
   let filter = 'all';
   let search = '';
+  const scopeKind=query.person_id?'person':query.cell_id?'cell':query.network_id?'network':null;
+  const scopeId=Number(query.person_id||query.cell_id||query.network_id)||null;
+  let scopeIds=null,scopeLabel='';
+  if(scopeKind&&Number.isSafeInteger(scopeId)&&scopeId>0){
+    try{
+      if(scopeKind==='person'){scopeIds=new Set([scopeId]);scopeLabel='Selected person';}
+      if(scopeKind==='cell'){
+        const cell=await api.lifegroup(scopeId);
+        scopeIds=new Set([cell.leader_person_id,...(cell.members||[]).map(m=>m.id)].filter(Boolean).map(Number));
+        scopeLabel=cell.leader_name||cell.name||'Cell';
+      }
+      if(scopeKind==='network'){
+        const network=await api.network(scopeId);
+        scopeIds=new Set([network.leader_person_id,...(network.groups||[]).flatMap(g=>[g.leader_person_id,...(g.members||[]).map(m=>m.id)])].filter(Boolean).map(Number));
+        scopeLabel=network.leader_name||network.name||'Network';
+      }
+    }catch(e){scopeIds=null;toast('Unable to load the selected attendance context.','error');}
+  }
 
   main.innerHTML = html`
     <div class="page-header">
@@ -31,8 +50,39 @@ export async function renderAttendance({ main, query }) {
         <a class="btn" href="#/attendance/history">History</a>
       </div>
     </div>
-    <div id="content"><div class="loading">Loading…</div></div>`;
+    ${scopeIds?html`<div class="sync-note mb-2"><b>Attendance context:</b> ${scopeLabel}. Showing matching People in the Sunday roster. <a href="#/lifegroups">Back to Lifegroups</a> · <a href="#/attendance?date=${date}">Show everyone</a></div>`:''}
+    <div id="content"><div class="loading">Loading…</div></div>
+    ${can('lifegroups:view')?html`<details class="card mt-2" id="cellAttendancePanel" ${scopeKind==='cell'||scopeKind==='network'?'open':''}><summary class="card__header" style="cursor:pointer">Cell Group attendance and reports</summary><div class="card__body" id="cellAttendanceBody"><div class="loading">Loading Cell Groups…</div></div></details>`:''}`;
 
+  const cellPanel=main.querySelector('#cellAttendancePanel');
+  let cellAttendanceLoaded=false;
+  async function loadCellAttendance(){
+    const root=main.querySelector('#cellAttendanceBody');if(!root)return;
+    const groups=(await api.lifegroups({status:'active'}))
+      .filter(g=>!g.leads_network&&(!scopeKind||scopeKind!=='network'||Number(g.network_id)===scopeId));
+    const selectedId=Number(root.querySelector('[data-cell-id]')?.value)||(
+      scopeKind==='cell'?scopeId:Number(groups[0]?.id)||null);
+    const selected=groups.find(g=>Number(g.id)===selectedId);
+    root.innerHTML=html`<div class="row" style="gap:12px;flex-wrap:wrap">
+      <label class="grow">Cell Group <select data-cell-id aria-label="Choose Cell Group">${groups.map(g=>html`<option value="${g.id}" ${selected?.id===g.id?'selected':''}>${g.leader_name||g.name}</option>`).join('')}</select></label>
+      ${can('lifegroups:manage')&&selected?html`<button class="btn btn--primary" type="button" data-record-cell>Record meeting</button>`:''}
+    </div><div id="cellReportResults" class="mt-2"></div>`;
+    root.querySelector('[data-cell-id]')?.addEventListener('change',()=>loadCellAttendance());
+    const results=root.querySelector('#cellReportResults');
+    if(!selected){results.innerHTML='<p class="small muted">No active Cell Groups are available.</p>';return;}
+    try{
+      const p=await api.lifegroupProgress(selected.id,12);
+      results.innerHTML=html`<div class="row" style="gap:16px;flex-wrap:wrap">
+        <span><strong>${p.total}</strong> members</span><span><strong>${p.held_last_4}</strong> meetings held in the last four weeks</span>
+      </div><div class="table-wrap mt-2"><table class="table"><thead><tr><th>Meeting date</th><th>Status</th><th>Present</th></tr></thead>
+      <tbody>${(p.meetings||[]).slice(0,12).map(m=>html`<tr><td>${fmtDate(m.meeting_date)}</td><td>${m.held?'Held':'Not held'}</td><td>${m.present_count??0}</td></tr>`).join('')}</tbody></table></div>`;
+      root.querySelector('[data-record-cell]')?.addEventListener('click',()=>meetingForm(selected.id,p,null,()=>loadCellAttendance()));
+    }catch(error){results.innerHTML=html`<div class="alert alert--error">${error.message}</div>`;}
+  }
+  cellPanel?.addEventListener('toggle',()=>{
+    if(cellPanel.open&&!cellAttendanceLoaded){cellAttendanceLoaded=true;loadCellAttendance().catch(error=>toast(error.message,'error'));}
+  });
+  if(cellPanel?.open){cellAttendanceLoaded=true;loadCellAttendance().catch(error=>toast(error.message,'error'));}
   const content = main.querySelector('#content');
   const dateInput = main.querySelector('#dateInput');
   const dateLabel = main.querySelector('#dateLabel');
@@ -40,7 +90,7 @@ export async function renderAttendance({ main, query }) {
   const setDate = (d) => {
     if (d > today) { toast('Future Sundays cannot be recorded yet.', 'info'); return; }
     date = d; dateInput.value = d;
-    history.replaceState(null, '', `#/attendance?date=${d}`);
+    history.replaceState(null, '', '#/attendance'+api.qs({date:d,...(scopeIds?{[scopeKind+'_id']:scopeId}:{})}));
     load();
   };
   main.querySelector('#prevSunday').onclick = () => setDate(addDays(date, -7));
@@ -148,6 +198,7 @@ export async function renderAttendance({ main, query }) {
     return service.roster.filter((p) => {
       if (filter === 'present' && p.att_status !== 'present') return false;
       if (filter === 'unmarked' && p.att_status === 'present') return false;
+      if (scopeIds&&!scopeIds.has(Number(p.id))) return false;
       if (search) {
         const hay = `${p.first_name} ${p.last_name} ${p.last_name} ${p.first_name} ${p.person_code}`.toLowerCase();
         if (!hay.includes(search)) return false;

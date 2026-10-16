@@ -108,7 +108,7 @@ function getLayout(rows,edges){
  * Only show information that helps administrators navigate the hierarchy;
  * personal contact fields remain in the dedicated People profile.
  */
-function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,relations,onChoose,relationsLoading}){
+function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,manage,canAttendance,relations,onChoose,relationsLoading}){
  if(!selection)return null;
  const {person,role,groupId,active,count}=selection;
  const label=role==='network'?'Network Leader':role==='cell'?'Cell Leader':'Member';
@@ -125,8 +125,8 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,manage,rela
   <div className="lg-r-panel-actions">
    {manage&&role==='cell'&&<button type="button" onClick={()=>onAdd(selection)}><Plus size={15}/> Add Member</button>}
    {manage&&role!=='member'&&<button type="button" onClick={()=>onReassign(selection)}><ArrowRightLeft size={15}/> Edit / Reassign</button>}
-   {groupId&&<a href={'#/lifegroups/'+groupId}><CalendarDays size={15}/> View Attendance</a>}
-   {(role==='member'?person.id:person.leader_person_id)&&<a href={'#/people/'+(role==='member'?person.id:person.leader_person_id)}><UserRound size={15}/> View Full Profile</a>}
+   {canAttendance&&<a href={'#/attendance?'+(role==='network'?'network_id='+person.id:role==='cell'?'cell_id='+groupId:'person_id='+person.id)}><CalendarDays size={15}/> View Attendance</a>}
+   {onProfile&&(role==='member'?person.id:person.leader_person_id)&&<button type="button" onClick={()=>onProfile(role==='member'?person.id:person.leader_person_id)}><UserRound size={15}/> View Full Profile</button>}
    {manage&&active&&<button className="lg-r-danger" type="button" onClick={()=>onRemove(selection)}><Trash2 size={15}/> Remove from Lifegroups</button>}
   </div>
  </aside>;
@@ -137,9 +137,8 @@ function Dashboard({data,callbacks}){
  const [members,setMembers]=useState(()=>new Map());
  const [reports,setReports]=useState(()=>new Map());
  const [selected,setSelected]=useState(null);
- const [search,setSearch]=useState('');
  const [loading,setLoading]=useState(new Set());
- const allFilters={...data.filters,q:search||data.filters.q||''};
+ const allFilters={...data.filters};
  const toggle=useCallback(id=>setExpanded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next}),[]);
  const addMembers=useCallback(async g=>{
   if(members.has(g.id)||loading.has(g.id))return;
@@ -154,7 +153,7 @@ function Dashboard({data,callbacks}){
  useEffect(()=>{const opened=new Set([...expanded].filter(id=>id.startsWith('c')));
   for(const id of opened){const g=data.groups.find(g=>'c'+g.id===id);if(g&&!members.has(g.id))addMembers(g);}
  },[expanded,data.groups,addMembers,members]);
- const {rows,edges}=useMemo(()=>buildRows(data.networks,data.groups,members,expanded,allFilters),[data,members,expanded,search]);
+ const {rows,edges}=useMemo(()=>buildRows(data.networks,data.groups,members,expanded,allFilters),[data,members,expanded]);
  const rowsById=useMemo(()=>new Map(rows.map(r=>[r.id,r])),[rows]);
  const select=useCallback(row=>{
   setSelected(row);
@@ -200,19 +199,19 @@ function Dashboard({data,callbacks}){
   });
   // A detail photo click should navigate even if the current search
   // is hiding the destination node.
-  setSearch('');
+  callbacks.onClearSearch?.();
   select(item);
- },[data.groups,select]);
+ },[data.groups,select,callbacks]);
  const nodes=useMemo(()=>getLayout(rows,edges).map(n=>({
   ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member',
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
  useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
- useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase()));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
+ useEffect(()=>{const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf]);
 
  return <div className="lg-r-shell">
-  <div className="lg-r-tools"><div className="lg-r-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leaders, members or Person ID" aria-label="Search Lifegroups people"/></div>
+  <div className="lg-r-tools">
    <span className="lg-r-count">{rows.filter(r=>r.role==='network').length} networks · {rows.filter(r=>r.role==='cell').length} cells · {rows.filter(r=>r.role==='member').length} visible members</span>
    <button onClick={fit} title="Center all visible people"><Maximize2 size={16}/> Fit map</button></div>
   <div className="lg-r-main">
@@ -225,7 +224,7 @@ function Dashboard({data,callbacks}){
     </ReactFlow>
     {rows.length===0&&<div className="lg-r-empty">No Networks match these filters.</div>}
    </div>
-   <Panel selection={selected} progress={reports.get(selected?.groupId)} manage={callbacks.manage}
+   <Panel selection={selected} progress={reports.get(selected?.groupId)} manage={callbacks.manage} canAttendance={callbacks.canAttendance} onProfile={callbacks.onProfile}
     relations={relations} onChoose={chooseRelation}
     relationsLoading={selected?.role==='cell'&&loading.has(selected.groupId)}
     onClose={()=>setSelected(null)} onAdd={callbacks.onAdd} onReassign={callbacks.onReassign} onRemove={callbacks.onRemove}/>

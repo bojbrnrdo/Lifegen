@@ -302,11 +302,12 @@ export async function renderLifegroups({main, query}) {
  main.innerHTML=html`
  <section class="lifegroups-page">
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button type="button" class="btn" id="removeFromLifegroups" title="Remove Network, Cell Leader, or Member">${icon('trash',16)} Remove</button>`:''}</div></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
+ <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
@@ -316,7 +317,7 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load(true)}));
- main.querySelector('#removeFromLifegroups')?.addEventListener('click',()=>openRemoveFromLifegroups({onRemoved:afterRemove}));
+
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
@@ -405,9 +406,57 @@ export async function renderLifegroups({main, query}) {
       version:canvas.__lifegenReactVersion||0,
     },{
       manage:can('lifegroups:manage'),
+      canAttendance:can('attendance:view'),
+      onProfile:can('people:view')?async id=>{
+        try{
+          const p=await api.person(id);
+          const savedClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
+          const nextMode={vip:'member',member:'cell',cell_leader:'network'}[savedClassification]||null;
+          const modal=openModal({
+            title:fullName(p),
+            wide:true,
+            body:html`<div class="profile-head">${raw(avatar(p,'lg'))}<div class="info"><strong>${fullName(p)}</strong><div class="small muted">${p.person_code||''}</div><div class="mt-1">${raw(statusBadge(p.status))}</div></div></div>
+              <dl class="dl mt-2">
+                <div><dt>Registered</dt><dd>${p.date_registered?fmtDate(p.date_registered):'—'}</dd></div>
+                <div><dt>Sunday attendance</dt><dd>${Number(p.sundays_attended||p.history?.filter(h=>h.status==='present').length||0)}</dd></div>
+                <div><dt>Preferred area</dt><dd>${p.preferred_area||'—'}</dd></div>
+                <div><dt>Preferred day</dt><dd>${p.preferred_day||'—'}</dd></div>
+              </dl>
+              ${can('lifegroups:manage')?html`<div class="toolbar mt-2"><label class="grow">Classification
+                <select data-classification aria-label="Discipleship classification">
+                  <option value="">Choose classification…</option>
+                  <option value="vip">VIP</option><option value="member">Member</option>
+                  <option value="cell_leader">Cell Leader</option><option value="network_leader">Network Leader</option>
+                </select>
+              </label><button class="btn btn--primary" type="button" data-change-classification>Update</button></div>
+              <p class="small muted">Changing classification does not grant admin access or erase attendance history. Leadership roles require their corresponding active relationship.</p>`:''}`.value,
+            footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a>${can('lifegroups:manage')&&can('people:write')?html`<button class="btn" type="button" data-transfer-profile>Assign / Transfer Cell</button>`:''}${nextMode&&can('lifegroups:manage')&&can('people:write')?html`<button type="button" class="btn btn--primary" data-promote-profile>Promote</button>`:''}<button type="button" class="btn" data-close-profile>Close</button>`.value
+          });
+          modal.querySelector('[data-close-profile]')?.addEventListener('click',closeModal);
+          modal.querySelector('[data-transfer-profile]')?.addEventListener('click',()=>{closeModal();findLifegroup(p,()=>load(true));});
+          modal.querySelector('[data-promote-profile]')?.addEventListener('click',()=>{closeModal();createAddNewModal({initialTab:nextMode,personId:p.id,onSaved:()=>load(true)});});
+          const currentClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
+          const choice=modal.querySelector('[data-classification]');
+          if(choice)choice.value=currentClassification;
+          modal.querySelector('[data-change-classification]')?.addEventListener('click',async event=>{
+            const next=choice?.value;
+            if(!next)return toast('Choose a classification.','error');
+            const confirmed=await confirmDialog({title:'Change discipleship classification?',
+              message:'Update this People record to '+next.replaceAll('_',' ')+'? Attendance and membership history will remain available.',
+              confirmText:'Update'});
+            if(!confirmed)return;
+            await withLoading(event.currentTarget,async()=>{
+              try{await api.setDiscipleshipClassification(p.id,next,'Staff classification change');
+                toast('Classification updated.');await load(true);
+              }catch(error){toast(error.message||'Could not change classification.','error');}
+            });
+          });
+        }catch(error){toast(error.message||'Unable to open profile.','error');}
+      }:null,
       loadMembers:id=>api.lifegroup(id),
       loadProgress:id=>api.lifegroupProgress(id,12),
       loadProfile:id=>api.person(id),
+      onClearSearch:()=>{filters.q='';const input=main.querySelector('#treeQ');if(input)input.value='';load();},
       onError:ex=>toast(ex.message||'Unable to load Lifegroup information.','error'),
       onRemove:selection=>removeContext?.({
         kind:selection.role==='cell'?'group':selection.role,
@@ -433,7 +482,22 @@ export async function renderLifegroups({main, query}) {
     await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:removeContext});
   }
  }
- main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();},200));
+ let peopleSearchSeq=0;
+ async function searchPeople(){
+   const box=main.querySelector('#treePeopleMatches'),q=filters.q.trim(),seq=++peopleSearchSeq;
+   if(!can('people:view')||q.length<2){box.hidden=true;box.innerHTML='';return;}
+   box.hidden=false;box.innerHTML='<div class="loading">Searching People…</div>';
+   try{
+     const rows=await api.people({q,status:'all',limit:15});
+     if(seq!==peopleSearchSeq||!main.contains(box))return;
+     box.innerHTML=rows.length?html`<section class="card mb-2"><div class="card__body" style="padding:12px 16px">
+       <b>Matching People</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">
+       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`).join('')}
+       </div></div></section>`:html`<p class="small muted mb-2">No matching People records. Try a different name or Person ID.</p>`;
+   }catch(e){if(seq===peopleSearchSeq)box.innerHTML=html`<p class="small muted">${e.message||'Search unavailable.'}</p>`;}
+ }
+ main.querySelector('#treeQ').addEventListener('input',debounce(e=>{filters.q=e.target.value.trim();load();searchPeople();},200));
+ if(filters.q)searchPeople();
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
  main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));

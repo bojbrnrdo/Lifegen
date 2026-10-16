@@ -1,4 +1,4 @@
-import { recommendEligibleCells } from './lifegroup-match.js';
+import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
 
@@ -601,6 +601,21 @@ async function assignMember(groupId, personId, extra = {}, actor) {
  * The existing assignMember transaction handles capacity, membership locks and audit log.
  * On contention, try the next eligible cell and return a manual-review result if none remains.
  */
+async function readVipAssignmentPolicy(){
+ const row=(await query("SELECT value FROM settings WHERE key='vip_assignment_priority'")).rows[0];
+ if(!row)return [...DEFAULT_VIP_PRIORITIES];
+ try{return validateVipPriorityOrder(row.value);}catch{return [...DEFAULT_VIP_PRIORITIES];}
+}
+async function saveVipAssignmentPolicy(input,actor){
+ let order;
+ try{order=validateVipPriorityOrder(input);}catch{throw httpError(400,'Choose each VIP assignment priority exactly once.');}
+ await transaction(async client=>{
+   await client.query("INSERT INTO settings(key,value) VALUES('vip_assignment_priority',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[JSON.stringify(order)]);
+   await logAction(client,actor,'settings',null,'vip_assignment_priority_changed',{priority_order:order});
+ });
+ return {priority_order:order};
+}
+
 async function autoAssignMember(personId, prefs = {}, actor = null) {
   const person = (await query('SELECT id,sex,archived_at,status,preferred_area,preferred_day,preferred_category FROM people WHERE id=$1',[personId])).rows[0];
   if (!person || person.archived_at || person.status === 'inactive') throw httpError(404, 'Active person not found.');
@@ -608,9 +623,10 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
   if (active) return { assigned: true, already_assigned: true, lifegroup_id: Number(active.lifegroup_id) };
   if (!['male','female'].includes(person.sex)) return { assigned:false, reason:'sex_missing', needs_manual_assignment:true };
   const gender = person.sex === 'male' ? 'boys' : 'girls';
+  const priorities=await readVipAssignmentPolicy();
   const candidates = recommendEligibleCells(await listGroups({gender,status:'active'}),{
     day:prefs.day || person.preferred_day, area:prefs.area || person.preferred_area,
-    category:prefs.category || person.preferred_category,
+    category:prefs.category || person.preferred_category,priority_order:priorities,
   });
   for (const cell of candidates) {
     try {
@@ -933,7 +949,37 @@ async function networkDetail(id) {
   };
 }
 
+/** Church classification is distinct from attendance status and staff account permissions.
+ * Until a reviewed schema migration is approved, store it in existing People
+ * extras JSON and use audit_log for durable previous/current history.
+ */
+async function setDiscipleshipClassification(personId, requested, reason, actor) {
+  const target=clean(requested);
+  if(!['network_leader','cell_leader','member','vip'].includes(target))
+    throw httpError(400,'Choose Network Leader, Cell Leader, Member or VIP.');
+  const note=stringField(reason,'Reason',{max:500});
+  return transaction(async client=>{
+    const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
+    const current=clean(p.extras?.discipleship_classification);
+    if(current===target)return {person_id:personId,classification:target,unchanged:true};
+    const network=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    const cell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    if(target==='network_leader'&&!network)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+    if(target==='cell_leader'&&(!cell||network))throw httpError(409,'Connect this person as Cell Leader, and resolve any active Network leadership first.');
+    if(['member','vip'].includes(target)&&(network||cell))throw httpError(409,'Reassign the active leadership relationship before changing this person to Member or VIP.');
+    await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
+      '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
+    await logAction(client,actor,'people',personId,'discipleship_classification_changed',
+      {from:current,to:target,reason:note});
+    return {person_id:personId,previous_classification:current,classification:target,unchanged:false};
+  });
+}
+
 async function lifegroupMethod(name, args, actor) {
+  if (name === 'setDiscipleshipClassification') return setDiscipleshipClassification(asId(args[0],'person ID'),args[1],args[2]||null,actor);
+  if (name === 'vipAssignmentPolicy') return {priority_order:await readVipAssignmentPolicy()};
+  if (name === 'saveVipAssignmentPolicy') return saveVipAssignmentPolicy(args[0],actor);
   if (name === 'lifegroupOverview') return trackerOverview();
   if (name === 'lifegroups') return listGroups(args[0] || {});
   if (name === 'lifegroupOptions') return options();
@@ -944,7 +990,7 @@ async function lifegroupMethod(name, args, actor) {
     if (!['male','female'].includes(sex)) return { prefs, groups: [] };
     const gender = sex === 'male' ? 'boys' : 'girls';
     let groups = await listGroups({ gender, status: 'active' });
-    groups = recommendEligibleCells(groups, prefs);
+    groups = recommendEligibleCells(groups, {...prefs,priority_order:await readVipAssignmentPolicy()});
     return { prefs, groups };
   }
   if (name === 'lifegroup') return getGroup(asId(args[0], 'group ID'));
