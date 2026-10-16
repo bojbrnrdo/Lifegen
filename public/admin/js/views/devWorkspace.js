@@ -200,8 +200,18 @@ export async function renderDevPackaging({main}){
  };
  main.querySelector('#refreshPackageRuns').onclick=refreshRuns;
  if(data.connected)refreshRuns();
- main.querySelector('#runPackage').onclick=async()=>{const status=main.querySelector('#packageStatus');if(!confirm('Start a package build for this development branch?'))return;
-  try{const result=await api('package',{method:'POST',body:{branch:main.querySelector('#devBranch').value.trim()}});status.textContent=result.message+' The run may take a moment to appear.';await refreshRuns();}
-  catch(e){status.textContent=e.message;}
+ let packagePending=false;
+ main.querySelector('#runPackage').onclick=async()=>{
+  if(packagePending)return;
+  const button=main.querySelector('#runPackage'),status=main.querySelector('#packageStatus');
+  const branch=main.querySelector('#devBranch').value.trim();
+  if(!confirm('Start a package build for '+branch+'?'))return;
+  packagePending=true;button.disabled=true;status.textContent='Requesting package build for '+branch+'…';
+  try{
+   const result=await api('package',{method:'POST',body:{branch}});
+   status.textContent=result.message+' The run may take a moment to appear.';
+   await refreshRuns();
+  }catch(e){status.textContent=e.message;}
+  finally{packagePending=false;button.disabled=!data.writesEnabled;}
  };
 }
