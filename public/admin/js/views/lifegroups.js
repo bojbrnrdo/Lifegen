@@ -410,6 +410,8 @@ export async function renderLifegroups({main, query}) {
       onProfile:can('people:view')?async id=>{
         try{
           const p=await api.person(id);
+          const savedClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
+          const nextMode={vip:'member',member:'cell',cell_leader:'network'}[savedClassification]||null;
           const modal=openModal({
             title:fullName(p),
             wide:true,
@@ -428,9 +430,11 @@ export async function renderLifegroups({main, query}) {
                 </select>
               </label><button class="btn btn--primary" type="button" data-change-classification>Update</button></div>
               <p class="small muted">Changing classification does not grant admin access or erase attendance history. Leadership roles require their corresponding active relationship.</p>`:''}`.value,
-            footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a><button type="button" class="btn btn--primary" data-close-profile>Close</button>`.value
+            footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a>${can('lifegroups:manage')&&can('people:write')?html`<button class="btn" type="button" data-transfer-profile>Assign / Transfer Cell</button>`:''}${nextMode&&can('lifegroups:manage')&&can('people:write')?html`<button type="button" class="btn btn--primary" data-promote-profile>Promote</button>`:''}<button type="button" class="btn" data-close-profile>Close</button>`.value
           });
           modal.querySelector('[data-close-profile]')?.addEventListener('click',closeModal);
+          modal.querySelector('[data-transfer-profile]')?.addEventListener('click',()=>{closeModal();findLifegroup(p,()=>load(true));});
+          modal.querySelector('[data-promote-profile]')?.addEventListener('click',()=>{closeModal();createAddNewModal({initialTab:nextMode,personId:p.id,onSaved:()=>load(true)});});
           const currentClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
           const choice=modal.querySelector('[data-classification]');
           if(choice)choice.value=currentClassification;
