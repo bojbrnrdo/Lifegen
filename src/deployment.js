@@ -81,19 +81,20 @@ export function inspectArchive(buffer){
  return {hash:sha(buffer),version:String(pkg.version||''),files,files_count:files.length,size:buffer.length,flattened:Boolean(prefix)};
 }
 
+export const safeKey=(value,label)=>{if(typeof value!=='string'||!idOk(value))throw httpError(400,'Invalid '+label+'.');return value;};
+export const safeArchiveHash=value=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw httpError(400,'Invalid archive checksum.');return value;};
+export const safeScope=value=>{if(value==='')return '';return safeKey(value,'account scope');};
+export const safePublishBody=value=>{
+  if(!value||typeof value!=='object'||Array.isArray(value))throw httpError(400,'Invalid deployment request.');
+  return {project_id:safeKey(value.project_id,'project ID'),archive_hash:safeArchiveHash(value.archive_hash),confirm:value.confirm===true};
+ };
+
 export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipPaths=['/home/user/LIFEGEN-Vercel-Deploy.zip','/home/user/LIFEGEN-One-Site.zip','/home/user/lifegen-neon/private-data/approved-releases/LIFEGEN-Vercel-Deploy-2.1.2.zip'],config=()=>process.env,now=()=>Date.now()}={}){
  const sessions=new Map();
  const scrub=(text,session)=>{
   let value=String(text||'');
   for(const secret of [session?.token,config().DATABASE_URL,config().DATABASE_DIRECT_URL,config().DATABASE_SSL_ROOT_CERT,config().SETUP_KEY])if(secret)value=value.split(secret).join('[redacted]');
   return value.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi,'[private database URL]').replace(/npg_[a-zA-Z0-9]+/g,'[redacted]').slice(0,14000);
- };
- const safeKey=(value,label)=>{if(typeof value!=='string'||!idOk(value))throw httpError(400,'Invalid '+label+'.');return value;};
- const safeArchiveHash=value=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw httpError(400,'Invalid archive checksum.');return value;};
- const safeScope=value=>{if(value==='')return '';return safeKey(value,'account scope');};
- const safePublishBody=value=>{
-  if(!value||typeof value!=='object'||Array.isArray(value))throw httpError(400,'Invalid deployment request.');
-  return {project_id:safeKey(value.project_id,'project ID'),archive_hash:safeArchiveHash(value.archive_hash),confirm:value.confirm===true};
  };
  const get=key=>{const s=sessions.get(key);if(!s||now()-s.lastUsed>TTL){sessions.delete(key);throw httpError(409,'Your publishing connection expired. Connect Vercel again.');}s.lastUsed=now();return s;};
  async function api(s,path,{method='GET',body,scope=null,params={}}={}){
