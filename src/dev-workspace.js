@@ -54,7 +54,11 @@ const ensureEnabled=async(req,res,next)=>{try{
  if(await verified())return next();
  return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side integration token.'});
  }catch(e){next(e);}};
-const checkWrite=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
+const writesAllowed=()=>process.env.VERCEL_ENV!=='production'&&process.env.LIFEGEN_DEV_WRITES_ENABLED==='true';
+const checkWrite=(req,res,next)=>{try{
+ if(!writesAllowed())return res.status(403).json({error:'Developer Git writes are disabled on this environment. Enable them only in an isolated development deployment.'});
+ checkOrigin(req);checkCsrf(req);next();
+ }catch(e){next(e);}};
 const deny=(res)=>res.status(400).json({error:'Only safe development branches and source-file paths are allowed.'});
 
 export function registerDevWorkspace(app){
@@ -66,7 +70,8 @@ export function registerDevWorkspace(app){
    environment:process.env.VERCEL_ENV||'local',
    branch:process.env.VERCEL_GIT_COMMIT_REF||'',
    commit:(process.env.VERCEL_GIT_COMMIT_SHA||'').slice(0,12),
-   readOnly:!connected
+   readOnly:!connected||!writesAllowed(),
+   writesEnabled:connected&&writesAllowed()
   });
  }));
  app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
