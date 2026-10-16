@@ -562,6 +562,12 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     // Revalidate auto-placement eligibility under the group's row lock.
     // The recommendation list is advisory and may become stale before assignment.
     if (extra.auto_assign) {
+      const parentNetwork=(await client.query(
+        'SELECT id,is_active,gender,is_demo FROM networks WHERE id=$1 FOR SHARE',
+        [group.network_id]
+      )).rows[0];
+      if (!parentNetwork || !parentNetwork.is_active || parentNetwork.is_demo || parentNetwork.gender!==group.gender)
+        throw httpError(409,'Cell is not eligible for automatic VIP placement: its Network must be active, non-demo and gender-compatible.');
       if (group.is_demo || !group.leader_person_id)
         throw httpError(409, 'Cell is not eligible for automatic assignment.');
       const leaderNetworks = (await client.query(
