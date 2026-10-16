@@ -554,6 +554,12 @@ async function saveNetwork(body, actor, id = null) {
   });
 }
 
+export function eligibleVipAssignmentCell(group,network,leader) {
+  return Boolean(group?.is_active && !group.is_demo && group.leader_person_id &&
+    network?.is_active && !network.is_demo && network.gender===group.gender &&
+    leader?.id && !leader.archived_at && leader.status!=='inactive');
+}
+
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
@@ -562,8 +568,18 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     // Revalidate auto-placement eligibility under the group's row lock.
     // The recommendation list is advisory and may become stale before assignment.
     if (extra.auto_assign) {
-      if (group.is_demo || !group.leader_person_id)
-        throw httpError(409, 'Cell is not eligible for automatic assignment.');
+      const parentNetwork=(await client.query(
+        'SELECT id,is_active,gender,is_demo FROM networks WHERE id=$1 FOR SHARE',
+        [group.network_id]
+      )).rows[0];
+      if (!group.leader_person_id)
+        throw httpError(409,'Cell requires an assigned leader before automatic VIP placement.');
+      const activeLeader=(await client.query(
+        'SELECT id,archived_at,status FROM people WHERE id=$1 FOR SHARE',
+        [group.leader_person_id]
+      )).rows[0];
+      if (!eligibleVipAssignmentCell(group,parentNetwork,activeLeader))
+        throw httpError(409,'Cell, parent Network and Cell Leader must all be eligible for automatic VIP placement.');
       const leaderNetworks = (await client.query(
         'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
         [group.leader_person_id]
