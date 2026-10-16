@@ -69,7 +69,10 @@ function buildRows(networks,groups,members,expanded,filters){
   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:!!n.is_active)));
  const groupSet=groups.filter(g=>g.network_id!=null&&
   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:!!g.is_active)));
- const matching=new Set();
+ const matching=new Set(), matchingMembers=new Set();
+ if(q)for(const g of groupSet)for(const m of members.get(g.id)||[])if(!m.left_at && (name(m)+' '+(m.person_code||'')+' '+m.id).toLowerCase().includes(q)){
+  matching.add('c'+g.id);matching.add('n'+g.network_id);matchingMembers.add('m'+g.id+'-'+m.id);
+ }
  if(q)for(const n of netSet)if((name(n)+' '+n.name).toLowerCase().includes(q))matching.add('n'+n.id);
  if(q)for(const g of groupSet)if((name(g)+' '+g.name).toLowerCase().includes(q)){
   matching.add('c'+g.id);matching.add('n'+g.network_id);
@@ -85,7 +88,7 @@ function buildRows(networks,groups,members,expanded,filters){
    if(q&&!matching.has(cid)&&!matching.has(nc))continue;
    add(cid,nc,'cell',g,g.is_active,g.member_count,g.id);
    if(!expanded.has(cid)&&!q)continue;
-   for(const m of members.get(g.id)||[])if(!m.left_at&&(!q||(name(m)+' '+m.id).toLowerCase().includes(q)||matching.has(cid))){
+   for(const m of members.get(g.id)||[])if(!m.left_at&&(!q||matchingMembers.has('m'+g.id+'-'+m.id)||(name(g)+' '+g.name).toLowerCase().includes(q)||(name(n)+' '+n.name).toLowerCase().includes(q))){
     add('m'+g.id+'-'+m.id,cid,'member',m,m.status!=='inactive',0,g.id);
    }
   }
@@ -206,10 +209,10 @@ function Dashboard({data,callbacks}){
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
  useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
- useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase())&&r.role!=='member');if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
+ useEffect(()=>{if(!search)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(search.toLowerCase()));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[search,rows,nodes,rf]);
 
  return <div className="lg-r-shell">
-  <div className="lg-r-tools"><div className="lg-r-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find Network or Cell Leader" aria-label="Search Lifegroups network"/></div>
+  <div className="lg-r-tools"><div className="lg-r-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leaders, members or Person ID" aria-label="Search Lifegroups people"/></div>
    <span className="lg-r-count">{rows.filter(r=>r.role==='network').length} networks · {rows.filter(r=>r.role==='cell').length} cells · {rows.filter(r=>r.role==='member').length} visible members</span>
    <button onClick={fit} title="Center all visible people"><Maximize2 size={16}/> Fit map</button></div>
   <div className="lg-r-main">

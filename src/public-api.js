@@ -6,6 +6,7 @@ import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual
 import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
+import { handleLifegroupMethod } from './lifegroups.js';
 // ---------------------------------------------------------------------------
 // Public registration (VIP first-timer + regular attendee)
 // ---------------------------------------------------------------------------
@@ -194,6 +195,17 @@ publicRouter.post('/registrations',async(req,res)=>{
   await logAction(client,null,'vip_registrations',id,'public_registration',{person_id:p.id,service_date:announcedForService?service_date:null});
   return {vip:{id,person_id:p.id,name,created_at:new Date().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
  },{write:true});
+ // VIP registration is already committed. Cell assignment is a separate, guarded
+ // transaction; failure never loses the new People/VIP records or the recovery code.
+ if(!result.already_registered){
+   try {
+     const assignment=await handleLifegroupMethod('autoAssignLifegroup',[result.vip.person_id],null);
+     result.cell_assignment=assignment.assigned?'assigned':'needs_manual_assignment';
+   } catch(error) {
+     console.error('Automatic VIP Cell placement deferred:',error.message);
+     result.cell_assignment='needs_manual_assignment';
+   }
+ }
  setVipCookie(req,res,result.session.token);delete result.session;res.status(result.already_registered?200:201).json(result);
 });
 publicRouter.post('/vip/restore',async(req,res)=>{

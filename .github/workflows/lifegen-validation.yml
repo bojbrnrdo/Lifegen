@@ -1,0 +1,32 @@
+name: LIFEGEN validation
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/people-workflows-reorganization]
+permissions:
+  contents: read
+jobs:
+  build-and-unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Check changed JavaScript syntax
+        run: |
+          node --check src/app.js
+          node --check src/public-api.js
+          node --check src/lifegroups.js
+          node --check src/lifegroup-match.js
+          node --check public/admin/js/views/unifiedAddNew.js
+          node --check public/admin/js/views/registrations.js
+          node --check public/admin/js/views/lifegroups.js
+      - name: Run deterministic matching tests
+        run: node --test tests/lifegroup-match.test.mjs

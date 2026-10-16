@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
-import { query, transaction, withState, runDomain, logAction, connectionHint } from './db.js';
+import { query, transaction, withState, runDomain, logAction, stateId, connectionHint } from './db.js';
 import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
@@ -74,9 +74,9 @@ const methods={
  dashboard:['dashboard:view',false],
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
- registrations:['registrations:manage',false],
+ registrations:['registrations:manage',false],registerAdminVip:['registrations:manage',true],
  lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
- removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
+ removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
  giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
@@ -185,6 +185,37 @@ async function customMethod(req,name,args) {
  if(name==='giftTracker')return listGiftTracker();
  if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='registerAdminVip'){
+  requirePermission(actor,'people:write');
+  const input=args[0]||{};
+  if(input.privacy_consent!==true)throw httpError(400,'Consent is required.');
+  const first=String(input.first_name||'').trim(),last=String(input.last_name||'').trim();
+  const gender=String(input.sex||'').trim(),school=String(input.school||'').trim(),inviter=String(input.inviter||'').trim();
+  const age=Number(input.age),contact=String(input.contact_number||'').trim()||null;
+  const key=String(input.idempotency_key||'').trim();
+  if(!first||!last||first.length>120||last.length>120)throw httpError(400,'Enter first and last names.');
+  if(!['male','female'].includes(gender))throw httpError(400,'Choose Boy or Girl.');
+  if(!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Provide age, school and inviter.');
+  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(key))throw httpError(400,'Invalid registration request key.');
+  const hashed=hashToken(key);
+  return withState(async({data,client})=>{
+    const prior=(await client.query('SELECT id,person_id FROM vip_registrations WHERE idempotency_key=$1',[hashed])).rows[0];
+    if(prior)return {person_id:Number(prior.person_id),vip_registration_id:Number(prior.id),already_registered:true};
+    const person=await domain.createPerson({
+      first_name:first,last_name:last,full_name:first+' '+last,sex:gender,age,school,inviter,
+      contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true,
+      ...(input.photo?{photo:input.photo}:{})
+    });
+    const id=stateId(data,'vip_registrations'),recovery='LG-'+randomToken();
+    await client.query(`INSERT INTO vip_registrations
+      (id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id,person.id,first+' '+last,age,school,inviter,contact,hashToken(recovery),hashed]);
+    await logAction(client,actor,'vip_registrations',id,'staff_registration',{person_id:person.id});
+    return {person_id:person.id,vip_registration_id:id,recovery_code:recovery,already_registered:false};
+  },{write:true,actor});
+ }
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
  }

@@ -1,3 +1,4 @@
+import { recommendEligibleCells } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
 
@@ -548,9 +549,22 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
+      if (tier === 'solid' && current.tier !== 'solid') {
+        const solidCount = Number((await client.query(
+          "SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'",[groupId]
+        )).rows[0].n);
+        if (solidCount >= SOLID_TARGET) throw httpError(409, 'Closed cell is already at its six-member target.');
+      }
+      const changed = current.role !== role || current.tier !== tier;
       if (sex !== person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
-      await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
-      return { unchanged: true };
+      if (changed) {
+        await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
+        await logAction(client, actor, 'lifegroup_memberships', current.id, 'role_or_tier_change', {
+          person_id: personId, lifegroup_id: groupId,
+          previous_role: current.role, role, previous_tier: current.tier, tier,
+        });
+      }
+      return { unchanged: !changed && sex === person.sex };
     }
     if (current && !asBool(extra.confirm_move) && !asBool(extra.force_move)) {
       throw httpError(409, `This person is currently in ${current.group_name}. Confirm the move to continue.`, { current_group: current.group_name, current_group_id: Number(current.lifegroup_id) });
@@ -581,6 +595,35 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     return { unchanged: false };
   });
   return { ...await membershipForPerson(personId), unchanged: result.unchanged };
+}
+
+/** Assign an ungrouped person to an eligible Cell; never moves existing memberships.
+ * The existing assignMember transaction handles capacity, membership locks and audit log.
+ * On contention, try the next eligible cell and return a manual-review result if none remains.
+ */
+async function autoAssignMember(personId, prefs = {}, actor = null) {
+  const person = (await query('SELECT id,sex,archived_at,status,preferred_area,preferred_day,preferred_category FROM people WHERE id=$1',[personId])).rows[0];
+  if (!person || person.archived_at || person.status === 'inactive') throw httpError(404, 'Active person not found.');
+  const active = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
+  if (active) return { assigned: true, already_assigned: true, lifegroup_id: Number(active.lifegroup_id) };
+  if (!['male','female'].includes(person.sex)) return { assigned:false, reason:'sex_missing', needs_manual_assignment:true };
+  const gender = person.sex === 'male' ? 'boys' : 'girls';
+  const candidates = recommendEligibleCells(await listGroups({gender,status:'active'}),{
+    day:prefs.day || person.preferred_day, area:prefs.area || person.preferred_area,
+    category:prefs.category || person.preferred_category,
+  });
+  for (const cell of candidates) {
+    try {
+      const membership = await assignMember(cell.id,personId,{role:'member',tier:'new'},actor);
+      return { assigned:true, lifegroup_id:cell.id, membership, already_assigned:Boolean(membership.unchanged) };
+    } catch (error) {
+      // Never mask authorization or validation faults; only skip a Cell lost to contention.
+      if (error.status !== 409) throw error;
+      const nowActive = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
+      if (nowActive) return {assigned:true,already_assigned:true,lifegroup_id:Number(nowActive.lifegroup_id)};
+    }
+  }
+  return { assigned:false, reason:'no_eligible_cell', needs_manual_assignment:true };
 }
 
 async function leaveMember(groupId, personId, leftAt = today(), actor) {
@@ -901,7 +944,7 @@ async function lifegroupMethod(name, args, actor) {
     if (!['male','female'].includes(sex)) return { prefs, groups: [] };
     const gender = sex === 'male' ? 'boys' : 'girls';
     let groups = await listGroups({ gender, status: 'active' });
-    groups = groups.filter((g) => g.slots == null || g.slots > 0).map((g) => ({ ...g, score: Number(g.schedule_day === prefs.day) + Number(g.category && prefs.category && g.category.toLowerCase() === String(prefs.category).toLowerCase()), reasons: [] }));
+    groups = recommendEligibleCells(groups, prefs);
     return { prefs, groups };
   }
   if (name === 'lifegroup') return getGroup(asId(args[0], 'group ID'));
@@ -946,6 +989,7 @@ async function lifegroupMethod(name, args, actor) {
   }
   if (name === 'removeCellLeaderFromTree') return removeCellLeaderFromTree(asId(args[0],'group ID'),actor);
   if (name === 'removeMemberFromTree') return removeMemberFromTree(asId(args[0],'group ID'),asId(args[1],'person ID'),actor);
+  if (name === 'autoAssignLifegroup') return autoAssignMember(asId(args[0],'person ID'),args[1] || {},actor);
   if (name === 'assignLifegroup') return assignMember(asId(args[0],'group ID'),asId(args[1],'person ID'),args[2] || {},actor);
   if (name === 'leaveLifegroup') return leaveMember(asId(args[0],'group ID'),asId(args[1],'person ID'),clean(args[2]) || today(),actor);
   if (name === 'setTier') {

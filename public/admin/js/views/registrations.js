@@ -1,3 +1,4 @@
+import {createAddNewModal} from './unifiedAddNew.js';
 import { api } from '../api.js';
 import { state, can } from '../app.js';
 import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce, statusBadge, confirmDialog, esc } from '../ui.js';
@@ -33,12 +34,14 @@ export async function refreshPendingBadge(){
 }
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
- main.innerHTML=html`<div class="page-header"><div><h1>VIP registrations</h1><p class="sub">From the LIFEGEN website, directly into the shared database.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
+ main.innerHTML=html`<div class="page-header"><div><h1>Registration</h1><p class="sub">Register People and manage VIP follow-up.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
+ <div class="card mb-2"><div class="card__header"><h2>Register a person</h2></div><div class="card__body"><div class="row" style="gap:8px;flex-wrap:wrap">${can('people:write')?['network','cell','member','vip'].map((mode,i)=>html`<button type="button" class="btn" data-register-mode="${mode}">${['Network Leader','Cell Leader','Member','VIP'][i]}</button>`).join(''):html`<p class="small muted">Your role can review VIP registrations, but cannot create People records.</p>`}</div><p class="small muted mt-2">VIPs without an eligible Cell assignment can be managed in Needs Cell.</p></div></div>
  <div class="sync-note mb-2"><b>VIP follow-up:</b> every signup creates a linked People record and immediately appears in the <a href="#/lifegroups?tab=needs">Lifegroup Tracker follow-up queue</a> until a group is selected. The monthly prize streak remains visible here; it does not export or move VIPs into a group.</div>
  <div class="card mb-2" id="giftCard"><div class="card__header"><h2>${icon('gift')} VIP Gift Tracker</h2><p class="small muted">Track Sunday attendance and gift eligibility.</p></div>
   <div class="card__body"><div class="kpi-row" id="giftKpis"></div><div class="stack mt-2" id="giftList"><div class="loading">Loading…</div></div></div></div>
  <div class="card mb-2"><div class="card__header"><h2>Sunday check-ins awaiting validation</h2></div><div class="card__body" id="pendingChecks">Loading…</div></div>
  <div class="toolbar"><div class="filter-tabs" id="vipFilters"><button data-f="new" class="${filter==='new'?'active':''}">New</button><button data-f="reviewed" class="${filter==='reviewed'?'active':''}">Reviewed</button><button data-f="all" class="${filter==='all'?'active':''}">All</button></div><div class="gsearch grow">${icon('search')}<input id="vipSearch" type="search" value="${search}" placeholder="Search VIP, inviter or contact" aria-label="Search registrations"/></div></div><div class="card" id="vipList"></div>`;
+ main.querySelectorAll('[data-register-mode]').forEach(button=>button.addEventListener('click',()=>createAddNewModal({initialTab:button.dataset.registerMode,onSaved:()=>load()})));
  async function load(){
   loadGiftTracker();
   const box=main.querySelector('#pendingChecks'),list=main.querySelector('#vipList');if(!box||!list)return;
