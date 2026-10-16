@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, statSync, openSync, readSync, closeSync} from 'node:fs';
+import {readFileSync, openSync, fstatSync, readSync, closeSync} from 'node:fs';
 
 const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
 const page=read('../public/lifegen/index.html');
@@ -26,12 +26,14 @@ test('Janime uses a first-party MP4, with no Google iframe or crop',()=>{
 });
 
 test('optimized MP4 is present, deployable, and has the correct file signature',()=>{
- const file=statSync(media);
- assert.ok(file.size>5_000_000,'not a truncated file');
- assert.ok(file.size<90_000_000,'below GitHub file size limit');
- const fd=openSync(media,'r'),buf=Buffer.alloc(12);
- try{assert.equal(readSync(fd,buf,0,12,0),12);}finally{closeSync(fd);}
- assert.equal(buf.toString('ascii',4,8),'ftyp');
+ const fd=openSync(media,'r');
+ try{
+  const file=fstatSync(fd),buf=Buffer.alloc(12);
+  assert.ok(file.size>5_000_000,'not a truncated file');
+  assert.ok(file.size<90_000_000,'below GitHub file size limit');
+  assert.equal(readSync(fd,buf,0,12,0),12);
+  assert.equal(buf.toString('ascii',4,8),'ftyp');
+ }finally{closeSync(fd);}
 });
 
 test('native HTML5 playback uses built-in controls and preserves original fallback link',()=>{

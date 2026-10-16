@@ -23,17 +23,24 @@ const pages = ['public/lifegen/index.html', 'public/vip-announce/index.html', 'p
 const REF = /((?:src|href)=")(\/[^"?]+\.(?:css|js))\?v=(\d+)\.(\d+)\.(\d+)(")/g;
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
-const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : {};
+const readIfPresent = file => {
+  try { return fs.readFileSync(file); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+};
+const manifestBytes = readIfPresent(manifestPath);
+const manifest = manifestBytes ? JSON.parse(manifestBytes.toString('utf8')) : {};
 const changes = [];
 
 for (const page of pages) {
   const file = path.join(root, page);
-  if (!fs.existsSync(file)) continue;
-  let html = fs.readFileSync(file, 'utf8');
+  const pageBytes = readIfPresent(file);
+  if (!pageBytes) continue;
+  let html = pageBytes.toString('utf8');
   const rewritten = html.replace(REF, (match, pre, url, major, minor, patch, post) => {
     const asset = path.join(root, 'public', url);
-    if (!fs.existsSync(asset)) return match;
-    const hash = sha(fs.readFileSync(asset));
+    const assetBytes = readIfPresent(asset);
+    if (!assetBytes) return match;
+    const hash = sha(assetBytes);
     const version = `${major}.${minor}.${patch}`;
     const recorded = manifest[url];
     if (recorded && recorded.version === version && recorded.sha256 !== hash) {
