@@ -39,7 +39,7 @@ export const can = (perm) => Boolean(state.user?.permissions?.includes(perm));
 // ---------------------------------------------------------------------------
 const routes = [
   { path: /^\/dashboard$/, view: renderDashboard, nav: 'dashboard', perm: 'dashboard:view' },
-  { path: /^\/people$/, view: renderPeople, nav: 'lifegroups', perm: 'people:view' },
+  { path: /^\/people$/, view: () => { location.replace('#/lifegroups?tab=people'); }, nav: 'lifegroups', perm: 'people:view' },
   { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'lifegroups', perm: 'people:write' },
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
