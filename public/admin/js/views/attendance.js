@@ -20,6 +20,24 @@ export async function renderAttendance({ main, query }) {
   let service = null;   // { id, present_count, ..., roster } — id is null until the first mark
   let filter = 'all';
   let search = '';
+  const scopeKind=query.person_id?'person':query.cell_id?'cell':query.network_id?'network':null;
+  const scopeId=Number(query.person_id||query.cell_id||query.network_id)||null;
+  let scopeIds=null,scopeLabel='';
+  if(scopeKind&&Number.isSafeInteger(scopeId)&&scopeId>0){
+    try{
+      if(scopeKind==='person'){scopeIds=new Set([scopeId]);scopeLabel='Selected person';}
+      if(scopeKind==='cell'){
+        const cell=await api.lifegroup(scopeId);
+        scopeIds=new Set([cell.leader_person_id,...(cell.members||[]).map(m=>m.id)].filter(Boolean).map(Number));
+        scopeLabel=cell.leader_name||cell.name||'Cell';
+      }
+      if(scopeKind==='network'){
+        const network=await api.network(scopeId);
+        scopeIds=new Set([network.leader_person_id,...(network.groups||[]).flatMap(g=>[g.leader_person_id,...(g.members||[]).map(m=>m.id)])].filter(Boolean).map(Number));
+        scopeLabel=network.leader_name||network.name||'Network';
+      }
+    }catch(e){scopeIds=null;toast('Unable to load the selected attendance context.','error');}
+  }
 
   main.innerHTML = html`
     <div class="page-header">
@@ -31,6 +49,7 @@ export async function renderAttendance({ main, query }) {
         <a class="btn" href="#/attendance/history">History</a>
       </div>
     </div>
+    ${scopeIds?html`<div class="sync-note mb-2"><b>Attendance context:</b> ${scopeLabel}. Showing matching People in the Sunday roster. <a href="#/lifegroups">Back to Lifegroups</a> · <a href="#/attendance?date=${date}">Show everyone</a></div>`:''}
     <div id="content"><div class="loading">Loading…</div></div>`;
 
   const content = main.querySelector('#content');
@@ -40,7 +59,7 @@ export async function renderAttendance({ main, query }) {
   const setDate = (d) => {
     if (d > today) { toast('Future Sundays cannot be recorded yet.', 'info'); return; }
     date = d; dateInput.value = d;
-    history.replaceState(null, '', `#/attendance?date=${d}`);
+    history.replaceState(null, '', '#/attendance'+api.qs({date:d,...(scopeIds?{[scopeKind+'_id']:scopeId}:{})}));
     load();
   };
   main.querySelector('#prevSunday').onclick = () => setDate(addDays(date, -7));
@@ -148,6 +167,7 @@ export async function renderAttendance({ main, query }) {
     return service.roster.filter((p) => {
       if (filter === 'present' && p.att_status !== 'present') return false;
       if (filter === 'unmarked' && p.att_status === 'present') return false;
+      if (scopeIds&&!scopeIds.has(Number(p.id))) return false;
       if (search) {
         const hay = `${p.first_name} ${p.last_name} ${p.last_name} ${p.first_name} ${p.person_code}`.toLowerCase();
         if (!hay.includes(search)) return false;
