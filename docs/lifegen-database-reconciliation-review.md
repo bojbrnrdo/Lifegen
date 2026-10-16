@@ -27,3 +27,17 @@ Audit date: 2026-10-17 (Philippine time). Supabase project `kmcvszqkrnzhexbdbbig
 - Rerun `docs/sql/lifegen-readonly-reconciliation-audit.sql`; verify no unexpected record loss and registration/attendance flows.
 
 **Warning:** Do not put SQL migrations into `database/` until the release is explicitly approved: `scripts/migrate.mjs` may run SQL at build/deploy time. This is a review document, not migration authorization.
+
+## Classification preview execution (read-only)
+Ran `docs/sql/lifegen-classification-backfill-preview.sql` against the production project with **no writes**:
+
+| Person ID | Suggested classification | Follow-up |
+|---|---|---|
+| 1 | — | No leadership, membership or VIP record; manual classification |
+| 2 | — | No leadership, membership or VIP record; manual classification |
+| 3 | — | Active Network **and** Cell leader; resolve dual leadership first |
+| 4 | Cell Leader | Active Cell leader and active membership; verify expected role handling |
+| 5 | Member | Active membership; verify registration history before backfill |
+| 6 | Member | Active membership; verify registration history before backfill |
+
+The preview suggests **three candidate records**, but it does **not** authorize automatic updates. Explicitly confirm all classifications before a write migration; in particular, missing VIP registration history should not be interpreted as definitive evidence that someone is not a VIP.
