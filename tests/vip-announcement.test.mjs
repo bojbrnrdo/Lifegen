@@ -262,7 +262,7 @@ test('the projector updates in place so fullscreen survives a data change', asyn
   assert.match(js, /startPolling/);
   // Rendering uses textContent for user-supplied strings, so a name cannot inject markup.
   assert.match(js, /name\.textContent = vip\.full_name/);
-  assert.match(js, /who\.textContent = vip\.inviter/);
+  assert.match(js, /who\.textContent = noInviter \? 'not recorded' : vip\.inviter/);
   assert.doesNotMatch(js, /innerHTML\s*=/);
 });
 
