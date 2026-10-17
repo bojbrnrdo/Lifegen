@@ -83,6 +83,21 @@ try {
   const queuedVip = needs.find((row) => row.id === personId);
   assert.ok(queuedVip?.is_vip, 'new public VIP is immediately in the Lifegroup needs queue and identified as a VIP');
 
+  // Public signup may not include gender. The automatic matcher must not
+  // guess it or create a membership; staff can complete the profile first.
+  const pendingAuto = await json('/api/tracker/autoAssignLifegroup', {
+    method: 'POST',
+    body: { args: [personId, {}] },
+    auth: session,
+  });
+  assert.equal(pendingAuto.assigned, false, 'VIP without gender cannot be auto-assigned');
+  assert.equal(pendingAuto.reason, 'sex_missing', 'missing gender is explicitly reported');
+  assert.equal(pendingAuto.needs_manual_assignment, true, 'VIP remains queued for manual review');
+  const pendingNeeds = await json('/api/tracker/lifegroupNeeds', {
+    method: 'POST', body: { args: [{}] }, auth: session,
+  });
+  assert.ok(pendingNeeds.some((row) => row.id === personId), 'unassigned VIP remains in follow-up queue');
+
   const group = await json('/api/tracker/createLifegroup', {
     method: 'POST',
     body: { args: [{ name: `Integration ${idempotencyKey.slice(0, 8)}`, gender: 'boys', is_demo: true }] },
