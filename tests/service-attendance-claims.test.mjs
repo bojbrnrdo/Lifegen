@@ -14,6 +14,16 @@ test('each person can have only one claim per service',()=>{
  assert.match(sql,/UNIQUE \(service_id,person_id\)/);
  assert.match(api,/ON CONFLICT \(service_id,person_id\)/);
 });
+test('admin review requires permission and pending claim',()=>{
+ const app=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
+ assert.match(app,/validateRegularCheckin:\['attendance:write',true\]/);
+ assert.match(app,/claim.status!=='pending'/);
+ assert.match(app,/logAction\(client,actor,'service_attendance_claims'/);
+});
+test('repeat scan reads existing claim without updating validation status',()=>{
+ assert.match(api,/ON CONFLICT \(service_id,person_id\) DO NOTHING/);
+ assert.match(api,/SELECT id,status FROM service_attendance_claims WHERE service_id=/);
+});
 test('public claimant cannot directly write valid status',()=>{
  assert.match(sql,/status text NOT NULL DEFAULT 'pending'/);
  assert.match(api,/INSERT INTO service_attendance_claims\(service_id,person_id,source\)/);
