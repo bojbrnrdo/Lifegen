@@ -105,7 +105,7 @@ publicRouter.get('/service-checkin',async(req,res)=>{
  res.json({service_date:pass.service_date,registered:!!(vip||attendee),identity_type:vip?'vip':attendee?'regular':null,
    regular_passes_enabled:attendeePassesEnabled(),
    csrf_token:vip?.csrf_token||attendee?.csrf_token||null,attendee:name?{name}:null,
-   can_check_in:serviceCheckinOpen(pass.service_date)&&!!vip});
+   can_check_in:serviceCheckinOpen(pass.service_date)&&(!!vip||!!attendee)});
 });
 publicRouter.post('/service-checkin',async(req,res)=>{
  checkOrigin(req);await rateLimit(req,'checkin',20);
@@ -113,8 +113,21 @@ publicRouter.post('/service-checkin',async(req,res)=>{
  if(!pass)return res.status(400).json({error:'Invalid service QR.'});
  if(!serviceCheckinOpen(pass.service_date))return res.status(403).json({error:'Check-in is available only during this Sunday service.'});
  const vip=await readVip(req);
- if(!vip)return res.status(401).json({error:'Please recover or register your VIP portal before checking in.'});
- if(!safeEqual(req.get('x-csrf-token'),vip.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
+ const attendee=vip?null:await readAttendeeSession(req);
+ if(!vip&&!attendee)return res.status(401).json({error:'Recover your attendee pass or VIP portal before checking in.'});
+ if(!safeEqual(req.get('x-csrf-token'),vip?.csrf_token||attendee?.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
+ if(attendee){
+  if(process.env.SERVICE_ATTENDANCE_CLAIMS_ENABLED!=='true')throw httpError(503,'Regular self-check-in is awaiting staff activation.');
+  const result=await transaction(async client=>{
+   const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
+   if(!service)throw httpError(404,'Service unavailable.');
+   const claim=(await client.query(`INSERT INTO service_attendance_claims(service_id,person_id,source)
+    VALUES($1,$2,'regular') ON CONFLICT (service_id,person_id) DO UPDATE SET service_id=EXCLUDED.service_id
+    RETURNING id,status`,[service.id,attendee.person_id])).rows[0];
+   return claim;
+  });
+  return res.json({status:result.status,message:result.status==='valid'?'Attendance already confirmed.':'Check-in submitted for staff validation.'});
+ }
  const result=await transaction(async client=>{
   const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
   if(!service)throw httpError(404,'Service unavailable.');
