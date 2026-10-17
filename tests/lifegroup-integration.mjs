@@ -79,6 +79,21 @@ try {
   registrationId = Number(registration.vip.id);
   assert.ok(personId > 0 && registrationId > 0, 'VIP registration creates linked Person and registration rows');
 
+  const repeated = await json('/api/public/registrations', {
+    method: 'POST',
+    body: {
+      full_name: `Tracker QA ${idempotencyKey.slice(0, 8)}`,
+      age: 22,
+      school: 'Local integration test',
+      inviter: 'Automated test',
+      privacy_consent: true,
+      idempotency_key: idempotencyKey,
+    },
+  });
+  assert.equal(Number(repeated.vip.id), registrationId, 'replayed registration retains original VIP registration');
+  assert.equal(Number(repeated.vip.person_id), personId, 'replayed registration retains original Person');
+  assert.equal(repeated.already_registered, true, 'repeated registration reports an existing registration');
+
   const needs = await json('/api/tracker/lifegroupNeeds', { method: 'POST', body: { args: [{}] }, auth: session });
   const queuedVip = needs.find((row) => row.id === personId);
   assert.ok(queuedVip?.is_vip, 'new public VIP is immediately in the Lifegroup needs queue and identified as a VIP');
