@@ -633,6 +633,21 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     if (roleInput && !['member','leader','assistant'].includes(roleInput)) throw httpError(400, 'Choose a valid group role.');
     const tierInput = clean(extra.tier);
     if (tierInput && !['new','solid'].includes(tierInput)) throw httpError(400, 'Choose Open cell or Closed cell.');
+    // Parent-linked assignments are intentionally gated until the additive schema is deployed.
+    // This check precedes any person/membership mutation and avoids undefined links.
+    if (extra.parent_membership_id !== undefined && extra.parent_membership_id !== null && extra.parent_membership_id !== '') {
+      const parentId=asId(extra.parent_membership_id,'Closed Cell parent membership ID');
+      if (tierInput === 'solid') throw httpError(400,'Closed Cell members cannot have a Closed Cell parent.');
+      const column=(await client.query(`SELECT 1 FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='lifegroup_memberships'
+        AND column_name='parent_membership_id'`)).rows[0];
+      if (!column) throw httpError(409,'Closed Cell parent assignments are awaiting the approved database migration.');
+      const candidate=(await client.query(`SELECT id,person_id,lifegroup_id,tier,left_at
+        FROM lifegroup_memberships WHERE id=$1 FOR UPDATE`,[parentId])).rows[0];
+      validateOpenCellParent({id:-1,person_id:personId,lifegroup_id:groupId,tier:tierInput||'new',left_at:null},candidate);
+      // This route does not yet persist the new relationship. Do not claim it succeeded.
+      throw httpError(409,'Parent assignment persistence is not enabled yet; no changes were made.');
+    }
     const networkLeadership = (await client.query('SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1', [personId])).rows[0];
     if (networkLeadership && group.leader_person_id !== personId) {
       throw httpError(409, `${person.first_name} ${person.last_name} leads ${networkLeadership.name} and cannot be a member under another Lifegroup leader.`);
