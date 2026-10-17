@@ -181,9 +181,11 @@
       const inviter = document.createElement('p');
       inviter.className = 'vip-inviter';
       const lead = document.createElement('span');
-      lead.textContent = 'Invited by';
+      // The server's fallback text means no inviter was recorded; say that plainly.
+      const noInviter = vip.inviter === 'Inviter not specified';
+      lead.textContent = noInviter ? 'Inviter' : 'Invited by';
       const who = document.createElement('b');
-      who.textContent = vip.inviter;
+      who.textContent = noInviter ? 'not recorded' : vip.inviter;
       inviter.append(lead, document.createTextNode(' '), who);
 
       card.append(avatar, name, inviter);
@@ -345,7 +347,7 @@
         if (n.showInviter !== false) {
           const inv = document.createElement('p');
           inv.className = 'o-inviter';
-          inv.textContent = `Invited by ${vip.inviter}`;
+          inv.textContent = vip.inviter === 'Inviter not specified' ? 'Inviter not recorded' : `Invited by ${vip.inviter}`;
           li.append(inv);
         }
         ul.append(li);
