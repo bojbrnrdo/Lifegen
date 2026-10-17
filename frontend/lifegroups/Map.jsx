@@ -6,6 +6,7 @@ import {Users,UserRound,Network,CalendarClock,AlertTriangle,Plus,ArrowRightLeft,
  Search,X,Maximize2,Trash2} from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './map.css';
+import {splitMemberHierarchy} from './memberHierarchy.js';
 
 const W=190,H=202;
 const profiles=new WeakMap();
@@ -24,7 +25,7 @@ function nodeAvatar({person}){
 const Avatar=({person})=>nodeAvatar({person});
 const TreeNode=memo(({data})=>{
  const {entry,expanded,expandable,selected,activate,alert}=data;
- const label=entry.role==='network'?'Network Leader':entry.role==='cell'?'Cell Leader':'Member';
+ const label=entry.role==='network'?'Network Leader':entry.role==='cell'?'Cell Leader':entry.person?.tier==='solid'?'Closed Cell':entry.person?.tier==='new'?'Open Cell':'Member';
  const title=name(entry.person);
  const onKeyDown=e=>{
   if(e.key!=='Enter'&&e.key!==' ')return;
@@ -88,8 +89,16 @@ function buildRows(networks,groups,members,expanded,filters){
    if(q&&!matching.has(cid)&&!matching.has(nc))continue;
    add(cid,nc,'cell',g,g.is_active,g.member_count,g.id);
    if(!expanded.has(cid)&&!q)continue;
-   for(const m of members.get(g.id)||[])if(!m.left_at&&(!q||matchingMembers.has('m'+g.id+'-'+m.id)||(name(g)+' '+g.name).toLowerCase().includes(q)||(name(n)+' '+n.name).toLowerCase().includes(q))){
-    add('m'+g.id+'-'+m.id,cid,'member',m,m.status!=='inactive',0,g.id);
+   const {roots,children}=splitMemberHierarchy(members.get(g.id)||[]);
+   const matches=m=>!q||matchingMembers.has('m'+g.id+'-'+m.id)||(name(g)+' '+g.name).toLowerCase().includes(q)||(name(n)+' '+n.name).toLowerCase().includes(q);
+   for(const m of roots){
+    const mid='m'+g.id+'-'+m.id;
+    const attached=children.get(Number(m.membership_id))||[];
+    if(!matches(m)&&!attached.some(matches))continue;
+    add(mid,cid,'member',m,m.status!=='inactive',attached.length,g.id);
+    if((expanded.has(mid)||q)&&m.tier==='solid')for(const child of attached){
+     if(matches(child)||matches(m))add('m'+g.id+'-'+child.id,mid,'member',child,child.status!=='inactive',0,g.id);
+    }
    }
   }
  }
@@ -164,7 +173,7 @@ function Dashboard({data,callbacks}){
  const activate=useCallback(row=>{
   // A single click on the circle opens leader details AND reveals their
   // connected Cells/Members. Clicking it again collapses that branch.
-  if(row.role!=='member')toggle(row.id);
+  if(row.role!=='member'||(row.person?.tier==='solid'&&row.count>0))toggle(row.id);
   select(row);
  },[select,toggle]);
  // Relationships come from authorized LIFEGEN data, not mock nodes.
@@ -203,7 +212,7 @@ function Dashboard({data,callbacks}){
   select(item);
  },[data.groups,select,callbacks]);
  const nodes=useMemo(()=>getLayout(rows,edges).map(n=>({
-  ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member',
+  ...n,data:{...n.data,expanded:expanded.has(n.id),expandable:n.data.entry.role!=='member'||(n.data.entry.person?.tier==='solid'&&n.data.entry.count>0),
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
