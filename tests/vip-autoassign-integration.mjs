@@ -79,6 +79,19 @@ try{
  }]},auth);
  fixtures.meeting=Number(attendance.meeting_id);
  assert.ok(attendance.progress.members.some(p=>Number(p.id)===vipId),'VIP included in meeting progress');
+ const attendanceVerifier=new pg.Client({connectionString:db,ssl:false});
+ try{
+  await attendanceVerifier.connect();
+  const saved=await attendanceVerifier.query(
+   'SELECT a.present,a.absent,a.devotion,m.lifegroup_id FROM lifegroup_meeting_attendance a JOIN lifegroup_meetings m ON m.id=a.meeting_id WHERE a.meeting_id=$1 AND a.person_id=$2',
+   [fixtures.meeting,vipId]
+  );
+  assert.equal(saved.rowCount,1,'one persisted attendance record for VIP');
+  assert.equal(saved.rows[0].present,true,'VIP attendance persisted as present');
+  assert.equal(saved.rows[0].absent,false,'VIP attendance not marked absent');
+  assert.equal(Number(saved.rows[0].lifegroup_id),fixtures.cell,'attendance belongs to assigned Cell');
+ }finally{await attendanceVerifier.end().catch(()=>{});}
+
  console.log('PASS: signup -> eligible non-demo Cell auto-assignment -> idempotency -> attendance');
 }finally{
  try{
