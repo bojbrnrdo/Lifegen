@@ -635,20 +635,16 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     if (roleInput && !['member','leader','assistant'].includes(roleInput)) throw httpError(400, 'Choose a valid group role.');
     const tierInput = clean(extra.tier);
     if (tierInput && !['new','solid'].includes(tierInput)) throw httpError(400, 'Choose Open cell or Closed cell.');
-    // Parent-linked assignments are intentionally gated until the additive schema is deployed.
-    // This check precedes any person/membership mutation and avoids undefined links.
-    if (extra.parent_membership_id !== undefined && extra.parent_membership_id !== null && extra.parent_membership_id !== '') {
-      const parentId=asId(extra.parent_membership_id,'Closed Cell parent membership ID');
-      if (tierInput === 'solid') throw httpError(400,'Closed Cell members cannot have a Closed Cell parent.');
-      const column=(await client.query(`SELECT 1 FROM information_schema.columns
-        WHERE table_schema='public' AND table_name='lifegroup_memberships'
-        AND column_name='parent_membership_id'`)).rows[0];
-      if (!column) throw httpError(409,'Closed Cell parent assignments are awaiting the approved database migration.');
-      const candidate=(await client.query(`SELECT id,person_id,lifegroup_id,tier,left_at
-        FROM lifegroup_memberships WHERE id=$1 FOR UPDATE`,[parentId])).rows[0];
-      validateOpenCellParent({id:-1,person_id:personId,lifegroup_id:groupId,tier:tierInput||'new',left_at:null},candidate);
-      // This route does not yet persist the new relationship. Do not claim it succeeded.
-      throw httpError(409,'Parent assignment persistence is not enabled yet; no changes were made.');
+    const requestedParent=optionalId(extra.parent_membership_id,'Closed Cell parent membership ID');
+    let parentMembership=null;
+    if(requestedParent){
+      if(tierInput==='solid')throw httpError(400,'Closed Cell members cannot have a parent.');
+      const column=(await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+        AND table_name='lifegroup_memberships' AND column_name='parent_membership_id'`)).rows[0];
+      if(!column)throw httpError(409,'Parent assignments require the approved database migration.');
+      parentMembership=(await client.query(`SELECT id,person_id,lifegroup_id,tier,left_at
+        FROM lifegroup_memberships WHERE id=$1 FOR UPDATE`,[requestedParent])).rows[0];
+      validateOpenCellParent({id:-1,person_id:personId,lifegroup_id:groupId,tier:'new',left_at:null},parentMembership);
     }
     const networkLeadership = (await client.query('SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1', [personId])).rows[0];
     if (networkLeadership && group.leader_person_id !== personId) {
@@ -659,6 +655,7 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       WHERE m.person_id=$1 AND m.left_at IS NULL FOR UPDATE OF m`, [personId])).rows[0];
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
+    if(requestedParent && tier!=='new')throw httpError(400,'Only Open Cell members can have a Closed Cell parent.');
     if (current && Number(current.lifegroup_id) === groupId) {
       if (tier === 'solid' && current.tier !== 'solid') {
         const solidCount = Number((await client.query(
@@ -666,10 +663,12 @@ async function assignMember(groupId, personId, extra = {}, actor) {
         )).rows[0].n);
         if (solidCount >= SOLID_TARGET) throw httpError(409, 'Closed cell is already at its six-member target.');
       }
-      const changed = current.role !== role || current.tier !== tier;
+      if(requestedParent && current.tier==='solid')throw httpError(409,'Reassign Closed Cell members before changing their role.');
+      const changed = current.role !== role || current.tier !== tier || Boolean(requestedParent);
       if (sex !== person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
       if (changed) {
-        await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
+        if(requestedParent)await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2,parent_membership_id=$3 WHERE id=$4', [role,tier,requestedParent,current.id]);
+        else await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
         await logAction(client, actor, 'lifegroup_memberships', current.id, 'role_or_tier_change', {
           person_id: personId, lifegroup_id: groupId,
           previous_role: current.role, role, previous_tier: current.tier, tier,
@@ -697,11 +696,16 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     if (!person.sex && selectedSex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
     if (current) await client.query('UPDATE lifegroup_memberships SET left_at=$1 WHERE id=$2', [joined,current.id]);
     const membershipId = await allocateId(client, 'lifegroup_memberships');
-    await client.query(`INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at,notes,assigned_by)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [membershipId,personId,groupId,role,tier,joined,stringField(extra.notes,'Notes',{max:1000}),actor?.id || null]);
+    if(requestedParent){
+      await client.query(`INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at,notes,assigned_by,parent_membership_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[membershipId,personId,groupId,role,tier,joined,stringField(extra.notes,'Notes',{max:1000}),actor?.id||null,requestedParent]);
+    }else{
+      await client.query(`INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at,notes,assigned_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [membershipId,personId,groupId,role,tier,joined,stringField(extra.notes,'Notes',{max:1000}),actor?.id || null]);
+    }
     await logAction(client, actor, 'lifegroup_memberships', membershipId, current ? 'move' : 'assign', {
       person_id: personId, lifegroup_id: groupId, from_lifegroup_id: current ? Number(current.lifegroup_id) : null,
-      tier, role,
+      tier, role, parent_membership_id:requestedParent,
     });
     return { unchanged: false };
   });
