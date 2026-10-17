@@ -393,6 +393,7 @@ app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
 app.get(['/vip-announce','/vip-announce/','/vip-announce/index.html'],(req,res)=>page(res,'vip-announce'));
 app.get(['/tracker','/tracker/index.html'],(req,res)=>res.redirect(308,'/admin'));
 app.get(['/lifegen','/lifegen/index.html'],(req,res)=>res.redirect(308,'/'));
+app.get(['/checkin','/checkin/'],(req,res)=>res.sendFile(path.join(root,'public','checkin','index.html')));
 app.get('/privacy',async(req,res)=>{
  let settings={};try{settings=Object.fromEntries((await query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]));}catch{}
  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
