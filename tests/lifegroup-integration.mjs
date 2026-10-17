@@ -17,8 +17,19 @@ if (!process.env.LIFEGEN_INTEGRATION_ADMIN_PASSWORD) {
   process.exit(2);
 }
 
+// Both connections must stay on a loopback host: migrations and app writes
+// may use DATABASE_DIRECT_URL independently of DATABASE_URL.
+const directUrl = process.env.LIFEGEN_INTEGRATION_DIRECT_URL || databaseUrl;
+let directParsed;
+try { directParsed = new URL(directUrl); }
+catch { console.error('LIFEGEN_INTEGRATION_DIRECT_URL must be a valid local PostgreSQL URL.'); process.exit(2); }
+if (!['localhost', '127.0.0.1', '::1'].includes(directParsed.hostname)) {
+  console.error('Refusing integration writes: LIFEGEN_INTEGRATION_DIRECT_URL must be local.');
+  process.exit(2);
+}
+
 process.env.DATABASE_URL = databaseUrl;
-process.env.DATABASE_DIRECT_URL = process.env.LIFEGEN_INTEGRATION_DIRECT_URL || databaseUrl;
+process.env.DATABASE_DIRECT_URL = directUrl;
 process.env.LOCAL_DEMO = 'true';
 process.env.NODE_ENV = 'test';
 const { default: app } = await import('../src/app.js');
@@ -71,6 +82,21 @@ try {
   const needs = await json('/api/tracker/lifegroupNeeds', { method: 'POST', body: { args: [{}] }, auth: session });
   const queuedVip = needs.find((row) => row.id === personId);
   assert.ok(queuedVip?.is_vip, 'new public VIP is immediately in the Lifegroup needs queue and identified as a VIP');
+
+  // Public signup may not include gender. The automatic matcher must not
+  // guess it or create a membership; staff can complete the profile first.
+  const pendingAuto = await json('/api/tracker/autoAssignLifegroup', {
+    method: 'POST',
+    body: { args: [personId, {}] },
+    auth: session,
+  });
+  assert.equal(pendingAuto.assigned, false, 'VIP without gender cannot be auto-assigned');
+  assert.equal(pendingAuto.reason, 'sex_missing', 'missing gender is explicitly reported');
+  assert.equal(pendingAuto.needs_manual_assignment, true, 'VIP remains queued for manual review');
+  const pendingNeeds = await json('/api/tracker/lifegroupNeeds', {
+    method: 'POST', body: { args: [{}] }, auth: session,
+  });
+  assert.ok(pendingNeeds.some((row) => row.id === personId), 'unassigned VIP remains in follow-up queue');
 
   const group = await json('/api/tracker/createLifegroup', {
     method: 'POST',
