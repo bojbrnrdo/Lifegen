@@ -146,6 +146,8 @@ export async function renderAttendance({ main, query }) {
 
   function renderRoster() {
     const c = counts();
+    // QR generation requires an existing Sunday service record. Creating one
+    // remains an explicit staff action, never an unattended public mutation.
     content.innerHTML = html`
       ${canWrite && lock.message ? html`<div class="alert ${correction() ? 'alert--warn' : 'alert--info'} mb-2">${icon(correction() ? 'warn' : 'lock', 18)}<span>${lock.message}</span></div>` : ''}
       <div class="card mb-2">
@@ -158,6 +160,7 @@ export async function renderAttendance({ main, query }) {
             </div>
             <div class="row">
               ${writable && can('people:write') ? html`<button class="btn" id="quickAdd">${icon('plus')} New first timer</button>` : ''}
+              ${can('attendance:view') ? html`<button class="btn" id="printServiceQr">${icon('qr')} Print Service QR</button>` : ''}
               ${service.id ? html`<a class="btn btn--ghost" href="#/attendance/history/${service.id}">Details</a>` : ''}
             </div>
           </div>
