@@ -17,7 +17,8 @@ test('account-free passes require feature flag and verification',()=>{
 test('public attendee recovery requires same origin and rate limiting',()=>{
  assert.match(api,/checkOrigin\(req\);await rateLimit\(req,'attendee-restore',8\)/);
 });
-test('regular attendee cannot tap Present until a regular attendance claim backend exists',()=>{
- assert.match(api,/can_check_in:serviceCheckinOpen\(pass.service_date\)&&!!vip/);
- assert.match(client,/identity_type==='regular'/);
+test('regular check-in requires secure session and feature activation',()=>{
+ assert.match(api,/can_check_in:serviceCheckinOpen\(pass.service_date\)&&\(!!vip\|\|!!attendee\)/);
+ assert.match(api,/SERVICE_ATTENDANCE_CLAIMS_ENABLED!=='true'/);
+ assert.match(client,/identity_type/);
 });
