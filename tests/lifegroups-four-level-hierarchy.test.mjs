@@ -14,9 +14,12 @@ test('unlinked Open Cell stays at Cell root without fabricated parent',()=>{
  assert.equal(result.children.size,0);
 });
 test('foreign group and wrong-tier parents are never linked',()=>{
- for(const invalid of [{...open,lifegroup_id:9},{...solid,tier:'new'}]){
-  const result=splitMemberHierarchy([invalid===solid?invalid:solid, invalid===solid?open:invalid]);
-  if(invalid.tier==='new'&&invalid.lifegroup_id===8)continue;
+ for(const [parent,child] of [
+  [solid,{...open,lifegroup_id:9}],
+  [{...solid,tier:'new'},open],
+  [solid,{...open,person_id:solid.person_id}],
+ ]){
+  const result=splitMemberHierarchy([parent,child]);
   assert.equal(result.children.size,0);
  }
 });
