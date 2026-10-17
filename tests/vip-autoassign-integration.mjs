@@ -117,10 +117,10 @@ try{
   for(const id of fixtures.people)await client.query('DELETE FROM people WHERE id=$1',[id]);
   await client.query('COMMIT');
   const remaining=await client.query(
-   'SELECT (SELECT count(*)::int FROM people WHERE id=ANY($1::int[])) AS people, (SELECT count(*)::int FROM vip_registrations WHERE id=ANY($2::int[])) AS registrations, (SELECT count(*)::int FROM lifegroups WHERE id=$3) AS cells, (SELECT count(*)::int FROM networks WHERE id=$4) AS networks',
-   [fixtures.people,fixtures.registrations,fixtures.cell,fixtures.network]
+   'SELECT (SELECT count(*)::int FROM people WHERE id=ANY($1::int[])) AS people, (SELECT count(*)::int FROM vip_registrations WHERE id=ANY($2::int[])) AS registrations, (SELECT count(*)::int FROM lifegroups WHERE id=$3) AS cells, (SELECT count(*)::int FROM networks WHERE id=$4) AS networks, (SELECT count(*)::int FROM lifegroup_memberships WHERE person_id=ANY($1::int[]) OR lifegroup_id=$3) AS memberships, (SELECT count(*)::int FROM lifegroup_meetings WHERE id=$5 OR lifegroup_id=$3) AS meetings, (SELECT count(*)::int FROM lifegroup_meeting_attendance WHERE person_id=ANY($1::int[]) OR meeting_id=$5) AS attendance',
+   [fixtures.people,fixtures.registrations,fixtures.cell,fixtures.network,fixtures.meeting]
   );
-  assert.deepEqual(remaining.rows[0],{people:0,registrations:0,cells:0,networks:0},
+  assert.deepEqual(remaining.rows[0],{people:0,registrations:0,cells:0,networks:0,memberships:0,meetings:0,attendance:0},
    'disposable VIP integration fixtures must be fully removed');
  }catch(error){await client?.query('ROLLBACK').catch(()=>{});console.error('Local integration cleanup failed:',error.message);process.exitCode=1;}
  finally{await client?.end().catch(()=>{});await new Promise(resolve=>server.close(resolve));await closePool();}
