@@ -91,8 +91,8 @@ export async function currentPrize(client={query}) {
 // Attendee recovery requires possession of a high-entropy pass, not an email or name.
 publicRouter.post('/attendee/restore',async(req,res)=>{
  checkOrigin(req);await rateLimit(req,'attendee-restore',8);
- const restored=await restoreAttendeePass(req,res,req.body?.recovery_pass);
- res.json({ok:true,person_id:restored.person_id});
+ await restoreAttendeePass(req,res,req.body?.recovery_pass);
+ res.json({ok:true});
 });
 publicRouter.get('/service-checkin',async(req,res)=>{
  const pass=verifyServicePass(req.query?.t);
