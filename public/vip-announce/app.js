@@ -83,6 +83,10 @@
 
   const two = (n) => String(Math.max(0, n)).padStart(2, '0');
 
+  // First letters of the first two words, e.g. "Ana Reyes" -> "AR".
+  const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase()).join('') || '?';
+
   function setNum(key, value) {
     const node = cdNums[key];
     if (!node) return;
@@ -133,6 +137,8 @@
     const first = !state.booted;
     const fresh = [];
     const frag = document.createDocumentFragment();
+    // Fewer, larger cards for a short list; more columns as the list grows, so the board fills the screen.
+    el.roster.style.setProperty('--roster-cols', String(vips.length <= 4 ? 1 : vips.length <= 10 ? 2 : 3));
 
     vips.forEach((vip, index) => {
       const key = vip.full_name;
@@ -148,6 +154,12 @@
       card.style.animationDelay = `${Math.min(index, 24) * 28}ms`;
       if (!known && !first) card.classList.add('is-new');
 
+      const avatar = document.createElement('span');
+      avatar.className = 'vip-avatar';
+      avatar.dataset.tone = String(index % 3);
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = initials(vip.full_name);
+
       const name = document.createElement('p');
       name.className = 'vip-name';
       name.textContent = vip.full_name;
@@ -160,7 +172,7 @@
       who.textContent = vip.inviter;
       inviter.append(lead, document.createTextNode(' '), who);
 
-      card.append(name, inviter);
+      card.append(avatar, name, inviter);
 
       if (!known && !first) {
         const tag = document.createElement('span');

@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&amp;family=Instrument+Sans:ital,wght@0,400..700;1,400..700&amp;display=swap" rel="stylesheet"/>
-<link href="/vip-announce/styles.css?v=2.5.0" rel="stylesheet"/>
+<link href="/vip-announce/styles.css?v=2.5.1" rel="stylesheet"/>
 </head>
 <body>
 <a class="skip-link" href="#roster">Skip to the VIP list</a>
@@ -66,23 +66,23 @@
       <!-- Announcement: shown from the configured service start. -->
       <section aria-labelledby="welcomeHeading" class="phase phase-announce" id="announcePhase" hidden>
         <div class="announce-head">
-          <div>
-            <p class="eyebrow">LIFEGEN · Sunday service</p>
-            <h1 class="welcome" id="welcomeHeading">Welcome our <em>VIPs</em></h1>
-            <p class="svc-date">
-              <span id="svcDate">—</span>
-              <span aria-hidden="true" class="svc-dot"></span>
-              <span id="svcTime">1:00 – 3:00 PM</span>
-            </p>
-          </div>
-          <div class="count-badge" id="countBadge">
-            <strong id="countNum">00</strong>
-            <span id="countWord">VIPs TODAY</span>
-          </div>
+          <h1 class="welcome" id="welcomeHeading">Welcome our <em>VIPs</em></h1>
+          <p class="svc-date">
+            <span id="svcDate">—</span>
+            <span aria-hidden="true" class="svc-dot"></span>
+            <span id="svcTime">1:00 – 3:00 PM</span>
+          </p>
         </div>
 
         <div class="roster-wrap">
           <div class="roster" id="roster" role="list"></div>
+        </div>
+
+        <div class="count-row">
+          <div class="count-badge" id="countBadge">
+            <strong id="countNum">00</strong>
+            <span id="countWord">VIPs TODAY</span>
+          </div>
         </div>
 
         <div class="state-box" id="stateBox" hidden>
@@ -107,6 +107,6 @@
   </div>
 </main>
 
-<script defer src="/vip-announce/app.js?v=2.5.1"></script>
+<script defer src="/vip-announce/app.js?v=2.5.2"></script>
 </body>
 </html>
