@@ -93,7 +93,7 @@ const methods={
  registrations:['registrations:manage',false],registerAdminVip:['registrations:manage',true],
  lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
  removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],setDiscipleshipClassification:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
- registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
+ registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],pendingRegularCheckins:['attendance:view',false],validateRegularCheckin:['attendance:write',true],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
  giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],serviceQr:['attendance:view',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
 };
@@ -282,6 +282,33 @@ async function customMethod(req,name,args) {
  }
  if(name==='reviewRegistration')return transaction(async client=>{const id=validId(args[0]);const r=(await client.query('UPDATE vip_registrations SET review_status=\'reviewed\',reviewed_by=$1,reviewed_at=now() WHERE id=$2 RETURNING id,person_id,review_status',[actor.id,id])).rows[0];if(!r)throw httpError(404,'Registration not found.');await logAction(client,actor,'vip_registrations',id,'reviewed');return r;});
  if(name==='recoverRegistration')return transaction(async client=>{const id=validId(args[0]),code='LG-'+randomToken();if(!(await client.query('UPDATE vip_registrations SET recovery_hash=$1 WHERE id=$2 RETURNING id',[hashToken(code),id])).rows.length)throw httpError(404,'Registration not found.');await logAction(client,actor,'vip_registrations',id,'recovery_code_rotated');return {recovery_code:code};});
+ if(name==='pendingRegularCheckins'){
+  if(process.env.SERVICE_ATTENDANCE_CLAIMS_ENABLED!=='true')return [];
+  return (await query(`SELECT c.id,c.service_id,c.person_id,c.created_at,s.service_date::text AS date_key,
+    p.full_name,p.person_code,c.status FROM service_attendance_claims c
+    JOIN services s ON s.id=c.service_id JOIN people p ON p.id=c.person_id
+    WHERE c.source='regular' AND c.status='pending' ORDER BY c.created_at DESC LIMIT 300`)).rows;
+ }
+ if(name==='validateRegularCheckin'){
+  if(process.env.SERVICE_ATTENDANCE_CLAIMS_ENABLED!=='true')throw httpError(503,'Regular attendance claims are not active.');
+  const id=validId(args[0]),valid=args[1]===true;
+  return withState(async({data,client})=>{
+   const claim=(await client.query(`SELECT c.*,s.service_date::text AS service_date FROM service_attendance_claims c
+     JOIN services s ON s.id=c.service_id WHERE c.id=$1 FOR UPDATE OF c`,[id])).rows[0];
+   if(!claim)throw httpError(404,'Attendance claim not found.');
+   if(claim.status!=='pending')throw httpError(409,'This claim has already been reviewed.');
+   if(valid){
+    const existing=data.records.find(r=>Number(r.person_id)===Number(claim.person_id)&&Number(r.service_id)===Number(claim.service_id));
+    // Never overwrite a staff-recorded absence or another attendance source.
+    if(existing&&existing.status!=='present')throw httpError(409,'An existing attendance record requires staff review.');
+    if(!existing)await domain.mark(claim.service_id,claim.person_id,'present');
+   }
+   const status=valid?'valid':'invalid';
+   await client.query('UPDATE service_attendance_claims SET status=$1,validated_at=now(),validated_by=$2 WHERE id=$3',[status,actor.id,id]);
+   await logAction(client,actor,'service_attendance_claims',id,status,{person_id:claim.person_id,service_id:claim.service_id});
+   return {id,status};
+  },{actor,write:true});
+ }
  if(name==='pendingCheckins')return (await query('SELECT c.id,c.date_key,c.created_at,c.registration_id,v.person_id,v.full_name,p.person_code FROM vip_checkins c JOIN vip_registrations v ON v.id=c.registration_id JOIN people p ON p.id=v.person_id WHERE c.status=\'pending\' ORDER BY c.created_at DESC')).rows;
  if(name==='validateCheckin')return withState(async({data,client})=>{
   const id=validId(args[0]),valid=args[1]===true;
