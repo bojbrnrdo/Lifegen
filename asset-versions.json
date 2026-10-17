@@ -1,7 +1,7 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.2",
-    "sha256": "5f3995643dda297947c616e239f8ed04307fecc5d59eff6bbf4b669851387331"
+    "version": "2.4.3",
+    "sha256": "5c3cd5aeb9e237b12f1a3a207a66bf43fd76d98e4c49a2a497c5afc23208f866"
   },
   "/lifegen/backend.js": {
     "version": "2.4.9",
@@ -12,16 +12,16 @@
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.21",
-    "sha256": "c29f1c3e8ba57524b016d90ae7ed21fd30314fab03aca09efc88bcfb4106359f"
+    "version": "2.4.22",
+    "sha256": "24fa6e1f3ca110eae52090863380e70fc4f56b4285cbd1a225797d08a0784e07"
   },
   "/lifegen/videos.js": {
     "version": "2.4.10",
     "sha256": "a57c8cbf231d92c850c9680fc5978ec555278bf13ce258ea215e229eea0c153b"
   },
   "/vendor/lucide-subset.min.js": {
-    "version": "2.3.0",
-    "sha256": "a584f1bc0e463315d3a34004b4cc54194051e484dcab0b936646d65bf365f868"
+    "version": "2.3.1",
+    "sha256": "b222472fc3b3da350fe8e4440de861d549a1a899d8fa8244b890c6f5eac65f28"
   },
   "/vip-announce/app.js": {
     "version": "2.5.1",
