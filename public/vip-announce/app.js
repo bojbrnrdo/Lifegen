@@ -43,8 +43,6 @@
     stateBox: $('stateBox'),
     stateTitle: $('stateTitle'),
     stateBody: $('stateBody'),
-    updated: $('updated'),
-    sourceTag: $('sourceTag'),
     refreshBtn: $('refreshBtn'),
     fsBtn: $('fsBtn'),
     designLayer: $('designLayer'),
@@ -396,10 +394,6 @@
       }
     }
 
-    el.updated.textContent = `Updated ${new Date(payload.generated_at).toLocaleTimeString('en-PH', { hour12: true })}`;
-    el.sourceTag.textContent = payload.source === 'database'
-      ? `Live from the LIFEGEN database · ${payload.timezone}`
-      : 'Live from the LIFEGEN database';
 
     state.payload = payload;
     state.lastGoodAt = Date.now();
@@ -474,8 +468,6 @@
     if (state.payload) {
       setConn('error', 'Reconnecting');
       const age = Math.round((Date.now() - (state.lastGoodAt || Date.now())) / 1000);
-      el.updated.textContent = `Showing data from ${age < 60 ? `${age}s` : `${Math.round(age / 60)} min`} ago`;
-      el.sourceTag.textContent = 'Waiting for the database to respond';
       return;
     }
     el.stage.setAttribute('aria-busy', 'false');

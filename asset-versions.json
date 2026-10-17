@@ -24,8 +24,8 @@
     "sha256": "a584f1bc0e463315d3a34004b4cc54194051e484dcab0b936646d65bf365f868"
   },
   "/vip-announce/app.js": {
-    "version": "2.5.5",
-    "sha256": "29b5a040830c7dd638add8faae519b23f78a44a96b0c84bda2f180173da8644b"
+    "version": "2.5.6",
+    "sha256": "faafa3b4202bb14de23e943e7c11a91d15ff48819c703831f8092891b7dfe1be"
   },
   "/vip-announce/styles.css": {
     "version": "2.5.4",
