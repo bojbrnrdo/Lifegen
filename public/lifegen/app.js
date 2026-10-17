@@ -1055,6 +1055,23 @@ $("rgSubmit").addEventListener("click", async () => {
             note: note,
             fine: "Your details are stored securely in the LIFEGEN Supabase database."
         });
+        // Display the recovery pass only when the server issued one to a newly
+        // created attendee. Do not show one for email-matched People records.
+        if (r?.attendee_recovery_pass) {
+            const holder = document.createElement("div");
+            holder.className = "recovery-code-box";
+            const title = document.createElement("strong");
+            title.textContent = "Your private LIFEGEN attendee recovery pass";
+            const help = document.createElement("p");
+            help.textContent = "Save this pass in a private place. You can use it to recover attendance check-in access on another phone. Do not share it.";
+            const code = document.createElement("code");
+            code.textContent = r.attendee_recovery_pass;
+            const copy = document.createElement("button");
+            copy.type = "button"; copy.className = "btn btn-gold"; copy.textContent = "Copy recovery pass";
+            copy.addEventListener("click", () => navigator.clipboard.writeText(r.attendee_recovery_pass).then(() => toast("Recovery pass copied.", "check")).catch(() => toast("Please copy the recovery pass manually.", "info")));
+            holder.append(title, help, code, copy);
+            $("reg-success").prepend(holder);
+        }
     } catch (err) {
         toast("Registration failed: " + err.message, "alert-triangle");
     }
