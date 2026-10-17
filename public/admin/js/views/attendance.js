@@ -185,6 +185,20 @@ export async function renderAttendance({ main, query }) {
       content.querySelectorAll('#filterTabs button').forEach((x) => x.classList.toggle('active', x === b));
       drawList();
     };
+    content.querySelector('#printServiceQr')?.addEventListener('click',async()=>{
+      try{
+        if(!service.id){
+          if(!writable)throw new Error('Open the Sunday service before generating its QR.');
+          await ensureService();
+        }
+        const qr=await api.serviceQr(service.id);
+        const modal=openModal({title:'Print Sunday Service QR',subtitle:fmtDate(date,{weekday:true}),
+          body:html`<div class="qr-poster"><div class="qr-poster__code">${raw(qr.svg)}</div><p>Scan this QR, identify yourself, and tap Present.</p><p class="small">${qr.url}</p><p class="small muted">This printed QR is valid only for the selected Sunday. VIPs submit a check-in for staff validation.</p></div>`,
+          footer:'<button type="button" class="btn" data-print-qr>Print QR</button><button type="button" class="btn" data-close-qr>Close</button>'});
+        modal.querySelector('[data-print-qr]').onclick=()=>window.print();
+        modal.querySelector('[data-close-qr]').onclick=closeModal;
+      }catch(error){toast(error.message||'Unable to generate service QR','error');}
+    });
     content.querySelector('#quickAdd')?.addEventListener('click', () => quickRegister());
     drawList();
   }
