@@ -93,6 +93,19 @@ export function validateNetworkInput(body = {}, existing = null) {
   return data;
 }
 
+/** Pure validation for an Open Cell child's Closed Cell parent. */
+export function validateOpenCellParent(child, parent) {
+  if (!child || child.tier !== 'new') throw httpError(400, 'Only Open Cell memberships can have a Closed Cell parent.');
+  if (!parent || parent.tier !== 'solid') throw httpError(409, 'Choose an active Closed Cell parent.');
+  if (Number(child.id) === Number(parent.id) || Number(child.person_id) === Number(parent.person_id))
+    throw httpError(409, 'A person cannot be their own parent.');
+  if (Number(child.lifegroup_id) !== Number(parent.lifegroup_id))
+    throw httpError(409, 'Closed Cell parent must belong to the same Cell.');
+  if (child.left_at != null || parent.left_at != null)
+    throw httpError(409, 'Both memberships must be active.');
+  return true;
+}
+
 export function validateTier(value) {
   const tier = clean(value);
   if (!['new', 'solid'].includes(tier)) throw httpError(400, 'Choose Open cell or Closed cell.');
