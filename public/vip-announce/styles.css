@@ -243,6 +243,17 @@ img{display:block;max-width:100%}
 .svc-date::after{background:linear-gradient(270deg,transparent,var(--gold))}
 .count-row{flex:none;display:flex;justify-content:center;padding-top:clamp(8px,1vw,16px)}
 
+/* ---- Portrait screens: the board is stacked, not wide ------------------ */
+@media (orientation:portrait){
+  .frame{padding:clamp(6px,1.4vw,14px)}
+  .welcome{font-size:clamp(28px,11vw,96px)}
+  .svc-date{font-size:clamp(12px,3.4vw,28px)}
+  .vip-card{grid-template-columns:auto minmax(0,1fr)}
+  .vip-inviter{grid-column:2;justify-content:flex-start;text-align:left;max-width:none}
+  .vip-name{font-size:clamp(15px,4.2vw,40px)}
+  .count-badge strong{font-size:clamp(26px,7vw,56px)}
+}
+
 /* ---- Loading / empty / error states --------------------------------------- */
 .state-box{
   flex:1 1 auto;min-height:0;
@@ -336,9 +347,17 @@ img{display:block;max-width:100%}
   object-fit:contain;              /* never crop or stretch the uploaded artwork */
   display:block;
 }
-/* Template mode: the artwork is a backdrop and the live data sits on top. */
-.design-layer.is-template .design-img{object-fit:cover}
-.design-layer.is-template .design-overlay{position:absolute}
+/* The frame is the largest box with the artwork's proportions that fits the screen. */
+.design-frame{
+  position:relative;overflow:hidden;
+  --ar:1.7778;
+  width:min(100vw,calc(100vh * var(--ar)));
+  height:min(100vh,calc(100vw / var(--ar)));
+  container-type:size;
+}
+.design-img{width:100%;height:100%;object-fit:fill;display:block}
+
+.design-overlay{position:absolute}
 
 .design-overlay{
   display:flex;flex-direction:column;
@@ -351,41 +370,41 @@ img{display:block;max-width:100%}
 }
 .design-overlay .o-title{
   font-family:var(--serif);font-weight:600;line-height:1;letter-spacing:-.01em;
-  font-size:calc(var(--t-size,5.2) * 1vw);color:var(--t-color,#F6F1E6);
+  font-size:calc(var(--t-size,5.2) * 1cqw);color:var(--t-color,#F6F1E6);
   margin:0 0 .35em;
   text-shadow:0 2px 26px rgba(4,18,10,.75);
 }
 .design-overlay .o-date{
   font-family:var(--sans);font-weight:700;letter-spacing:.16em;text-transform:uppercase;
-  font-size:calc(var(--d-size,2.2) * 1vw);color:var(--d-color,#D9B44A);margin:0 0 .5em;
+  font-size:calc(var(--d-size,2.2) * 1cqw);color:var(--d-color,#D9B44A);margin:0 0 .5em;
 }
 .design-overlay .o-count{
   display:flex;align-items:baseline;gap:.5em;margin:0 0 .7em;
   font-family:var(--sans);font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-  font-size:calc(var(--c-size,2.6) * 1vw);color:var(--c-color,#D4AF37);
+  font-size:calc(var(--c-size,2.6) * 1cqw);color:var(--c-color,#D4AF37);
 }
 .design-overlay .o-count strong{font-family:var(--serif);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0}
 .design-overlay .o-names{
   list-style:none;margin:0;padding:0;width:100%;
   display:grid;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));
-  gap:calc(var(--n-gap,1.4) * 1vw) calc(var(--n-gap,1.4) * 1.6vw);
+  gap:calc(var(--n-gap,1.4) * 1cqw) calc(var(--n-gap,1.4) * 1.6cqw);
   align-content:start;overflow-y:auto;
   scrollbar-width:none;
 }
 .design-overlay .o-names::-webkit-scrollbar{display:none}
 .design-overlay .o-name{
   font-family:var(--serif);font-weight:560;line-height:1.12;
-  font-size:calc(var(--n-size,1.9) * 1vw);color:var(--n-color,#F6F1E6);
+  font-size:calc(var(--n-size,1.9) * 1cqw);color:var(--n-color,#F6F1E6);
   overflow-wrap:anywhere;margin:0;
 }
 .design-overlay .o-inviter{
   font-family:var(--sans);font-weight:600;line-height:1.3;margin:.18em 0 0;
-  font-size:calc(var(--i-size,1.1) * 1vw);color:var(--i-color,rgba(246,241,230,.72));
+  font-size:calc(var(--i-size,1.1) * 1cqw);color:var(--i-color,rgba(246,241,230,.72));
   overflow-wrap:anywhere;
 }
 .design-overlay .o-empty{
   font-family:var(--serif);font-style:italic;
-  font-size:calc(var(--n-size,1.9) * 1vw);color:var(--i-color,rgba(246,241,230,.72));
+  font-size:calc(var(--n-size,1.9) * 1cqw);color:var(--i-color,rgba(246,241,230,.72));
 }
 .design-error{
   position:absolute;left:50%;bottom:6%;transform:translateX(-50%);

@@ -48,6 +48,7 @@
     refreshBtn: $('refreshBtn'),
     fsBtn: $('fsBtn'),
     designLayer: $('designLayer'),
+    designFrame: $('designFrame'),
     designImg: $('designImg'),
     designOverlay: $('designOverlay'),
     designError: $('designError'),
@@ -82,6 +83,18 @@
   const now = () => Date.now() + state.clockSkew;
 
   const two = (n) => String(Math.max(0, n)).padStart(2, '0');
+
+  // Columns and rows for the roster. A portrait screen is narrower, so it gets fewer columns.
+  const portraitQuery = window.matchMedia ? window.matchMedia('(orientation: portrait)') : null;
+  function rosterGrid(count) {
+    const portrait = Boolean(portraitQuery && portraitQuery.matches);
+    const cols = portrait ? (count <= 3 ? 1 : 2) : (count <= 4 ? 1 : count <= 10 ? 2 : 3);
+    el.roster.style.setProperty('--roster-cols', String(cols));
+    el.roster.style.setProperty('--roster-rows', String(Math.max(1, Math.ceil(count / cols))));
+  }
+  if (portraitQuery && portraitQuery.addEventListener) {
+    portraitQuery.addEventListener('change', () => rosterGrid(state.payload ? state.payload.vips.length : 6));
+  }
 
   // First letters of the first two words, e.g. "Ana Reyes" -> "AR".
   const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2)
@@ -139,9 +152,7 @@
     const frag = document.createDocumentFragment();
     // Fewer, larger cards for a short list; more columns as the list grows. Rows share
     // the screen height exactly, so every VIP is visible on one page without scrolling.
-    const cols = vips.length <= 4 ? 1 : vips.length <= 10 ? 2 : 3;
-    el.roster.style.setProperty('--roster-cols', String(cols));
-    el.roster.style.setProperty('--roster-rows', String(Math.max(1, Math.ceil(vips.length / cols))));
+    rosterGrid(vips.length);
 
     vips.forEach((vip, index) => {
       const key = vip.full_name;
@@ -245,6 +256,11 @@
     if (el.designImg.dataset.src !== design.url) {
       el.designImg.dataset.src = design.url;
       el.designImg.alt = design.title ? `${design.title} — LIFEGEN VIP announcement design` : '';
+      el.designImg.onload = () => {
+        // The frame takes the artwork's own proportions, so the overlay lines up with it.
+        const w = el.designImg.naturalWidth, h = el.designImg.naturalHeight;
+        if (w && h) el.designFrame.style.setProperty('--ar', String(w / h));
+      };
       el.designImg.onerror = () => {
         // Fall back to the branded layout rather than showing a broken frame.
         el.designError.hidden = false;

@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&amp;family=Instrument+Sans:ital,wght@0,400..700;1,400..700&amp;display=swap" rel="stylesheet"/>
-<link href="/vip-announce/styles.css?v=2.5.2" rel="stylesheet"/>
+<link href="/vip-announce/styles.css?v=2.5.3" rel="stylesheet"/>
 </head>
 <body>
 <a class="skip-link" href="#roster">Skip to the VIP list</a>
@@ -24,8 +24,12 @@
   <!-- Selected design layer. Fills the screen while the announcement is active;
        the branded frame below is hidden so nothing competes with the artwork. -->
   <div class="design-layer" id="designLayer" hidden>
-    <img alt="" class="design-img" id="designImg" decoding="async"/>
-    <div class="design-overlay" id="designOverlay" hidden></div>
+    <!-- Sized to the artwork's own proportions inside the screen, in either orientation, so the
+         live names and count always sit on the same spots as in the design. -->
+    <div class="design-frame" id="designFrame">
+      <img alt="" class="design-img" id="designImg" decoding="async"/>
+      <div class="design-overlay" id="designOverlay" hidden></div>
+    </div>
     <p class="design-error" id="designError" hidden>The selected design could not be loaded. The branded layout is being shown instead.</p>
   </div>
 
@@ -107,6 +111,6 @@
   </div>
 </main>
 
-<script defer src="/vip-announce/app.js?v=2.5.3"></script>
+<script defer src="/vip-announce/app.js?v=2.5.4"></script>
 </body>
 </html>

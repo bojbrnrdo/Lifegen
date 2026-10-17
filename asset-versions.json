@@ -24,11 +24,11 @@
     "sha256": "a584f1bc0e463315d3a34004b4cc54194051e484dcab0b936646d65bf365f868"
   },
   "/vip-announce/app.js": {
-    "version": "2.5.3",
-    "sha256": "6cdf2bd2fb864f43474e1fa5d9e8d246d39d0a37401d53e362992f04ed0f0da0"
+    "version": "2.5.4",
+    "sha256": "d6fd39b1d29b4d548e1d4fac6331b33c1e9cdba52187d9a1f7bd8902b23cf4a3"
   },
   "/vip-announce/styles.css": {
-    "version": "2.5.2",
-    "sha256": "bb4102f740842cd8512921d623b1e2203cbbb1f8c96f03c1130e4c02e38d731b"
+    "version": "2.5.3",
+    "sha256": "c9fca31a058f410f1a08bba25222cf6f3a9a6b2a8fb48c2adc20aa8184981073"
   }
 }
