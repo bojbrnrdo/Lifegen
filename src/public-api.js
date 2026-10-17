@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyServicePass, serviceCheckinOpen } from './service-qr.js';
+import {issueNewAttendeePass,restoreAttendeePass,readAttendeeSession,attendeePassesEnabled} from './attendee-pass.js';
 import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction, upsertRows } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
@@ -87,6 +88,12 @@ export async function currentPrize(client={query}) {
 }
 // A printed QR identifies the Sunday service only. The attendee must also hold
 // an existing, server-verified VIP session. No public name/person-ID check-in.
+// Attendee recovery requires possession of a high-entropy pass, not an email or name.
+publicRouter.post('/attendee/restore',async(req,res)=>{
+ checkOrigin(req);await rateLimit(req,'attendee-restore',8);
+ const restored=await restoreAttendeePass(req,res,req.body?.recovery_pass);
+ res.json({ok:true,person_id:restored.person_id});
+});
 publicRouter.get('/service-checkin',async(req,res)=>{
  const pass=verifyServicePass(req.query?.t);
  if(!pass)return res.status(400).json({error:'Invalid service QR.'});
@@ -384,7 +391,8 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
 
   await logAction(client,null,'people',person.id,'public_registration',{person_created:created,ministry,leader_person_id:leader?leader.leader_person_id:null,lifegroup_id:membership.lifegroup_id,review:review?review.reason:null});
   if(review)await logAction(client,null,'people',person.id,'public_registration_review',{reason:review.reason,manual_leader_name:review.manual_leader_name||null});
-  return {ok:true,person_created:created,person:{id:String(person.id),name:person.full_name||[person.first_name,person.last_name].filter(Boolean).join(' '),person_code:person.person_code||null},membership,review,leader};
+  const attendee_recovery_pass=created?await issueNewAttendeePass(client,person.id):null;
+  return {ok:true,person_created:created,person:{id:String(person.id),name:person.full_name||[person.first_name,person.last_name].filter(Boolean).join(' '),person_code:person.person_code||null},membership,review,leader,...(attendee_recovery_pass?{attendee_recovery_pass}:{})};
  },{write:true});
  res.status(result.person_created?201:200).json(result);
 });
