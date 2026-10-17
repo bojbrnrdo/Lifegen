@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {signServicePass,verifyServicePass} from '../src/service-qr.js';
+import {signServicePass,verifyServicePass,serviceCheckinOpen} from '../src/service-qr.js';
 const secret='correct-horse-battery-staple-long-secret-value';
 test('valid signed service QR identifies same service and date',()=>{
  const token=signServicePass(17,'2026-10-18',secret);
@@ -14,4 +14,12 @@ test('tampered QR cannot change service or date',()=>{
 test('weak or missing signing secret is rejected',()=>{
  assert.throws(()=>signServicePass(1,'2026-10-18','short'));
  assert.equal(verifyServicePass('bad','short'),null);
+});
+
+test('check-in opens only during the Sunday service in Manila',()=>{
+ assert.equal(serviceCheckinOpen('2026-10-18',new Date('2026-10-18T04:29:00Z')),false);
+ assert.equal(serviceCheckinOpen('2026-10-18',new Date('2026-10-18T04:30:00Z')),true);
+ assert.equal(serviceCheckinOpen('2026-10-18',new Date('2026-10-18T07:30:00Z')),true);
+ assert.equal(serviceCheckinOpen('2026-10-18',new Date('2026-10-18T07:31:00Z')),false);
+ assert.equal(serviceCheckinOpen('2026-10-18',new Date('2026-10-17T06:00:00Z')),false);
 });
