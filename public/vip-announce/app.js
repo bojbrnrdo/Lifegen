@@ -91,6 +91,8 @@
     const cols = portrait ? (count <= 3 ? 1 : 2) : (count <= 4 ? 1 : count <= 10 ? 2 : 3);
     el.roster.style.setProperty('--roster-cols', String(cols));
     el.roster.style.setProperty('--roster-rows', String(Math.max(1, Math.ceil(count / cols))));
+    // A single VIP is centered at a comfortable size instead of filling the whole list area.
+    el.roster.dataset.size = count === 1 ? 'one' : 'many';
   }
   if (portraitQuery && portraitQuery.addEventListener) {
     portraitQuery.addEventListener('change', () => rosterGrid(state.payload ? state.payload.vips.length : 6));

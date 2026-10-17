@@ -226,6 +226,13 @@ img{display:block;max-width:100%}
 .vip-inviter b{color:var(--gold-soft);font-weight:600;font-style:italic}
 .vip-new-tag{position:absolute;top:clamp(6px,.7vw,12px);right:clamp(6px,.7vw,12px);padding:3px 10px;border-radius:999px;background:var(--gold);color:#0e2e14;font-size:clamp(8px,.68vw,13px);font-weight:800;letter-spacing:.16em;text-transform:uppercase}
 
+/* One VIP: a centered card at a comfortable size, with the name given the room. */
+.roster[data-size="one"]{align-content:center;justify-items:center}
+.roster[data-size="one"] .vip-card{align-self:center;width:min(100%,clamp(420px,62vw,1100px));max-height:min(40vh,300px);padding-block:clamp(14px,2.4vh,32px)}
+.roster[data-size="one"] .vip-name{font-size:clamp(26px,min(4.6vw,7.5vh),84px)}
+.roster[data-size="one"] .vip-inviter{font-size:clamp(13px,min(1.5vw,2.8vh),30px)}
+.roster[data-size="one"] .vip-avatar{width:clamp(64px,min(8vw,14vh),170px);font-size:clamp(22px,min(3vw,5.5vh),64px)}
+
 /* Initials avatar, as on the reference board: green, gold and sage tones. */
 .vip-avatar{
   flex:none;display:grid;place-items:center;aspect-ratio:1;
