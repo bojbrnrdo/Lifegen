@@ -12,11 +12,12 @@ function panel(mode,initial){
  const gender=(mode==='network'||mode==='vip'||mode==='member')?'<fieldset class="unified-add__gender"><legend>Gender</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Male">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Female">'+svg('venus',20)+'</label></fieldset>':'';
  const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Network<select data-field="network" required><option value="">Choose Network</option></select></label>';
  const cell=mode==='member'?'<label class="unified-add__field">Cell Leader<select data-field="cell" required disabled><option value="">Choose Cell Leader</option></select></label>':'';
+ const membershipTier=mode==='member'?'<fieldset class="unified-add__gender" aria-label="Member Cell classification"><legend>Membership classification</legend><label><input type="radio" name="member_tier" value="solid" checked/> Closed Cell</label><label><input type="radio" name="member_tier" value="new"/> Open Cell</label><small>Open Cell requires an assigned Closed Cell parent. Parent assignment is not yet supported by the current database.</small></fieldset>':'';
  const existingPerson='<label class="unified-add__field">Existing Person ID (optional)<input name="existing_person_id" type="number" min="1" placeholder="Reuse an existing profile"/><small>Find the Person ID in Lifegroups → All People. Leave blank to register someone new.</small></label>';
  const vipDetails=mode==='vip'?'<div class="unified-add__names"><label class="unified-add__field">Age<input name="age" type="number" min="1" max="120" required /></label><label class="unified-add__field">School / Institution<input name="school" maxlength="300" required /></label><label class="unified-add__field">Invited by<input name="inviter" maxlength="200" required /></label><label class="unified-add__field">Contact (optional)<input name="contact_number" type="tel" maxlength="40" /></label></div>':'';
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
  return '<section role="tabpanel" id="unified-'+mode+'" aria-labelledby="tab-'+mode+'" '+(mode===initial?'':'hidden')+'><form data-form="'+mode+'" novalidate>'+
- '<div class="alert alert--error" data-error role="alert" hidden></div>'+gender+network+cell+
+ '<div class="alert alert--error" data-error role="alert" hidden></div>'+gender+network+cell+membershipTier+
  existingPerson+
  '<div class="unified-add__identity"><label class="unified-add__photo"><span data-photo-preview class="unified-add__photo-preview">'+svg('user',28)+'</span><span class="unified-add__photo-action">'+svg('camera',15)+' Upload photo</span><input type="file" data-photo accept="image/jpeg,image/png,image/webp" aria-label="'+label+' profile picture"/></label>'+
  '<div class="unified-add__names"><label class="unified-add__field">First name<input name="first_name" required maxlength="120" placeholder="First name"/></label><label class="unified-add__field">Last name<input name="last_name" required maxlength="120" placeholder="Last name"/></label></div></div>'+
@@ -128,12 +129,14 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
   const gender=(mode==='network'||mode==='vip'||(mode==='member'&&!network))?f.querySelector('[name=network_gender]:checked')?.value:network.gender;
   if(!gender)return error(mode,'Select Gender.');
   const cellId=mode==='member'?Number(f.querySelector('[data-field=cell]').value):null;
+  const memberTier=mode==='member'?f.querySelector('[name=member_tier]:checked')?.value:null;
+  if(mode==='member'&&memberTier==='new')return error(mode,'Open Cell registration requires selecting a Closed Cell parent. This feature is awaiting its database relationship and cannot be saved through this form yet.');
   // Members without an eligible Cell may be saved for Needs Cell follow-up.
   const person={first_name:first,last_name:last,...(gender?{sex:sexOf[gender]}:{}),photo:state.photos[mode],status:mode==='vip'?'first_timer':mode==='member'?'member':'leader',privacy_consent:true,registration_source:'staff'};
   for(const field of ['facebook_url','instagram_url','tiktok_url','x_url','youtube_url']){
    const value=f.querySelector('[name='+field+']').value.trim();if(value)person[field]=value;
   }
-  const fingerprint=JSON.stringify({person,existingId,networkId:network?.id||null,cellId});
+  const fingerprint=JSON.stringify({person,existingId,networkId:network?.id||null,cellId,memberTier});
   const pending=state.pending[mode];
   if(pending&&pending.fingerprint!==fingerprint)return error(mode,'A profile was already saved. Retry its assignment before editing these details.');
   if(!pending&&!existingId&&!(await duplicateGuard(person,f.querySelector('[data-duplicate]'))))return;
@@ -199,7 +202,7 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
      state.busy=false;setTab('member');onSaved({mode,person:created,group:result});
     }else{
      if(!cellId){await api.setDiscipleshipClassification(created.id,'member','Member awaiting Cell assignment');reset(mode);toast('Member saved to People to connect. Assign a Cell through Needs Cell.');onSaved({mode,person:created,needsAssignment:true});return;}
-     const assigned=state.pending[mode].membership||await api.assignLifegroup(cellId,created.id,{role:'member',sex:sexOf[gender]});
+     const assigned=state.pending[mode].membership||await api.assignLifegroup(cellId,created.id,{role:'member',tier:memberTier,sex:sexOf[gender]});
      state.pending[mode].membership=assigned;
      await api.setDiscipleshipClassification(created.id,'member','Member assigned to Cell');
      reset(mode);toast('Member added.');onSaved({mode,person:created,membership:assigned});
