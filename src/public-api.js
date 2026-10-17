@@ -100,7 +100,12 @@ publicRouter.get('/service-checkin',async(req,res)=>{
  const service=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[pass.service_id])).rows[0];
  if(!service||service.service_date!==pass.service_date||service.service_type!=='lifegen')return res.status(404).json({error:'Service not found.'});
  const vip=await readVip(req);
- res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:serviceCheckinOpen(pass.service_date)});
+ const attendee=vip?null:await readAttendeeSession(req);
+ const name=vip?(vip.person_name||vip.full_name):attendee?(attendee.full_name||[attendee.first_name,attendee.last_name].filter(Boolean).join(' ')):null;
+ res.json({service_date:pass.service_date,registered:!!(vip||attendee),identity_type:vip?'vip':attendee?'regular':null,
+   regular_passes_enabled:attendeePassesEnabled(),
+   csrf_token:vip?.csrf_token||attendee?.csrf_token||null,attendee:name?{name}:null,
+   can_check_in:serviceCheckinOpen(pass.service_date)&&!!vip});
 });
 publicRouter.post('/service-checkin',async(req,res)=>{
  checkOrigin(req);await rateLimit(req,'checkin',20);
