@@ -362,6 +362,46 @@ function tickCountdown() {
     $("cdBar").style.width = (100 * Math.min(1, Math.max(0, progress))).toFixed(2) + "%"
 }
 qsa(".reveal").forEach(el => io.observe(el)), tickCountdown(), setInterval(tickCountdown, 1e3);
+// ---- Fullscreen VIP welcome (tech team) ------------------------------------
+// The projector board at /vip-announce is public and read-only, so the tech team
+// can open it from this page without signing in to Admin. It opens as a
+// full-viewport overlay and requests browser fullscreen on the same click.
+(function vipFullscreenEntry() {
+    const btn = $("cdFsBtn"), overlay = $("vipFs"), close = $("vipFsClose");
+    if (!btn || !overlay || !close) return;
+    // The board is mounted on first use, so the homepage carries no iframe until someone opens it.
+    let frame = null;
+    function mount() {
+        if (frame) return;
+        frame = document.createElement("iframe");
+        frame.setAttribute("allow", "fullscreen");
+        frame.allowFullscreen = true;
+        frame.title = "LIFEGEN VIP welcome board";
+        frame.src = "/vip-announce";
+        overlay.prepend(frame);
+    }
+    function open() {
+        mount();
+        overlay.hidden = false;
+        document.body.classList.add("vip-fs-open");
+        // If the browser refuses fullscreen, the overlay still fills the window.
+        const asked = overlay.requestFullscreen ? overlay.requestFullscreen() : null;
+        if (asked && asked.catch) asked.catch(() => {});
+        close.focus();
+    }
+    function shut() {
+        if (overlay.hidden) return;
+        overlay.hidden = true;
+        document.body.classList.remove("vip-fs-open");
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        btn.focus({ preventScroll: true });
+    }
+    btn.addEventListener("click", open);
+    close.addEventListener("click", shut);
+    // Leaving fullscreen (Esc or the browser control) also closes the board.
+    document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) shut(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") shut(); });
+})();
 const prayers = {
     vip: [{
         title: "Personal Prayer for VIP (Visitors & Newcomers)",

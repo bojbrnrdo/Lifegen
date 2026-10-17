@@ -289,7 +289,7 @@ test('the public API exposes the announcement, the cycle and a change stream', a
   assert.match(api, /publicRouter\.get\('\/vip-announcement\/stream'/);
   assert.match(api, /publicRouter\.get\('\/service-cycle'/);
   // Registrations are attributed to a Sunday service on insert.
-  assert.match(api, /attributeServiceDate\(new Date\(\)\)/);
+  assert.match(api, /attributeServiceDate\(currentInstant\(\)\)/);
   assert.match(api, /service_date/);
 });
 

@@ -4,6 +4,7 @@ import { query, transaction, withState, stateId, allocateId, logAction, upsertRo
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
 import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
+import { currentInstant } from './service-cycle.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
 import { handleLifegroupMethod } from './lifegroups.js';
@@ -86,7 +87,7 @@ export async function currentPrize(client={query}) {
 }
 publicRouter.get('/config',async(req,res)=>{
  const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[['church_name','service_name','church_address','church_contact','privacy_contact']])).rows.map(r=>[r.key,r.value]));
- res.json({...siteUrls(req),settings,today:today(),server_time:new Date().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});
+ res.json({...siteUrls(req),settings,today:today(),server_time:currentInstant().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});
 });
 publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),month:today().slice(0,7)}));
 // ---- Sunday service cycle + fullscreen VIP announcement ----------------------
@@ -94,7 +95,7 @@ publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),m
 // window in settings, so it is identical for the hero countdown, every projector
 // and any later page refresh.
 publicRouter.get('/service-cycle',async(req,res)=>{
- const cycle=await readCycle(new Date());
+ const cycle=await readCycle(currentInstant());
  await persistCycleWindow(cycle).catch(()=>{});
  res.json(cycle);
 });
@@ -124,7 +125,7 @@ publicRouter.get('/vip-announcement/stream',streamFloodLimiter,async(req,res)=>{
 });
 // Names and count only — the hero countdown uses this to stay on one source.
 publicRouter.get('/vip-count',async(req,res)=>{
- const cycle=await readCycle(new Date());
+ const cycle=await readCycle(currentInstant());
  const {total}=await vipsForService(cycle.announce_service_date);
  res.json({service_date:cycle.announce_service_date,service_date_display:cycle.announce_service_date_display,total,state:cycle.state,timezone:cycle.timezone});
 });
@@ -186,7 +187,7 @@ publicRouter.post('/registrations',async(req,res)=>{
   // announcement is showing. Safe to check-then-insert: every write runs inside
   // the pg_advisory_xact_lock taken by withState, and the two partial unique
   // indexes from database/007 are the backstop.
-  const service_date=attributeServiceDate(new Date());
+  const service_date=attributeServiceDate(currentInstant());
   // A re-submit is only a duplicate when it matches the identity the unique index
   // uses — same normalized name AND same inviter. Two different people who share
   // a name but were invited by different people are two real VIPs, and both are
@@ -195,7 +196,7 @@ publicRouter.post('/registrations',async(req,res)=>{
   await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key,service_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,p.id,name,age,school,inviter,contact,hashToken(recovery),key,announcedForService?service_date:null]);
   const session=await startVipSession(client,id);
   await logAction(client,null,'vip_registrations',id,'public_registration',{person_id:p.id,service_date:announcedForService?service_date:null});
-  return {vip:{id,person_id:p.id,name,created_at:new Date().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
+  return {vip:{id,person_id:p.id,name,created_at:currentInstant().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
  },{write:true});
  // VIP registration is already committed. Cell assignment is a separate, guarded
  // transaction; failure never loses the new People/VIP records or the recovery code.
