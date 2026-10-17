@@ -121,10 +121,10 @@ publicRouter.post('/service-checkin',async(req,res)=>{
   const result=await transaction(async client=>{
    const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
    if(!service)throw httpError(404,'Service unavailable.');
-   const claim=(await client.query(`INSERT INTO service_attendance_claims(service_id,person_id,source)
-    VALUES($1,$2,'regular') ON CONFLICT (service_id,person_id) DO UPDATE SET service_id=EXCLUDED.service_id
-    RETURNING id,status`,[service.id,attendee.person_id])).rows[0];
-   return claim;
+   const inserted=(await client.query(`INSERT INTO service_attendance_claims(service_id,person_id,source)
+    VALUES($1,$2,'regular') ON CONFLICT (service_id,person_id) DO NOTHING RETURNING id,status`,[service.id,attendee.person_id])).rows[0];
+   if(inserted)return inserted;
+   return (await client.query('SELECT id,status FROM service_attendance_claims WHERE service_id=$1 AND person_id=$2',[service.id,attendee.person_id])).rows[0];
   });
   return res.json({status:result.status,message:result.status==='valid'?'Attendance already confirmed.':'Check-in submitted for staff validation.'});
  }
