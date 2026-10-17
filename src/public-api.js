@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyServicePass } from './service-qr.js';
+import { verifyServicePass, serviceCheckinOpen } from './service-qr.js';
 import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction, upsertRows } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
@@ -93,13 +93,13 @@ publicRouter.get('/service-checkin',async(req,res)=>{
  const service=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[pass.service_id])).rows[0];
  if(!service||service.service_date!==pass.service_date||service.service_type!=='lifegen')return res.status(404).json({error:'Service not found.'});
  const vip=await readVip(req);
- res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:pass.service_date===today()&&isSunday(today())});
+ res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:serviceCheckinOpen(pass.service_date)});
 });
 publicRouter.post('/service-checkin',async(req,res)=>{
  checkOrigin(req);await rateLimit(req,'checkin',20);
  const pass=verifyServicePass(req.body?.t);
  if(!pass)return res.status(400).json({error:'Invalid service QR.'});
- if(pass.service_date!==today()||!isSunday(today()))return res.status(403).json({error:'This printed QR is valid only on its Sunday service date.'});
+ if(!serviceCheckinOpen(pass.service_date))return res.status(403).json({error:'Check-in is available only during this Sunday service.'});
  const vip=await readVip(req);
  if(!vip)return res.status(401).json({error:'Please recover or register your VIP portal before checking in.'});
  if(!safeEqual(req.get('x-csrf-token'),vip.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
