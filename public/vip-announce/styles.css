@@ -191,7 +191,7 @@ img{display:block;max-width:100%}
 .welcome{
   margin-top:clamp(6px,.8vw,14px);
   font-family:var(--serif);font-weight:560;letter-spacing:-.02em;line-height:.98;
-  font-size:clamp(30px,6.4vw,124px);color:var(--paper);
+  font-size:clamp(30px,min(6.4vw,11vh),124px);color:var(--paper);
   text-transform:uppercase;
   text-shadow:0 4px 40px rgba(8,30,19,.55);
 }
@@ -213,25 +213,25 @@ img{display:block;max-width:100%}
   -webkit-mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - clamp(14px,2vw,38px)),transparent 100%);
   mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - clamp(14px,2vw,38px)),transparent 100%);
 }
-.roster{height:100%;overflow-y:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(var(--roster-cols,1),minmax(0,1fr));grid-auto-rows:minmax(clamp(84px,13vh,180px),1fr);gap:clamp(8px,1vw,18px);padding-right:clamp(2px,.4vw,8px);scrollbar-width:thin;scrollbar-color:rgba(212,175,55,.5) transparent}
+.roster{height:100%;overflow-y:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(var(--roster-cols,1),minmax(0,1fr));grid-template-rows:repeat(var(--roster-rows,1),minmax(0,1fr));gap:clamp(6px,min(1vw,1.6vh),18px);padding-right:clamp(2px,.4vw,8px);scrollbar-width:thin;scrollbar-color:rgba(212,175,55,.5) transparent}
 .roster::-webkit-scrollbar{width:8px}
 .roster::-webkit-scrollbar-thumb{background:rgba(212,175,55,.45);border-radius:99px}
 
-.vip-card{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(12px,1.6vw,30px);padding:clamp(10px,1.2vw,24px) clamp(14px,1.8vw,34px);border:1px solid rgba(212,175,55,.42);border-radius:clamp(12px,1.1vw,20px);background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.015));box-shadow:inset 0 1px 0 rgba(255,255,255,.07);overflow:hidden;animation:cardIn .5s cubic-bezier(.2,.7,.3,1) both}
+.vip-card{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:clamp(12px,1.6vw,30px);padding:clamp(6px,min(1.2vw,2.2vh),24px) clamp(14px,1.8vw,34px);border:1px solid rgba(212,175,55,.42);border-radius:clamp(12px,1.1vw,20px);background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.015));box-shadow:inset 0 1px 0 rgba(255,255,255,.07);overflow:hidden;animation:cardIn .5s cubic-bezier(.2,.7,.3,1) both}
 .vip-card.is-new{border-color:var(--gold);box-shadow:0 0 34px -8px rgba(212,175,55,.75), inset 0 1px 0 rgba(255,255,255,.1)}
 @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
 
-.vip-name{font-family:var(--serif);font-weight:560;line-height:1.1;font-size:clamp(17px,2.3vw,44px);color:var(--paper);letter-spacing:-.01em;overflow-wrap:anywhere;min-width:0}
-.vip-inviter{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:6px;text-align:right;font-size:clamp(11px,1.15vw,22px);line-height:1.35;color:var(--muted);max-width:44%;overflow-wrap:anywhere}
+.vip-name{font-family:var(--serif);font-weight:560;line-height:1.1;font-size:clamp(15px,min(2.3vw,3.6vh),44px);color:var(--paper);letter-spacing:-.01em;overflow-wrap:anywhere;min-width:0}
+.vip-inviter{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:6px;text-align:right;font-size:clamp(11px,min(1.15vw,2vh),22px);line-height:1.35;color:var(--muted);max-width:44%;overflow-wrap:anywhere}
 .vip-inviter b{color:var(--gold-soft);font-weight:600;font-style:italic}
 .vip-new-tag{position:absolute;top:clamp(6px,.7vw,12px);right:clamp(6px,.7vw,12px);padding:3px 10px;border-radius:999px;background:var(--gold);color:#0e2e14;font-size:clamp(8px,.68vw,13px);font-weight:800;letter-spacing:.16em;text-transform:uppercase}
 
 /* Initials avatar, as on the reference board: green, gold and sage tones. */
 .vip-avatar{
   flex:none;display:grid;place-items:center;aspect-ratio:1;
-  width:clamp(52px,5.6vw,112px);border-radius:50%;
+  width:clamp(40px,min(5.6vw,9vh),112px);border-radius:50%;
   font-family:var(--serif);font-weight:600;letter-spacing:.02em;
-  font-size:clamp(18px,2vw,40px);line-height:1;color:#fff;
+  font-size:clamp(14px,min(2vw,3.4vh),40px);line-height:1;color:#fff;
   background:#2E7D32;border:2px solid rgba(246,231,171,.7);
   box-shadow:0 8px 22px -10px rgba(0,0,0,.7);
 }

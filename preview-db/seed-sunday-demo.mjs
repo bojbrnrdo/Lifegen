@@ -13,6 +13,12 @@ const VIPS = [
   ['Mark', 'Villanueva', 'Jose Bautista', '2026-10-17T10:40:00+08:00'],
   ['Grace', 'Dela Cruz', 'Ruth Aquino', '2026-10-17T14:05:00+08:00'],
   ['Paolo', 'Garcia', null, '2026-10-17T18:20:00+08:00'],
+  ['Mika', 'Santos', 'Joshua Reyes', '2026-10-17T19:00:00+08:00'],
+  ['Daniel', 'Cruz', 'Joshua Reyes', '2026-10-17T19:30:00+08:00'],
+  ['Faith', 'Mendoza', 'Joshua Reyes', '2026-10-17T20:10:00+08:00'],
+  ['Carlo', 'Tan', 'Andrea Lim', '2026-10-17T20:45:00+08:00'],
+  ['Lea', 'Ramos', 'Mark Dela Cruz', '2026-10-17T21:15:00+08:00'],
+  ['Ben', 'Ocampo', 'Ruth Aquino', '2026-10-17T21:40:00+08:00'],
 ];
 
 const c = new pg.Client({ host: '127.0.0.1', port: 5433, user: 'postgres', database: 'lifegen', ssl: false });
@@ -30,13 +36,16 @@ if (!(await c.query('SELECT 1 FROM services WHERE service_date=$1', [SUNDAY])).r
 await c.query(`INSERT INTO settings(key,value) VALUES('vip_announce_minutes', to_jsonb($1::int))
                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [WINDOW_MINUTES]);
 
+// Person codes already in use (from earlier demo seeds) are skipped, so the seed can be re-run.
+const usedCodes = new Set((await c.query('SELECT person_code FROM people')).rows.map((r) => r.person_code));
 let code = 9101;
+const nextCode = () => { while (usedCodes.has(`2026-${code}`)) code++; usedCodes.add(`2026-${code}`); return `2026-${code++}`; };
 for (const [first, last, inviter, at] of VIPS) {
   const full = `${first} ${last}`;
   let row = (await c.query('SELECT id FROM people WHERE first_name=$1 AND last_name=$2 AND is_demo=true', [first, last])).rows[0];
   const pid = row ? row.id : (await c.query(`INSERT INTO people(id,person_code,first_name,last_name,full_name,status,date_registered,registration_source,is_demo,notes)
       VALUES($1,$2,$3,$4,$5,'first_timer',$6,'staff',true,'Sunday demo seed for preview') RETURNING id`,
-      [await nextId('people'), `2026-${code++}`, first, last, full, at.slice(0, 10)])).rows[0].id;
+      [await nextId('people'), nextCode(), first, last, full, at.slice(0, 10)])).rows[0].id;
   // Attributed to the Sunday, exactly as the public registration endpoint would store it.
   await c.query(`INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,review_status,reviewed_at,created_at,service_date)
     SELECT $1,$2,$3,20,'Demo University',$4,'0900 000 0000','reviewed',now(),$5::timestamptz,$6::date

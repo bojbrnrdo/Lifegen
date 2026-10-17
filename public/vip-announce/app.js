@@ -137,8 +137,11 @@
     const first = !state.booted;
     const fresh = [];
     const frag = document.createDocumentFragment();
-    // Fewer, larger cards for a short list; more columns as the list grows, so the board fills the screen.
-    el.roster.style.setProperty('--roster-cols', String(vips.length <= 4 ? 1 : vips.length <= 10 ? 2 : 3));
+    // Fewer, larger cards for a short list; more columns as the list grows. Rows share
+    // the screen height exactly, so every VIP is visible on one page without scrolling.
+    const cols = vips.length <= 4 ? 1 : vips.length <= 10 ? 2 : 3;
+    el.roster.style.setProperty('--roster-cols', String(cols));
+    el.roster.style.setProperty('--roster-rows', String(Math.max(1, Math.ceil(vips.length / cols))));
 
     vips.forEach((vip, index) => {
       const key = vip.full_name;
