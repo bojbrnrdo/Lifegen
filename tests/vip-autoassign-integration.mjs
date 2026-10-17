@@ -61,7 +61,10 @@ try{
  assert.equal(repeat.already_assigned,true,'auto assignment idempotent');
  const roster=await request('/api/tracker/lifegroup',{args:[fixtures.cell]},auth);
  assert.ok(roster.members.some(p=>Number(p.id)===vipId&&p.is_vip),'assigned VIP appears in roster');
- const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());
+ const meetingDay=new Date(today+'T12:00:00+08:00');
+ if(meetingDay.getUTCDay()!==0)meetingDay.setUTCDate(meetingDay.getUTCDate()-meetingDay.getUTCDay());
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(meetingDay);
  const attendance=await request('/api/tracker/saveMeeting',{args:[fixtures.cell,{
   meeting_date:date,held:true,present_ids:[vipId],devotion_ids:[]
  }]},auth);
@@ -87,7 +90,7 @@ try{
    await client.query('DELETE FROM audit WHERE person_id=$1',[id]);
   }
   // Test-generated audit logs should not reference removed fixtures.
-  await client.query("DELETE FROM audit_log WHERE (entity='people' AND entity_id=ANY($1::text[])) OR (entity='vip_registrations' AND entity_id=ANY($2::text[])) OR (entity='networks' AND entity_id=$3) OR (entity='lifegroups' AND entity_id=$4) OR (entity='lifegroup_meetings' AND entity_id=$5) OR (entity='lifegroup_memberships' AND details->>'person_id'=ANY($1::text[]))",
+  await client.query("DELETE FROM audit_log WHERE (entity='people' AND entity_id=ANY($1::text[])) OR (entity='vip_registrations' AND entity_id=ANY($2::text[])) OR (entity='networks' AND entity_id=$3) OR (entity='lifegroups' AND entity_id=$4) OR (entity='lifegroup_meetings' AND entity_id=$5)",
    [fixtures.people.map(String),fixtures.registrations.map(String),String(fixtures.network),String(fixtures.cell),String(fixtures.meeting)]);
   for(const id of fixtures.people)await client.query('DELETE FROM people WHERE id=$1',[id]);
   await client.query('COMMIT');
