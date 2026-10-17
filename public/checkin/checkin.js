@@ -16,7 +16,6 @@
    date.textContent=data.service_date;
    if(!data.registered){setMessage('No saved LIFEGEN attendee identity found on this browser.');recover.hidden=false;regularRecovery.hidden=!data.regular_passes_enabled;return;}
    name.textContent='Welcome, '+data.attendee.name;
-   if(data.identity_type==='regular'){setMessage('Regular attendee identity recovered. Self-service regular attendance still awaits staff activation.');return;}
    if(!data.can_check_in){setMessage('Check-in is available only during this Sunday service.');return;}
    setMessage('Tap Present to submit your attendance for validation.');
    button.hidden=false;button.disabled=false;
