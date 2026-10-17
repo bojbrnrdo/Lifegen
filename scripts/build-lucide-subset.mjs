@@ -17,7 +17,7 @@ const OUTPUT = path.join(root, 'public/vendor/lucide-subset.min.js');
 // Every icon name used by public/lifegen (HTML data-lucide attributes, toast() icons
 // and the TYPE_META maps). Add new ones here when the site grows.
 const USED = [
-  'alert-triangle', 'arrow-left', 'arrow-right', 'book-open', 'calendar-check',
+  'alert-triangle', 'arrow-left', 'arrow-right', 'arrow-up', 'book-open', 'calendar-check',
   'calendar-plus', 'check', 'chevron-left', 'chevron-right', 'clock', 'clock-3',
   'copy', 'heart', 'heart-handshake', 'image', 'info', 'leaf', 'lock', 'map-pin',
   'menu', 'message-circle', 'message-circle-heart', 'mouse-pointer-click',
