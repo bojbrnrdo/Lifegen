@@ -59,6 +59,15 @@ try{
  assert.equal(Number(placement.lifegroup_id),fixtures.cell,'VIP assigned to eligible Cell');
  const repeat=await request('/api/tracker/autoAssignLifegroup',{args:[vipId,{}]},auth);
  assert.equal(repeat.already_assigned,true,'auto assignment idempotent');
+ const verifier=new pg.Client({connectionString:db,ssl:false});
+ try{
+  await verifier.connect();
+  const activeMemberships=await verifier.query(
+   'SELECT count(*)::int AS total FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL',
+   [vipId]
+  );
+  assert.equal(activeMemberships.rows[0].total,1,'repeated auto-placement retains exactly one active membership');
+ }finally{await verifier.end().catch(()=>{});}
  const roster=await request('/api/tracker/lifegroup',{args:[fixtures.cell]},auth);
  assert.ok(roster.members.some(p=>Number(p.id)===vipId&&p.is_vip),'assigned VIP appears in roster');
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());
