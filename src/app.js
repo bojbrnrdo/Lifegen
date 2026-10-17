@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
+import {signServicePass} from './service-qr.js';
 import { query, transaction, withState, runDomain, logAction, stateId, connectionHint } from './db.js';
 import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
@@ -94,7 +95,7 @@ const methods={
  removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],setDiscipleshipClassification:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
- giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
+ giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],serviceQr:['attendance:view',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
@@ -106,6 +107,16 @@ async function customMethod(req,name,args) {
  if(name==='service')return serviceDetail(args[0]);
  if(name==='serviceAudit')return serviceAudit(args[0]);
  if(name==='openService')return openService(args[0],actor);
+ if(name==='serviceQr'){
+  const serviceId=validId(args[0]);
+  const record=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[serviceId])).rows[0];
+  if(!record||record.service_type!=='lifegen')throw httpError(404,'Sunday LIFEGEN service not found.');
+  const {public_url}=siteUrls(req);
+  const url=new URL('/checkin/',public_url.startsWith('http')?public_url:`${req.protocol}://${req.get('host')}`);
+  url.searchParams.set('t',signServicePass(record.id,record.service_date));
+  return {service_id:record.id,service_date:record.service_date,url:url.toString(),svg:await QRCode.toString(url.toString(),{type:'svg',width:360,margin:2})};
+ }
+
  if(name==='mark')return markAttendance(args[0],args[1],args[2],args[3],args[4],actor);
  if(name==='undoMark')return undoAttendance(args[0],args[1],args[2],actor);
  if(name==='updateService')return updateService(args[0],args[1]||{},actor);
@@ -382,6 +393,7 @@ app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
 app.get(['/vip-announce','/vip-announce/','/vip-announce/index.html'],(req,res)=>page(res,'vip-announce'));
 app.get(['/tracker','/tracker/index.html'],(req,res)=>res.redirect(308,'/admin'));
 app.get(['/lifegen','/lifegen/index.html'],(req,res)=>res.redirect(308,'/'));
+app.get(['/checkin','/checkin/'],(req,res)=>res.sendFile(path.join(root,'public','checkin','index.html')));
 app.get('/privacy',async(req,res)=>{
  let settings={};try{settings=Object.fromEntries((await query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]));}catch{}
  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
