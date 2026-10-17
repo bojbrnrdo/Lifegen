@@ -224,7 +224,9 @@ async function listNetworks(filters = {}) {
 
 async function activeMembers(groupId) {
   const { rows } = await query(`SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.photo,p.extras->>'facebook_url' AS facebook_url,p.extras->>'instagram_url' AS instagram_url,p.extras->>'tiktok_url' AS tiktok_url,p.extras->>'x_url' AS x_url,p.extras->>'youtube_url' AS youtube_url,p.sex,p.status,p.archived_at,
-      m.id AS membership_id,m.role,m.tier,m.joined_at::text AS joined_at,m.notes AS membership_notes,
+      m.id AS membership_id,m.lifegroup_id,m.person_id,m.role,m.tier,
+      (to_jsonb(m)->>'parent_membership_id')::bigint AS parent_membership_id,
+      m.joined_at::text AS joined_at,m.notes AS membership_notes,
       stats.sundays_attended,stats.last_attended,
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,
       (v.id IS NOT NULL) AS is_vip
