@@ -81,6 +81,13 @@ jobs:
         env:
           LOCAL_DEMO: "true"
         run: npm run demo:seed
+      - name: Run manual Lifegroup assignment and attendance integration
+        env:
+          LIFEGEN_INTEGRATION_DATABASE_URL: postgres://lifegen_test:temporary_ci_only@localhost:5432/lifegen_ci
+          LIFEGEN_INTEGRATION_DIRECT_URL: postgres://lifegen_test:temporary_ci_only@localhost:5432/lifegen_ci
+          LIFEGEN_INTEGRATION_ADMIN_USERNAME: demo@lifegen.local
+          LIFEGEN_INTEGRATION_ADMIN_PASSWORD: LifegenDemo2026!
+        run: node tests/lifegroup-integration.mjs
       - name: Run VIP auto-assignment and attendance integration
         env:
           LIFEGEN_INTEGRATION_DATABASE_URL: postgres://lifegen_test:temporary_ci_only@localhost:5432/lifegen_ci
