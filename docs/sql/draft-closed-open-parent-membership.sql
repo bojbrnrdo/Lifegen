@@ -1,6 +1,7 @@
--- DRAFT ONLY. Not applied to Supabase production.
--- Proposed additive schema for Network → Cell Leader → Closed Cell → Open Cell.
--- Review, staging validation, backup and explicit production approval required.
+-- APPLIED to LIFEGEN Supabase project kmcvszqkrnzhexbdbbig on 2026-10-17.
+-- Kept in repository for review/audit; do not rerun on this database.
+-- Additive schema for Network → Cell Leader → Closed Cell → Open Cell.
+-- Existing memberships preserved; application rollout still requires tests and approval.
 -- Before enabling writes, backend must enforce cross-row rules transactionally.
 ALTER TABLE public.lifegroup_memberships
   ADD COLUMN parent_membership_id bigint NULL;
@@ -12,6 +13,9 @@ ALTER TABLE public.lifegroup_memberships
 ALTER TABLE public.lifegroup_memberships
   ADD CONSTRAINT lifegroup_membership_not_self_parent
   CHECK (parent_membership_id IS NULL OR parent_membership_id <> id);
+ALTER TABLE public.lifegroup_memberships
+  ADD CONSTRAINT lifegroup_parent_requires_open_tier
+  CHECK (parent_membership_id IS NULL OR tier = 'new');
 CREATE INDEX lifegroup_memberships_parent_idx
   ON public.lifegroup_memberships(parent_membership_id)
   WHERE parent_membership_id IS NOT NULL;
