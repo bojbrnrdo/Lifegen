@@ -43,11 +43,10 @@
     stateBox: $('stateBox'),
     stateTitle: $('stateTitle'),
     stateBody: $('stateBody'),
-    updated: $('updated'),
-    sourceTag: $('sourceTag'),
     refreshBtn: $('refreshBtn'),
     fsBtn: $('fsBtn'),
     designLayer: $('designLayer'),
+    designFrame: $('designFrame'),
     designImg: $('designImg'),
     designOverlay: $('designOverlay'),
     designError: $('designError'),
@@ -82,6 +81,24 @@
   const now = () => Date.now() + state.clockSkew;
 
   const two = (n) => String(Math.max(0, n)).padStart(2, '0');
+
+  // Columns and rows for the roster. A portrait screen is narrower, so it gets fewer columns.
+  const portraitQuery = window.matchMedia ? window.matchMedia('(orientation: portrait)') : null;
+  function rosterGrid(count) {
+    const portrait = Boolean(portraitQuery && portraitQuery.matches);
+    const cols = portrait ? (count <= 3 ? 1 : 2) : (count <= 4 ? 1 : count <= 10 ? 2 : 3);
+    el.roster.style.setProperty('--roster-cols', String(cols));
+    el.roster.style.setProperty('--roster-rows', String(Math.max(1, Math.ceil(count / cols))));
+    // A single VIP is centered at a comfortable size instead of filling the whole list area.
+    el.roster.dataset.size = count === 1 ? 'one' : 'many';
+  }
+  if (portraitQuery && portraitQuery.addEventListener) {
+    portraitQuery.addEventListener('change', () => rosterGrid(state.payload ? state.payload.vips.length : 6));
+  }
+
+  // First letters of the first two words, e.g. "Ana Reyes" -> "AR".
+  const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase()).join('') || '?';
 
   function setNum(key, value) {
     const node = cdNums[key];
@@ -133,6 +150,9 @@
     const first = !state.booted;
     const fresh = [];
     const frag = document.createDocumentFragment();
+    // Fewer, larger cards for a short list; more columns as the list grows. Rows share
+    // the screen height exactly, so every VIP is visible on one page without scrolling.
+    rosterGrid(vips.length);
 
     vips.forEach((vip, index) => {
       const key = vip.full_name;
@@ -148,6 +168,12 @@
       card.style.animationDelay = `${Math.min(index, 24) * 28}ms`;
       if (!known && !first) card.classList.add('is-new');
 
+      const avatar = document.createElement('span');
+      avatar.className = 'vip-avatar';
+      avatar.dataset.tone = String(index % 3);
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = initials(vip.full_name);
+
       const name = document.createElement('p');
       name.className = 'vip-name';
       name.textContent = vip.full_name;
@@ -155,12 +181,14 @@
       const inviter = document.createElement('p');
       inviter.className = 'vip-inviter';
       const lead = document.createElement('span');
-      lead.textContent = 'Invited by';
+      // The server's fallback text means no inviter was recorded; say that plainly.
+      const noInviter = vip.inviter === 'Inviter not specified';
+      lead.textContent = noInviter ? 'Inviter' : 'Invited by';
       const who = document.createElement('b');
-      who.textContent = vip.inviter;
+      who.textContent = noInviter ? 'not recorded' : vip.inviter;
       inviter.append(lead, document.createTextNode(' '), who);
 
-      card.append(name, inviter);
+      card.append(avatar, name, inviter);
 
       if (!known && !first) {
         const tag = document.createElement('span');
@@ -230,6 +258,11 @@
     if (el.designImg.dataset.src !== design.url) {
       el.designImg.dataset.src = design.url;
       el.designImg.alt = design.title ? `${design.title} — LIFEGEN VIP announcement design` : '';
+      el.designImg.onload = () => {
+        // The frame takes the artwork's own proportions, so the overlay lines up with it.
+        const w = el.designImg.naturalWidth, h = el.designImg.naturalHeight;
+        if (w && h) el.designFrame.style.setProperty('--ar', String(w / h));
+      };
       el.designImg.onerror = () => {
         // Fall back to the branded layout rather than showing a broken frame.
         el.designError.hidden = false;
@@ -314,7 +347,7 @@
         if (n.showInviter !== false) {
           const inv = document.createElement('p');
           inv.className = 'o-inviter';
-          inv.textContent = `Invited by ${vip.inviter}`;
+          inv.textContent = vip.inviter === 'Inviter not specified' ? 'Inviter not recorded' : `Invited by ${vip.inviter}`;
           li.append(inv);
         }
         ul.append(li);
@@ -363,10 +396,6 @@
       }
     }
 
-    el.updated.textContent = `Updated ${new Date(payload.generated_at).toLocaleTimeString('en-PH', { hour12: true })}`;
-    el.sourceTag.textContent = payload.source === 'database'
-      ? `Live from the LIFEGEN database · ${payload.timezone}`
-      : 'Live from the LIFEGEN database';
 
     state.payload = payload;
     state.lastGoodAt = Date.now();
@@ -441,8 +470,6 @@
     if (state.payload) {
       setConn('error', 'Reconnecting');
       const age = Math.round((Date.now() - (state.lastGoodAt || Date.now())) / 1000);
-      el.updated.textContent = `Showing data from ${age < 60 ? `${age}s` : `${Math.round(age / 60)} min`} ago`;
-      el.sourceTag.textContent = 'Waiting for the database to respond';
       return;
     }
     el.stage.setAttribute('aria-busy', 'false');

@@ -30,6 +30,20 @@ from the database — no flattened image, so text changes without regenerating a
   records on screen and labels them stale — placeholder names are never substituted.
 - Updates in place, so an active fullscreen session survives every refresh.
 
+### Opening the board from the public site
+
+The countdown card on `/` has a **Fullscreen** button in its lower-right corner. It opens
+the same board as an in-page fullscreen overlay, so the tech team never needs to sign in to
+Admin. Pressing **Esc** or the browser's exit control closes it. The board is mounted only on
+first click, so the homepage carries no extra request until someone opens it.
+
+### Demo: a live Sunday on the local preview
+
+`LOCAL_DEMO_CLOCK=<Manila instant>` (honoured only when `LOCAL_DEMO=true`, never in
+production or on Vercel) moves the server clock to that instant and lets it run forward in
+real time. `preview-db/seed-sunday-demo.mjs` adds example VIPs for the Sunday. See
+[`preview-db/README.md`](preview-db/README.md) for the exact steps.
+
 ### One service-date source
 
 `src/service-cycle.js` is the single source of truth for the Sunday cycle in

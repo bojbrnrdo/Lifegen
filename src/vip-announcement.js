@@ -15,6 +15,7 @@ import {
   isSundayKey,
   TIME_ZONE,
   CYCLE_STATE,
+  currentInstant,
 } from './service-cycle.js';
 import { revision } from './events.js';
 import { httpError } from './domain.js';
@@ -46,7 +47,7 @@ export function cleanInviter(value) {
   return name || INVITER_FALLBACK;
 }
 
-export async function readCycle(now = new Date(), client = { query }) {
+export async function readCycle(now = currentInstant(), client = { query }) {
   const { rows } = await client.query(
     'SELECT key, value FROM settings WHERE key = ANY($1::text[])',
     [CYCLE_SETTING_KEYS],
@@ -99,7 +100,7 @@ export async function vipsForService(serviceDate, client = { query }) {
 
 // Full announcement payload: cycle + names + count + the database revision the
 // client can use to detect change.
-export async function vipAnnouncement({ date, now = new Date(), persist = true } = {}) {
+export async function vipAnnouncement({ date, now = currentInstant(), persist = true } = {}) {
   const cycle = await readCycle(now);
   const requested = date && isSundayKey(date) ? date : null;
   const serviceDate = requested || cycle.announce_service_date;
@@ -110,7 +111,7 @@ export async function vipAnnouncement({ date, now = new Date(), persist = true }
   if (persist) await persistCycleWindow(cycle).catch(() => {});
   return {
     timezone: TIME_ZONE,
-    generated_at: new Date().toISOString(),
+    generated_at: currentInstant().toISOString(),
     server_time: now.toISOString(),
     state: cycle.state,
     phase: cycle.phase,

@@ -1,7 +1,7 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.3",
-    "sha256": "5c3cd5aeb9e237b12f1a3a207a66bf43fd76d98e4c49a2a497c5afc23208f866"
+    "version": "2.4.4",
+    "sha256": "6061f3c2315ccd61708a81ee993a83471ffd7eb752b8c322808d7e4f0605d808"
   },
   "/lifegen/backend.js": {
     "version": "2.4.9",
@@ -12,8 +12,8 @@
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.22",
-    "sha256": "24fa6e1f3ca110eae52090863380e70fc4f56b4285cbd1a225797d08a0784e07"
+    "version": "2.4.23",
+    "sha256": "2bac5d62d1d18d44cf03e936818eeccbb39a946ef9e8901500975c1751deeea0"
   },
   "/lifegen/videos.js": {
     "version": "2.4.10",
@@ -24,11 +24,11 @@
     "sha256": "b222472fc3b3da350fe8e4440de861d549a1a899d8fa8244b890c6f5eac65f28"
   },
   "/vip-announce/app.js": {
-    "version": "2.5.1",
-    "sha256": "042cafda3f48d45e554ae6540af0a0a244fad87d3cbf1b5595aafd7963fab700"
+    "version": "2.5.7",
+    "sha256": "f4f9e92f12cb679d92f658719ef44eceee34455cb86635e133db71343adca43e"
   },
   "/vip-announce/styles.css": {
-    "version": "2.5.0",
-    "sha256": "809d3b70a5c99ba5e9e038e7090a0f8fe5a7fde73f3b02988bae01d34edb267a"
+    "version": "2.5.4",
+    "sha256": "07035d992e7c08bfbca606faae429ee1b97d64a1f3b9733d226c14e62e4a5f86"
   }
 }

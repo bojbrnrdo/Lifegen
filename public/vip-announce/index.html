@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&amp;family=Instrument+Sans:ital,wght@0,400..700;1,400..700&amp;display=swap" rel="stylesheet"/>
-<link href="/vip-announce/styles.css?v=2.5.0" rel="stylesheet"/>
+<link href="/vip-announce/styles.css?v=2.5.4" rel="stylesheet"/>
 </head>
 <body>
 <a class="skip-link" href="#roster">Skip to the VIP list</a>
@@ -24,8 +24,12 @@
   <!-- Selected design layer. Fills the screen while the announcement is active;
        the branded frame below is hidden so nothing competes with the artwork. -->
   <div class="design-layer" id="designLayer" hidden>
-    <img alt="" class="design-img" id="designImg" decoding="async"/>
-    <div class="design-overlay" id="designOverlay" hidden></div>
+    <!-- Sized to the artwork's own proportions inside the screen, in either orientation, so the
+         live names and count always sit on the same spots as in the design. -->
+    <div class="design-frame" id="designFrame">
+      <img alt="" class="design-img" id="designImg" decoding="async"/>
+      <div class="design-overlay" id="designOverlay" hidden></div>
+    </div>
     <p class="design-error" id="designError" hidden>The selected design could not be loaded. The branded layout is being shown instead.</p>
   </div>
 
@@ -66,23 +70,23 @@
       <!-- Announcement: shown from the configured service start. -->
       <section aria-labelledby="welcomeHeading" class="phase phase-announce" id="announcePhase" hidden>
         <div class="announce-head">
-          <div>
-            <p class="eyebrow">LIFEGEN · Sunday service</p>
-            <h1 class="welcome" id="welcomeHeading">Welcome our <em>VIPs</em></h1>
-            <p class="svc-date">
-              <span id="svcDate">—</span>
-              <span aria-hidden="true" class="svc-dot"></span>
-              <span id="svcTime">1:00 – 3:00 PM</span>
-            </p>
-          </div>
-          <div class="count-badge" id="countBadge">
-            <strong id="countNum">00</strong>
-            <span id="countWord">VIPs TODAY</span>
-          </div>
+          <h1 class="welcome" id="welcomeHeading">Welcome our <em>VIPs</em></h1>
+          <p class="svc-date">
+            <span id="svcDate">—</span>
+            <span aria-hidden="true" class="svc-dot"></span>
+            <span id="svcTime">1:00 – 3:00 PM</span>
+          </p>
         </div>
 
         <div class="roster-wrap">
           <div class="roster" id="roster" role="list"></div>
+        </div>
+
+        <div class="count-row">
+          <div class="count-badge" id="countBadge">
+            <strong id="countNum">00</strong>
+            <span id="countWord">VIPs TODAY</span>
+          </div>
         </div>
 
         <div class="state-box" id="stateBox" hidden>
@@ -92,11 +96,6 @@
       </section>
 
       <footer class="foot">
-        <span class="foot-item">Asia/Manila</span>
-        <span aria-hidden="true" class="foot-sep"></span>
-        <span class="foot-item" id="updated">Waiting for data…</span>
-        <span aria-hidden="true" class="foot-sep"></span>
-        <span class="foot-item" id="sourceTag">Live from the LIFEGEN database</span>
         <div class="foot-actions">
           <button class="foot-btn" id="refreshBtn" type="button">Refresh now</button>
           <button class="foot-btn foot-btn-gold" id="fsBtn" type="button">Fullscreen</button>
@@ -107,6 +106,6 @@
   </div>
 </main>
 
-<script defer src="/vip-announce/app.js?v=2.5.1"></script>
+<script defer src="/vip-announce/app.js?v=2.5.7"></script>
 </body>
 </html>
