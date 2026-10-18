@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { verifyServicePass } from './service-qr.js';
 import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction, upsertRows } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
@@ -85,6 +86,37 @@ export async function currentPrize(client={query}) {
  const old=(await client.query('SELECT value FROM settings WHERE key=\'monthly_prize\'')).rows[0]?.value;
  return typeof old==='string'?old:'No prize set yet';
 }
+// A printed QR identifies the Sunday service only. The attendee must also hold
+// an existing, server-verified VIP session. No public name/person-ID check-in.
+publicRouter.get('/service-checkin',async(req,res)=>{
+ const pass=verifyServicePass(req.query?.t);
+ if(!pass)return res.status(400).json({error:'Invalid service QR.'});
+ const service=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[pass.service_id])).rows[0];
+ if(!service||service.service_date!==pass.service_date||service.service_type!=='lifegen')return res.status(404).json({error:'Service not found.'});
+ const vip=await readVip(req);
+ res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:pass.service_date===today()&&isSunday(today())});
+});
+publicRouter.post('/service-checkin',async(req,res)=>{
+ checkOrigin(req);await rateLimit(req,'checkin',20);
+ const pass=verifyServicePass(req.body?.t);
+ if(!pass)return res.status(400).json({error:'Invalid service QR.'});
+ if(pass.service_date!==today()||!isSunday(today()))return res.status(403).json({error:'This printed QR is valid only on its Sunday service date.'});
+ const vip=await readVip(req);
+ if(!vip)return res.status(401).json({error:'Please recover or register your VIP portal before checking in.'});
+ if(!safeEqual(req.get('x-csrf-token'),vip.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
+ const result=await transaction(async client=>{
+  const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
+  if(!service)throw httpError(404,'Service unavailable.');
+  const previous=(await client.query('SELECT id,status FROM vip_checkins WHERE registration_id=$1 AND date_key=$2 FOR UPDATE',[vip.id,pass.service_date])).rows[0];
+  if(previous){
+   if(previous.status==='invalid')return (await client.query("UPDATE vip_checkins SET status='pending',validated_by=NULL,validated_at=NULL WHERE id=$1 RETURNING id,status",[previous.id])).rows[0];
+   return previous;
+  }
+  const id=await allocateId(client,'vip_checkins');
+  return (await client.query('INSERT INTO vip_checkins(id,registration_id,date_key) VALUES($1,$2,$3) RETURNING id,status',[id,vip.id,pass.service_date])).rows[0];
+ });
+ res.json({status:result.status,message:result.status==='valid'?'Attendance already confirmed.':'Check-in submitted for admin validation.'});
+});
 publicRouter.get('/config',async(req,res)=>{
  const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[['church_name','service_name','church_address','church_contact','privacy_contact']])).rows.map(r=>[r.key,r.value]));
  res.json({...siteUrls(req),settings,today:today(),server_time:currentInstant().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});

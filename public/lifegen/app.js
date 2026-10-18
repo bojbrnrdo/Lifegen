@@ -237,11 +237,20 @@ vPanel.addEventListener("mousemove", e => {
         vPanel.style.setProperty("--mx", vpEvt.clientX - r.left + "px"), vPanel.style.setProperty("--my", vpEvt.clientY - r.top + "px")
     })
 }), $("year").textContent = (new Date).getFullYear();
-const nav = $("nav"),
-    onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 30);
+const nav = $("nav"), toTop = $("toTop"),
+    onScroll = () => {
+        nav.classList.toggle("scrolled", window.scrollY > 30), toTop.classList.toggle("show", window.scrollY > 560)
+    };
 window.addEventListener("scroll", onScroll, {
     passive: !0
 }), onScroll();
+// ---- Back to top: smooth scroll, instant when the user prefers reduced motion
+toTop.addEventListener("click", () => {
+    window.scrollTo({
+        top: 0,
+        behavior: REDUCED_MOTION ? "auto" : "smooth"
+    })
+});
 const mm = $("mobileMenu");
 $("burger").addEventListener("click", () => {
     mm.classList.add("open"), document.body.style.overflow = "hidden"
