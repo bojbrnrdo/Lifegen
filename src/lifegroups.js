@@ -7,6 +7,12 @@ const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 const SOLID_TARGET = 6; // Attendance target, not a membership capacity.
 export const NETWORK_CELL_LEADER_LIMIT = 12;
 export const CELL_MEMBER_LIMIT = 12;
+// A configured capacity may narrow a Cell, but the tracker still enforces the
+// established twelve-member upper bound used by the hierarchy rules.
+export function effectiveGroupCapacity(group) {
+  const configured = group?.capacity == null ? CELL_MEMBER_LIMIT : Number(group.capacity);
+  return Number.isFinite(configured) ? Math.min(Math.max(Math.trunc(configured), 1), CELL_MEMBER_LIMIT) : CELL_MEMBER_LIMIT;
+}
 const clean = (value) => value == null ? null : String(value).trim() || null;
 const asId = (value, label = 'ID') => {
   const id = Number(value);
@@ -140,7 +146,7 @@ function shapeGroup(row) {
     solid_count: Number(row.solid_count || 0),
     open_count: Number(row.member_count || 0) - Number(row.solid_count || 0),
     solid_target: SOLID_TARGET,
-    slots: Math.max(Math.min(row.capacity == null ? CELL_MEMBER_LIMIT : Number(row.capacity),CELL_MEMBER_LIMIT) - Number(row.member_count || 0), 0),
+    slots: Math.max(effectiveGroupCapacity(row) - Number(row.member_count || 0), 0),
     max_members: Boolean(row.leads_network) ? NETWORK_CELL_LEADER_LIMIT : CELL_MEMBER_LIMIT,
     is_active: Boolean(row.is_active),
     is_demo: Boolean(row.is_demo),
@@ -654,11 +660,21 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const leaderGroup = group.leader_person_id && (await client.query('SELECT id FROM networks WHERE id=$1 AND leader_person_id=$2 AND is_active', [group.network_id,group.leader_person_id])).rows[0];
     if (leaderGroup) {
       const leaders = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (leaders >= NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Network has reached its 12 Cell Leader limit.') : httpError(409, 'Network has reached its 12 Cell Leader limit.'));
+      const capacity = effectiveGroupCapacity(group);
+      if (leaders >= capacity) {
+        if (capacity === NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Network has reached its 12 Cell Leader limit.') : httpError(409, 'Network has reached its 12 Cell Leader limit.'));
+        const message = `Network has reached its ${capacity} Cell Leader limit.`;
+        throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
+      }
     }
     if (!leaderGroup) {
       const members = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (members >= CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Cell Leader has reached the 12-member limit.') : httpError(409, 'Cell Leader has reached the 12-member limit.'));
+      const capacity = effectiveGroupCapacity(group);
+      if (members >= capacity) {
+        if (capacity === CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Cell Leader has reached the 12-member limit.') : httpError(409, 'Cell Leader has reached the 12-member limit.'));
+        const message = `Cell Leader has reached the ${capacity}-member limit.`;
+        throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
+      }
     }
     if (tier === 'solid') {
       const solid = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
