@@ -1041,7 +1041,8 @@ function renderRegReview() {
 const REG_REVIEW_NOTES = {
     manual_leader_unmatched: "We could not match the leader name you typed to our leader records. Your registration is saved, and our team will review your Lifegroup assignment.",
     already_in_a_lifegroup: "You are already part of a Lifegroup, so we kept your existing membership instead of creating a duplicate.",
-    no_leader_selected: "No leader was selected, so your Lifegroup assignment is waiting for admin review."
+    no_leader_selected: "No leader was selected, so your Lifegroup assignment is waiting for admin review.",
+    lifegroup_full: "That Lifegroup is currently full. Your registration is saved, and our team will review your Lifegroup assignment."
 };
 
 $("chooseVip").addEventListener("click", () => { showRegPanels("vip"); $("vip-name").focus({ preventScroll: true }); });

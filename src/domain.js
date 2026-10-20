@@ -6,7 +6,11 @@ const load = () => { const c=domainContext.getStore(); if(!c) throw new Error('D
 const save = () => { domainContext.getStore().dirty = true; };
 const nextId = (table) => ++load().seq[table];
 const ADMIN = new Proxy({}, {get:(_,k)=>domainContext.getStore()?.actor?.[k] ?? ({id:null,display_name:'Imported / system'})[k]});
-const STATUSES = ['first_timer','new_believer','regular','visitor_3','visitor_2','visitor_1','no_returns','member','leader','volunteer','inactive'];
+// Keep write validation aligned with database/001_init.sql. The visitor outcome
+// labels that appeared in an older import format remain readable for legacy
+// display/filter compatibility, but cannot be written as current statuses.
+const STATUSES = ['first_timer','new_believer','regular','member','leader','volunteer','inactive'];
+const LEGACY_DISPLAY_STATUSES = ['visitor_3','visitor_2','visitor_1','no_returns'];
 // Promote linked VIP profiles after five distinct Sunday attendances (more than four visits).
 export const VIP_MEMBER_ATTENDANCE_THRESHOLD = 5;
 const VIP_PROMOTION_STATUSES = new Set(['first_timer','new_believer','regular']);
@@ -146,7 +150,7 @@ function listPeople(params = {}) {
   else {
     rows = rows.filter((p) => !p.archived_at);
     if (status === 'active') rows = rows.filter((p) => p.status !== 'inactive');
-    else if (status !== 'all' && STATUSES.includes(status)) rows = rows.filter((p) => p.status === status);
+    else if (status !== 'all' && (STATUSES.includes(status) || LEGACY_DISPLAY_STATUSES.includes(status))) rows = rows.filter((p) => p.status === status);
   }
   if (params.first_timer === '1' || params.first_timer === 1) rows = rows.filter((p) => p.status === 'first_timer');
   const sort = params.sort;

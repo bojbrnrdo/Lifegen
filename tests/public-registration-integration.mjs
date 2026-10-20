@@ -107,6 +107,7 @@ try {
   const email1 = `test-reg-${Date.now()}@example.com`;
   const email2 = `test-reg-${Date.now()}-b@example.com`;
   const email3 = `test-reg-${Date.now()}-c@example.com`;
+  const emailCapacity = `test-reg-${Date.now()}-capacity@example.com`;
 
   // ------------------------------------------------------------------ leaders
   section('LEADER DROPDOWN (gender-based, live data)');
@@ -188,6 +189,29 @@ try {
     const memberships = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE person_id=$1', [person1])).rows[0].n);
     check('one person row for that email', people === 1, `people=${people}`);
     check('one membership row for that person', memberships === 1, `memberships=${memberships}`);
+  }
+
+  section('REGISTRATION CAPACITY');
+  let personAtCapacity = null;
+  {
+    // The first attendee occupies the only configured slot. A later public
+    // registration must be retained for follow-up without overfilling the Cell.
+    await client.query('UPDATE lifegroups SET capacity=1 WHERE id=$1', [lgM]);
+    const r = await api('/api/public/registrations/regular', {
+      method: 'POST',
+      body: {
+        full_name: 'Reg Test Capacity Review', email: emailCapacity, birthdate: '2002-06-06', gender: 'male',
+        school: 'Reg Test School', ministry: 'Prayer', leader_person_id: String(leaderMale),
+        privacy_consent: true, idempotency_key: key(),
+      },
+      visitor: V(11),
+    });
+    personAtCapacity = Number(r.json?.person?.id);
+    if (personAtCapacity) ids.people.push(personAtCapacity);
+    check('full Cell registration is retained for review', r.status === 201 && r.json?.person_created === true, `status=${r.status}`);
+    check('full Cell is flagged instead of overfilled', r.json?.review?.needed === true && r.json?.review?.reason === 'lifegroup_full' && r.json?.membership?.created === false, JSON.stringify(r.json?.review));
+    const active = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [lgM])).rows[0].n);
+    check('full Cell active membership count stays within capacity', active === 1, `active=${active}`);
   }
 
   section('MANUAL LEADER ENTRY');
