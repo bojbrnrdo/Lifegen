@@ -104,6 +104,20 @@ function getLayout(rows,edges){
  dagre.layout(graph);
  return rows.map(r=>{const p=graph.node(r.id);return{id:r.id,type:'person',position:{x:p.x-W/2,y:p.y-H/2},data:{entry:r}};});
 }
+function RelationshipGallery({relations,relationTitle,onChoose}){
+ return <div className="lg-r-relations">
+  <div className="lg-r-relations-head"><h3 title={relationTitle}>{relationTitle}</h3><span>{relations.length}</span></div>
+  {relations.length===0?<p className="lg-r-empty">No related people yet.</p>:
+   <div className="lg-r-relation-grid">{relations.map(item=>(
+    <button key={item.id} className="lg-r-relation-avatar" title={name(item.person)} aria-label={'View '+name(item.person)} onClick={()=>onChoose(item)}>
+     <Avatar person={item.person}/>
+     <span className="lg-r-relation-status is-active" aria-hidden="true"/>
+     <span className="lg-r-relation-tooltip">{name(item.person)}</span>
+    </button>
+   ))}</div>}
+ </div>;
+}
+
 /** Compact relationship-focused details drawer for the selected tree node.
  * Only show information that helps administrators navigate the hierarchy;
  * personal contact fields remain in the dedicated People profile.
@@ -122,6 +136,10 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,m
    {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'people':'members'}</span>}
   </div>
   {role==='cell'&&progress&&<p className="lg-r-panel-attendance"><CalendarClock size={15}/>{progress.met_this_week?'Attendance submitted this week':'Weekly attendance not submitted'}</p>}
+  <div className="lg-r-relations-wrap">
+   {relationsLoading?<p className="lg-r-loading">Loading relationships…</p>:
+    <RelationshipGallery relations={relations} relationTitle={relationTitle} onChoose={onChoose}/>}
+  </div>
   <div className="lg-r-panel-actions">
    {manage&&role==='cell'&&<button type="button" onClick={()=>onAdd(selection)}><Plus size={15}/> Add Member</button>}
    {manage&&role!=='member'&&<button type="button" onClick={()=>onReassign(selection)}><ArrowRightLeft size={15}/> Edit / Reassign</button>}
@@ -138,6 +156,7 @@ function Dashboard({data,callbacks}){
  const [reports,setReports]=useState(()=>new Map());
  const [selected,setSelected]=useState(null);
  const [loading,setLoading]=useState(new Set());
+ const [search,setSearch]=useState('');
  const allFilters={...data.filters};
  const toggle=useCallback(id=>setExpanded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next}),[]);
  const addMembers=useCallback(async g=>{
@@ -197,6 +216,7 @@ function Dashboard({data,callbacks}){
    if(item.role==='member'||item.role==='cell')next.add('c'+item.groupId);
    return next;
   });
+  setSearch('');
   // A detail photo click should navigate even if the current search
   // is hiding the destination node.
   callbacks.onClearSearch?.();

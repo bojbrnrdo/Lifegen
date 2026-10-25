@@ -210,8 +210,10 @@ publicRouter.post('/registrations',async(req,res)=>{
  if(name.length<2||name.length>200||!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Enter a valid name, birthday, school/institution and inviter.');
  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
  const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');const key=hashToken(rawKey);
- const existing=await readVip(req);
- if(existing)return res.json({vip:vipShape(existing),already_registered:true});
+ // Public is unlimited: every submit creates a fresh VIP record even if the
+ // browser already holds a VIP cookie. The cookie-session is simply rotated
+ // to the newest registration; the personal attendance dashboard is admin-only
+ // and is not rendered on the public site.
  const result=await withState(async({data,client})=>{
   const duplicate=(await client.query('SELECT * FROM vip_registrations WHERE idempotency_key=$1',[key])).rows[0];
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}

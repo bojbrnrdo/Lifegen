@@ -75,17 +75,27 @@ export async function persistCycleWindow(cycle, client = { query }) {
 // sign-up order. The partial unique index from database/007 guarantees one
 // attributed row per person per Sunday; COUNT(DISTINCT person_id) keeps the
 // total honest even if a legacy duplicate is ever attributed by hand.
+// IMPORTANT: Demo-seeded records (people.is_demo = true) are never shown to
+// the congregation — only live registrations from POST /api/public/registrations
+// appear on the fullscreen board. Preview can still load demo data in DB, it
+// just won't be rendered.
 export async function vipsForService(serviceDate, client = { query }) {
   if (!isSundayKey(serviceDate)) throw httpError(400, 'A Sunday service date is required.');
   const { rows } = await client.query(
     `SELECT v.full_name, v.inviter, v.person_id, v.created_at
        FROM vip_registrations v
+       LEFT JOIN people p ON p.id = v.person_id
       WHERE v.service_date = $1
+        AND (p.is_demo IS NULL OR p.is_demo = false)
       ORDER BY v.created_at, v.id`,
     [serviceDate],
   );
   const { rows: totals } = await client.query(
-    'SELECT COUNT(DISTINCT person_id)::int AS total FROM vip_registrations WHERE service_date = $1',
+    `SELECT COUNT(DISTINCT v.person_id)::int AS total
+       FROM vip_registrations v
+       LEFT JOIN people p ON p.id = v.person_id
+      WHERE v.service_date = $1
+        AND (p.is_demo IS NULL OR p.is_demo = false)`,
     [serviceDate],
   );
   return {
