@@ -5,20 +5,34 @@
 // Idempotent: re-running adds nothing new.
 import pg from 'pg';
 
-const SUNDAY = '2026-10-18';
+function manilaDateKey(d) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function sundayFor(d) {
+  const key = manilaDateKey(d);
+  const dow = new Date(key + 'T12:00:00+08:00').getDay();
+  const off = dow === 0 ? 0 : 7 - dow;
+  const s = new Date(key + 'T12:00:00+08:00');
+  s.setDate(s.getDate() + off);
+  return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
+}
+const demoClock = process.env.LOCAL_DEMO_CLOCK ? new Date(process.env.LOCAL_DEMO_CLOCK) : new Date();
+const SUNDAY = sundayFor(demoClock);
+const SATURDAY = (() => { const d = new Date(SUNDAY + 'T12:00:00+08:00'); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
 const WINDOW_MINUTES = 120; // keep the board up for the whole demo service.
 const VIPS = [
   // [first, last, inviter (null = not given), registered at (Manila)]
-  ['Ana', 'Reyes', 'Maria Santos', '2026-10-17T09:15:00+08:00'],
-  ['Mark', 'Villanueva', 'Jose Bautista', '2026-10-17T10:40:00+08:00'],
-  ['Grace', 'Dela Cruz', 'Ruth Aquino', '2026-10-17T14:05:00+08:00'],
-  ['Paolo', 'Garcia', null, '2026-10-17T18:20:00+08:00'],
-  ['Mika', 'Santos', 'Joshua Reyes', '2026-10-17T19:00:00+08:00'],
-  ['Daniel', 'Cruz', 'Joshua Reyes', '2026-10-17T19:30:00+08:00'],
-  ['Faith', 'Mendoza', 'Joshua Reyes', '2026-10-17T20:10:00+08:00'],
-  ['Carlo', 'Tan', 'Andrea Lim', '2026-10-17T20:45:00+08:00'],
-  ['Lea', 'Ramos', 'Mark Dela Cruz', '2026-10-17T21:15:00+08:00'],
-  ['Ben', 'Ocampo', 'Ruth Aquino', '2026-10-17T21:40:00+08:00'],
+  ['Ana', 'Reyes', 'Maria Santos', `${SATURDAY}T09:15:00+08:00`],
+  ['Mark', 'Villanueva', 'Jose Bautista', `${SATURDAY}T10:40:00+08:00`],
+  ['Grace', 'Dela Cruz', 'Ruth Aquino', `${SATURDAY}T14:05:00+08:00`],
+  ['Paolo', 'Garcia', null, `${SATURDAY}T18:20:00+08:00`],
+  ['Mika', 'Santos', 'Joshua Reyes', `${SATURDAY}T19:00:00+08:00`],
+  ['Daniel', 'Cruz', 'Joshua Reyes', `${SATURDAY}T19:30:00+08:00`],
+  ['Faith', 'Mendoza', 'Joshua Reyes', `${SATURDAY}T20:10:00+08:00`],
+  ['Carlo', 'Tan', 'Andrea Lim', `${SATURDAY}T20:45:00+08:00`],
+  ['Lea', 'Ramos', 'Mark Dela Cruz', `${SATURDAY}T21:15:00+08:00`],
+  ['Ben', 'Ocampo', 'Ruth Aquino', `${SATURDAY}T21:40:00+08:00`],
 ];
 
 const c = new pg.Client({ host: '127.0.0.1', port: 5433, user: 'postgres', database: 'lifegen', ssl: false });

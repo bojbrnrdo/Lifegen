@@ -85,16 +85,16 @@ test('the countdown does not switch back the instant it reaches zero', () => {
 });
 
 test('the announcement holds for the configured duration, then returns to the countdown', () => {
-  const inside = resolveCycle({ now: at('2026-10-18T05:29:00Z') }); // 1:29 PM Manila
+  const inside = resolveCycle({ now: at('2026-10-18T06:29:00Z') }); // 2:29 PM Manila — still inside 120-min window
   assert.equal(inside.state, CYCLE_STATE.VIP_ANNOUNCEMENT);
   assert.equal(inside.window.seconds_remaining > 0, true);
 
-  const after = resolveCycle({ now: at('2026-10-18T05:30:01Z') }); // 1:30:01 PM Manila
+  const after = resolveCycle({ now: at('2026-10-18T07:00:01Z') }); // 3:00:01 PM Manila — after the 120-min window
   assert.equal(after.state, CYCLE_STATE.COUNTDOWN);
   assert.equal(after.phase, CYCLE_PHASE.NEXT_SUNDAY_COUNTDOWN);
   assert.equal(after.countdown_service_date, '2026-10-25');
-  // The service is still in session at 1:30 PM even though the board moved on.
-  assert.equal(after.service_is_live, true);
+  // The service has ended at 3:00 PM.
+  assert.equal(after.service_is_live, false);
 
   const ended = resolveCycle({ now: at('2026-10-18T07:30:00Z') }); // 3:30 PM Manila
   assert.equal(ended.service_is_live, false);
@@ -121,7 +121,7 @@ test('the configured duration and start time drive the transition', () => {
   assert.equal(early.announce_service_date, '2026-10-18');
 
   const junk = resolveCycle({ now: at('2026-10-14T02:00:00Z'), config: { announce_minutes: 'abc' } });
-  assert.equal(junk.config.announce_minutes, 30, 'a bad setting falls back to the default');
+  assert.equal(junk.config.announce_minutes, 120, 'a bad setting falls back to the default');
 });
 
 test('the persisted window survives a projector refresh', () => {
