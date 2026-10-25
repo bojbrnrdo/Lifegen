@@ -502,18 +502,16 @@ function syncVipDashboardState() {
         signup = $("vip-signup-form-container"),
         regular = $("regular-registration"),
         success = $("reg-success"),
-        dash = $("vip-attendance-dashboard"),
-        device = getDevice();
-    // A confirmation the visitor is still reading stays on screen until the page
-    // is reloaded or they choose another flow — the background refresh must never
-    // paint over it.
+        dash = $("vip-attendance-dashboard");
+    // Public is unlimited: never auto-open the personal dashboard. That view
+    // (attendance count / prize progress) is admin-only; the presentation
+    // screen stays sourced from vip_registrations per-Sunday.
+    if (dash) dash.hidden = true;
     if (success && !success.hidden) {
-        choice.hidden = !0, signup.hidden = !0, regular.hidden = !0, dash.hidden = !0;
+        choice.hidden = !0, signup.hidden = !0, regular.hidden = !0;
         return;
     }
-    // loadVipAttendance refreshes the VIP state first, so the prize display below can
-    // reuse that response instead of making a second request.
-    device && device.token && device.name ? (choice.hidden = !0, signup.hidden = !0, regular.hidden = !0, dash.hidden = !1, $("vip-welcome-name").textContent = device.name, loadVipAttendance().finally(loadPrizeInVipSection)) : (choice.hidden = !1, signup.hidden = !0, regular.hidden = !0, dash.hidden = !0, clearLiveValidation("vip-signup-form"))
+    choice.hidden = !1, signup.hidden = !0, regular.hidden = !0, clearLiveValidation("vip-signup-form")
 }
 function validateVipForm() {
     const nameInput = $("vip-name"),
@@ -618,9 +616,7 @@ $("vip-signup-form").addEventListener("submit", async e => {
     e.preventDefault();
     const data = validateVipForm();
     if (!data) return;
-    if (getDevice() && getDevice().token) return toast("You are already registered on this device — opening your portal.", "info"), void syncVipDashboardState();
-    const token = makeToken(),
-        reg = {
+    const reg = {
             full_name: data.name,
             gender: data.gender,
             birthdate: data.birthdate,
@@ -633,10 +629,7 @@ $("vip-signup-form").addEventListener("submit", async e => {
     } catch (err) {
         return void toast("Registration failed: " + err.message, "alert-triangle")
     }
-    setDevice({
-        token: token,
-        name: data.name
-    }), toast("Welcome to LIFEGEN, " + data.name + "! Your registration has been recorded.", "sparkles"), e.target.reset(), showVipRegistrationSuccess()
+    toast("Welcome to LIFEGEN, " + data.name + "! Your registration has been recorded.", "sparkles"), e.target.reset(), showVipRegistrationSuccess()
 }), $("checkin-btn").addEventListener("click", async () => {
     if (!isTodaySunday()) return void toast("Attendance check-in is only available on Sundays.", "alert-triangle");
     const device = getDevice();
@@ -936,6 +929,24 @@ function showVipRegistrationSuccess() {
         message: "Welcome to the LIFEGEN family. Your registration has been recorded.",
         fine: "Your details are stored securely in the LIFEGEN Supabase database."
     });
+    // Unlimited public: add a one-tap way to register another VIP without reload
+    const panel = $("reg-success");
+    if (panel && !panel.querySelector('[data-another-vip]')) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-gold btn-block';
+        btn.setAttribute('data-another-vip', '1');
+        btn.style.marginTop = '16px';
+        btn.textContent = 'Register another VIP';
+        btn.addEventListener('click', () => {
+            // Clear the success state and return to the chooser so the next
+            // person can be registered immediately — no personal counter shown.
+            showRegPanels('choice');
+            // Also clear any lingering VIP session cookie server-side is fine;
+            // the next registration simply creates a new row.
+        });
+        panel.appendChild(btn);
+    }
 }
 
 function goRegStep(step) {

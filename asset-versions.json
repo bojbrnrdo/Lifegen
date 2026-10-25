@@ -1,7 +1,7 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.5",
-    "sha256": "d0bc30192a7406979ff8bba53ebc6df8b41a0bcc00aa4ca46c1a55f350daba23"
+    "version": "2.4.6",
+    "sha256": "7dde7371a2589bb7f3a01a3e8c495bcf97d49c58b0685037cbcb7107c6a507cd"
   },
   "/lifegen/backend.js": {
     "version": "2.4.9",
