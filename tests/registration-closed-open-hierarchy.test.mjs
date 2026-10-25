@@ -5,8 +5,8 @@ import {readFileSync} from 'node:fs';
 const source=readFileSync(new URL('../public/admin/js/views/unifiedAddNew.js',import.meta.url),'utf8');
 
 test('Member registration exposes Closed Cell and Open Cell choices',()=>{
- assert.match(source,/name=\\"member_tier\\" value=\\"solid\\" checked/);
- assert.match(source,/name=\\"member_tier\\" value=\\"new\\"/);
+ assert.match(source,/name=\"member_tier\" value=\"solid\" checked/);
+ assert.match(source,/name=\"member_tier\" value=\"new\"/);
 });
 
 test('Open Cell registration fails closed until parent relationship is implemented',()=>{
