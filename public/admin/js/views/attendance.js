@@ -37,7 +37,9 @@ export async function renderAttendance({ main, query }) {
         scopeIds=new Set([network.leader_person_id,...(network.groups||[]).flatMap(g=>[g.leader_person_id,...(g.members||[]).map(m=>m.id)])].filter(Boolean).map(Number));
         scopeLabel=network.leader_name||network.name||'Network';
       }
-    }catch(e){scopeIds=null;toast('Unable to load the selected attendance context.','error');}
+    }catch(e){scopeIds=new Set();scopeLabel='Unavailable context';toast('Unable to load the selected attendance context. Roster hidden for safety.','error');}
+  } else if(scopeKind){
+    scopeIds=new Set();scopeLabel='Invalid context';toast('Invalid attendance context. Open Attendance from a valid profile or Cell.','error');
   }
 
   main.innerHTML = html`
