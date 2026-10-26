@@ -56,7 +56,7 @@ export async function renderPeople({ main, query }) {
     if (!offset) list.innerHTML = '<div class="loading">Loading…</div>';
     let page;
     try { page = await api.people({ ...filters, paged: 1, limit: PAGE, offset }); }
-    catch (err) { list.innerHTML = html`<div class="alert alert--error" style="margin:16px">${err.message}</div>`; return; }
+    catch (err) { if(id === reqId) list.innerHTML = html`<div class="alert alert--error" style="margin:16px">${err.message}</div>`; return; }
     if (id !== reqId) return;
     const people = previous.concat(page.rows);
 
