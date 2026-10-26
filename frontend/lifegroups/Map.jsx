@@ -49,7 +49,7 @@ const TreeNode=memo(({data})=>{
    </div>
    <div className="lg-r-identity"><strong title={title}>{title}</strong><span>{label}</span></div>
    <div className="lg-r-badges">
-    {entry.role!=='member'&&<span><Users size={12}/>{entry.count} {entry.role==='network'?'direct members':'members'}</span>}
+    {entry.role!=='member'&&<span><Users size={12}/>{entry.count} {entry.role==='network'?'people':'members'}</span>}
     {alert===true&&<span className="lg-r-warning" title="No submitted attendance report for this week"><AlertTriangle size={12}/> Report due</span>}
    </div>
    <Handle type="source" position={Position.Bottom} isConnectable={false} className="lg-r-handle"/>
@@ -134,7 +134,7 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,m
   <div className="lg-r-panel-person"><Avatar person={person}/><div><strong>{name(person)}</strong><small>{label}</small></div></div>
   <div className="lg-r-panel-summary">
    <span className={'lg-r-panel-status '+(active?'is-active':'is-inactive')}><i/>{active?'Active':'Inactive'}</span>
-   {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'direct members':'members'}</span>}
+   {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'people':'members'}</span>}
   </div>
   {role==='cell'&&progress&&<p className="lg-r-panel-attendance"><CalendarClock size={15}/>{progress.met_this_week?'Attendance submitted this week':'Weekly attendance not submitted'}</p>}
   <div className="lg-r-relations-wrap">
