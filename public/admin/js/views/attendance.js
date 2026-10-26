@@ -21,8 +21,8 @@ export async function renderAttendance({ main, query }) {
   let service = null;   // { id, present_count, ..., roster } — id is null until the first mark
   let filter = 'all';
   let search = '';
-  const scopeKind=query.person_id?'person':query.cell_id?'cell':query.network_id?'network':null;
-  const scopeId=Number(query.person_id||query.cell_id||query.network_id)||null;
+  const scopeKind=query.person_id!=null?'person':query.cell_id!=null?'cell':query.network_id!=null?'network':null;
+  const scopeId=scopeKind?Number(query[scopeKind+'_id']):null;
   let scopeIds=null,scopeLabel='';
   if(scopeKind&&Number.isSafeInteger(scopeId)&&scopeId>0){
     try{
@@ -37,7 +37,9 @@ export async function renderAttendance({ main, query }) {
         scopeIds=new Set([network.leader_person_id,...(network.groups||[]).flatMap(g=>[g.leader_person_id,...(g.members||[]).map(m=>m.id)])].filter(Boolean).map(Number));
         scopeLabel=network.leader_name||network.name||'Network';
       }
-    }catch(e){scopeIds=null;toast('Unable to load the selected attendance context.','error');}
+    }catch(e){scopeIds=new Set();scopeLabel='Unavailable context';toast('Unable to load the selected attendance context. Roster hidden for safety.','error');}
+  } else if(scopeKind){
+    scopeIds=new Set();scopeLabel='Invalid context';toast('Invalid attendance context. Open Attendance from a valid profile or Cell.','error');
   }
 
   main.innerHTML = html`
@@ -64,7 +66,7 @@ export async function renderAttendance({ main, query }) {
       scopeKind==='cell'?scopeId:Number(groups[0]?.id)||null);
     const selected=groups.find(g=>Number(g.id)===selectedId);
     root.innerHTML=html`<div class="row" style="gap:12px;flex-wrap:wrap">
-      <label class="grow">Cell Group <select data-cell-id aria-label="Choose Cell Group">${groups.map(g=>html`<option value="${g.id}" ${selected?.id===g.id?'selected':''}>${g.leader_name||g.name}</option>`).join('')}</select></label>
+      <label class="grow">Cell Group <select data-cell-id aria-label="Choose Cell Group">${groups.map(g=>html`<option value="${g.id}" ${selected?.id===g.id?'selected':''}>${g.leader_name||g.name}</option>`)}</select></label>
       ${can('lifegroups:manage')&&selected?html`<button class="btn btn--primary" type="button" data-record-cell>Record meeting</button>`:''}
     </div><div id="cellReportResults" class="mt-2"></div>`;
     root.querySelector('[data-cell-id]')?.addEventListener('change',()=>loadCellAttendance());
@@ -75,7 +77,7 @@ export async function renderAttendance({ main, query }) {
       results.innerHTML=html`<div class="row" style="gap:16px;flex-wrap:wrap">
         <span><strong>${p.total}</strong> members</span><span><strong>${p.held_last_4}</strong> meetings held in the last four weeks</span>
       </div><div class="table-wrap mt-2"><table class="table"><thead><tr><th>Meeting date</th><th>Status</th><th>Present</th></tr></thead>
-      <tbody>${(p.meetings||[]).slice(0,12).map(m=>html`<tr><td>${fmtDate(m.meeting_date)}</td><td>${m.held?'Held':'Not held'}</td><td>${m.present_count??0}</td></tr>`).join('')}</tbody></table></div>`;
+      <tbody>${(p.meetings||[]).slice(0,12).map(m=>html`<tr><td>${fmtDate(m.meeting_date)}</td><td>${m.held?'Held':'Not held'}</td><td>${m.present_count??0}</td></tr>`)}</tbody></table></div>`;
       root.querySelector('[data-record-cell]')?.addEventListener('click',()=>meetingForm(selected.id,p,null,()=>loadCellAttendance()));
     }catch(error){results.innerHTML=html`<div class="alert alert--error">${error.message}</div>`;}
   }
@@ -138,11 +140,10 @@ export async function renderAttendance({ main, query }) {
     service.id = created.id;
   }
 
-  const counts = () => ({
-    all: service.roster.length,
-    present: service.roster.filter((p) => p.att_status === 'present').length,
-    unmarked: service.roster.filter((p) => p.att_status !== 'present').length,
-  });
+  const counts = () => {
+    const roster=scopeIds?service.roster.filter(p=>scopeIds.has(Number(p.id))):service.roster;
+    return {all:roster.length,present:roster.filter(p=>p.att_status==='present').length,unmarked:roster.filter(p=>p.att_status!=='present').length};
+  };
 
   function renderRoster() {
     const c = counts();
