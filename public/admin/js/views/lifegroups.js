@@ -493,7 +493,7 @@ export async function renderLifegroups({main, query}) {
      if(seq!==peopleSearchSeq||!main.contains(box))return;
      box.innerHTML=rows.length?html`<section class="card mb-2"><div class="card__body" style="padding:12px 16px">
        <b>Matching People</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">
-       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`).join('')}
+       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`)}
        </div></div></section>`:html`<p class="small muted mb-2">No matching People records. Try a different name or Person ID.</p>`;
    }catch(e){if(seq===peopleSearchSeq)box.innerHTML=html`<p class="small muted">${e.message||'Search unavailable.'}</p>`;}
  }
@@ -530,7 +530,7 @@ async function drawAllPeople(body) {
    const total=Array.isArray(page)?rows.length:Number(page?.total??rows.length);
    if(!Number.isFinite(total)||total<0)throw new Error('Invalid directory result. Please retry.');
    if(offset>0&&rows.length===0){offset=total>0?Math.floor((total-1)/PAGE)*PAGE:0;return load();}
-   result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${esc(p.person_code||'')}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`).join('')}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
+   result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${p.person_code||''}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`)}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
    pager.innerHTML=html`<span class="small muted">Showing ${rows.length?offset+1:0}–${offset+rows.length} of ${total}</span><div class="row"><button class="btn btn--sm" type="button" data-prev ${offset===0?'disabled':''}>Previous</button><button class="btn btn--sm" type="button" data-next ${offset+rows.length>=total?'disabled':''}>Next</button></div>`;
    pager.querySelector('[data-prev]').onclick=()=>{offset=Math.max(0,offset-PAGE);load();};
    pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
