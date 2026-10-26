@@ -145,6 +145,31 @@ try {
   });
   meetingId = Number(report.meeting_id);
   assert.ok(report.progress.members.some((member) => member.id === personId && member.is_vip), 'Lifegroup meeting report and progress include the linked VIP');
+  // Verify durable Cell meeting attendance belongs to the canonical People ID,
+  // and saving the same meeting again does not create duplicate attendance.
+  const verifyClient = new pg.Client({ connectionString: databaseUrl, ssl: false });
+  await verifyClient.connect();
+  try {
+    const before = await verifyClient.query(
+      'SELECT count(*)::int AS total FROM lifegroup_meeting_attendance WHERE meeting_id=$1 AND person_id=$2',
+      [meetingId, personId],
+    );
+    assert.equal(before.rows[0].total, 1, 'Cell meeting attendance is linked to the registered Person exactly once');
+    const repeatedMeeting = await json('/api/tracker/saveMeeting', {
+      method: 'POST',
+      body: { args: [groupId, { meeting_date: meetingDate, held: true, present_ids: [personId], devotion_ids: [] }] },
+      auth: session,
+    });
+    assert.equal(Number(repeatedMeeting.meeting_id), meetingId, 're-saving a Cell meeting reuses its record');
+    const after = await verifyClient.query(
+      'SELECT count(*)::int AS total FROM lifegroup_meeting_attendance WHERE meeting_id=$1 AND person_id=$2',
+      [meetingId, personId],
+    );
+    assert.equal(after.rows[0].total, 1, 're-saving a Cell meeting does not duplicate attendance');
+  } finally {
+    await verifyClient.end();
+  }
+
 
   console.log('PASS: public VIP signup → Lifegroup needs queue → assign to group → attendance report/progress.');
 } finally {
