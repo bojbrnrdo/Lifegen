@@ -20,10 +20,10 @@ const imageSize = bytes => {
 };
 const sha = b => createHash('sha256').update(b).digest('hex');
 
-test('all 48 supplied photos and the artwork occupy the photo/poster deck exactly once', () => {
-  assert.equal(manifest.items.length, 49);
-  assert.equal(new Set(manifest.items.map(e => e.source)).size, 49);
-  assert.equal((page.match(/class="deck-card"/g) || []).length, 49);
+test('all 48 supplied photos occupy the photo/poster deck exactly once', () => {
+  assert.equal(manifest.items.length, 48);
+  assert.equal(new Set(manifest.items.map(e => e.source)).size, 48);
+  assert.equal((page.match(/class="deck-card"/g) || []).length, 48);
   for (const item of manifest.items) {
     assert.equal(page.split(`data-img="${item.preview}"`).length - 1, 1);
     assert.equal(page.split(`data-full="${item.full}"`).length - 1, 1);
@@ -71,7 +71,7 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   const poster = highlight.match(/data-poster="([^"]+)"/)[1];
   assert.equal(poster, '/brand/gallery/drive/grand-campus-hangout-cover.webp');
   assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
-  assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 1);
+  assert.equal((page.match(/data-label="Carlo Yarte"/g) || []).length, 1);
 });
 
 test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
@@ -104,10 +104,6 @@ test('the highlight thumbnail is a 16:9 crop of the supplied title card', () => 
   assert.equal(size.mime, 'image/webp');
   // Drop-in shape for the 16:9 frame, and for a 1280 × 720 video thumbnail.
   assert.deepEqual([size.width, size.height], [1280, 720]);
-  // The supplied title card is the only artwork; the deck poster is untouched.
-  assert.notEqual(sha(cover), manifest.items[0].fullSha256);
-  assert.equal(assets('/brand/gallery/drive/lifegen-artwork-preview.webp').length,
-               manifest.items[0].previewBytes);
   assert.doesNotMatch(page, /lifegen-highlight-cover/);
 });
 
