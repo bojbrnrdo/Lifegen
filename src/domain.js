@@ -336,10 +336,8 @@ export const domain = {
     return decorate(p);
   }),
   deletePerson: async_((id) => {
-    const d = load(); const n = Number(id);
-    if (!findPerson(n)) throw httpError(404, 'Person not found.');
-    d.people = d.people.filter((p) => p.id !== n); d.records = d.records.filter((r) => r.person_id !== n); d.audit = d.audit.filter((a) => a.person_id !== n);
-    save(); return {};
+    if (!findPerson(Number(id))) throw httpError(404, 'Person not found.');
+    throw httpError(409, 'Permanent deletion is disabled to protect Lifegroup and attendance history. Archive the person instead.');
   }),
 
   // services / attendance
