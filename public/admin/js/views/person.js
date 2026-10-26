@@ -79,7 +79,6 @@ export async function renderPerson({ main }, id) {
       <span class="row">
         <button class="btn ${inactive ? '' : 'btn--danger-ghost'}" id="toggleActive">${inactive ? 'Reactivate' : 'Deactivate'}</button>
         <button class="btn btn--ghost small" id="archiveBtn" style="color:var(--muted)" title="Hide from lists; keep history">Archive</button>
-        ${can('people:delete') ? html`<button class="btn btn--ghost small" id="deleteBtn" style="color:var(--muted)">Delete permanently</button>` : ''}
       </span>
     </div>` : ''}`;
 
@@ -128,14 +127,5 @@ export async function renderPerson({ main }, id) {
     });
   }
 
-  main.querySelector('#deleteBtn')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({
-      title: 'Delete this person permanently?',
-      message: `This removes <b>${p.first_name} ${p.last_name}</b> (${p.person_code}) and <b>${p.history.length}</b> attendance record(s). Past Sunday totals will change and this <b>cannot be undone</b>. Prefer <b>Archive</b> unless this record was created by mistake.`,
-      confirmText: 'Delete permanently', danger: true, confirmWord: 'DELETE',
-    });
-    if (!ok) return;
-    try { await api.deletePerson(p.id); toast('Person deleted.', 'info'); location.hash = '#/people'; }
-    catch (err) { toast(err.message, 'error'); }
-  });
+
 }
