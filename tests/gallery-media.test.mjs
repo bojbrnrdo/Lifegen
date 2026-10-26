@@ -74,11 +74,10 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   assert.equal((page.match(/data-label="Carlo Yarte"/g) || []).length, 1);
 });
 
-test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
+test('Janime Rivera testimony plays on LIFEGEN without a Google Vids editor link', () => {
   const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
-  const url = 'https://docs.google.com/videos/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/edit?usp=drive_link';
   assert.ok(testimony.includes(`data-video="/brand/videos/janime-rivera-testimony-720p.mp4"`));
-  assert.ok(testimony.includes(`href="${url}"`));
+  assert.doesNotMatch(testimony, /docs\.google\.com\/videos|Open original in Google Vids/);
   assert.match(testimony, /data-ratio="16\/9"/);
   assert.match(testimony, /<h4>Janime Rivera<\/h4>/);
   const poster = testimony.match(/data-poster="([^"]+)"/)[1];
@@ -94,6 +93,22 @@ test('the testimony thumbnail is a 16:9 widescreen LCF title card', () => {
   const size = sniffImage(cover);
   assert.equal(size.mime, 'image/webp');
   assert.deepEqual([size.width, size.height], [1280, 720]);
+});
+
+test('the Carlo Yarte testimony uses the same 16:9 LCF title card as Janime', () => {
+  // Carlo's poster used to be a blank black frame, so the second testimony card
+  // looked like a broken video next to Janime's. Both cards now show the church
+  // title card, so this pins the shape AND that the card is not empty.
+  const poster = page.match(/data-label="Carlo Yarte"[\s\S]*?data-poster="([^"]+)"/)?.[1]
+    ?? page.match(/data-poster="([^"]+)"[^>]*data-label="Carlo Yarte"/)?.[1];
+  assert.equal(poster, '/brand/gallery/drive/carlo-yarte-testimony-cover.webp');
+  const cover = assets(poster);
+  assert.equal(sniffImage(cover).mime, 'image/webp');
+  assert.deepEqual([imageSize(cover).width, imageSize(cover).height], [1280, 720]);
+  // A blank poster is a solid colour: count distinct sampled luma values.
+  const vp8l = cover.toString('ascii', 12, 16);
+  assert.equal(vp8l, 'VP8L', 'the title card stays lossless so the lockup is not smeared');
+  assert.ok(cover.length > 8000, `the title card must contain the LCF lockup (${cover.length} bytes)`);
 });
 
 test('the highlight thumbnail is a 16:9 crop of the supplied title card', () => {
