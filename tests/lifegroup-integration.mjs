@@ -192,7 +192,7 @@ try {
     });
     assert.equal(approved.status, 'valid', 'admin can approve pending check-in');
     const attendance = await checkinClient.query(
-      "SELECT r.id,r.source,r.source_checkin_id,r.service_id FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=$1 AND s.service_date=$2 AND r.status='present'",
+      "SELECT r.id,r.source,(r.extras->>'source_checkin_id')::bigint AS source_checkin_id,r.service_id FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=$1 AND s.service_date=$2 AND r.status='present'",
       [personId, meetingDate],
     );
     assert.equal(attendance.rows.length, 1, 'approval records exactly one Sunday attendance');
