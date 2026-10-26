@@ -151,6 +151,13 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,m
 }
 function Dashboard({data,callbacks}){
  const rf=useReactFlow();
+ const [mobile,setMobile]=useState(()=>window.matchMedia('(max-width: 780px)').matches);
+ useEffect(()=>{
+  const media=window.matchMedia('(max-width: 780px)');
+  const update=()=>setMobile(media.matches);
+  media.addEventListener('change',update);
+  return ()=>media.removeEventListener('change',update);
+ },[]);
  const [expanded,setExpanded]=useState(()=>new Set());
  const [members,setMembers]=useState(()=>new Map());
  const [reports,setReports]=useState(()=>new Map());
@@ -227,7 +234,14 @@ function Dashboard({data,callbacks}){
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
- useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
+ useEffect(()=>{fit()},[nodes,fit,data.filters.gender,data.filters.status,mobile]);
+ useEffect(()=>{
+  const canvas=document.querySelector('.lg-r-canvas');
+  if(!canvas || !window.ResizeObserver)return;
+  const observer=new ResizeObserver(()=>fit());
+  observer.observe(canvas);
+  return ()=>observer.disconnect();
+ },[fit]);
  useEffect(()=>{const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf]);
 
  return <div className="lg-r-shell">
@@ -238,9 +252,11 @@ function Dashboard({data,callbacks}){
    <div className="lg-r-canvas">
     <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} proOptions={{hideAttribution:true}}
      fitView minZoom={.03} maxZoom={2.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable
+     panOnDrag={!mobile} panOnScroll={false} zoomOnScroll={!mobile} zoomOnPinch={!mobile}
+     zoomOnDoubleClick={!mobile} preventScrolling={!mobile}
      onPaneClick={()=>setSelected(null)} >
      <Background color="#c9e4d2" gap={22} size={1}/>
-     <Controls showInteractive={false} fitViewOptions={{padding:.18,maxZoom:1.1}}/>
+     {!mobile&&<Controls showInteractive={false} fitViewOptions={{padding:.18,maxZoom:1.1}}/>}
     </ReactFlow>
     {rows.length===0&&<div className="lg-r-empty">No Networks match these filters.</div>}
    </div>
@@ -249,7 +265,7 @@ function Dashboard({data,callbacks}){
     relationsLoading={selected?.role==='cell'&&loading.has(selected.groupId)}
     onClose={()=>setSelected(null)} onAdd={callbacks.onAdd} onReassign={callbacks.onReassign} onRemove={callbacks.onRemove}/>
   </div>
-  <p className="lg-r-caption">Click a profile circle to expand or collapse · Drag to pan · Scroll to zoom</p>
+  <p className="lg-r-caption">Click a profile circle to expand or collapse{mobile?' · Map auto-fits your screen':' · Drag to pan · Scroll to zoom'}</p>
  </div>;
 }
 export function mount(el,data,callbacks){
