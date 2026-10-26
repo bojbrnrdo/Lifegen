@@ -120,7 +120,7 @@ function setActiveNav(key) {
   const devMenu=document.getElementById('devMenu');
   if(devMenu && key.startsWith('dev-')){devMenu.hidden=false;document.getElementById('devMenuToggle')?.setAttribute('aria-expanded','true');}
   const peopleMenu = document.getElementById('peopleMenu');
-  if (peopleMenu && ['attendance', 'registrations'].includes(key)) {
+  if (peopleMenu && ['lifegroups', 'attendance', 'registrations'].includes(key)) {
     peopleMenu.hidden = false;
     document.getElementById('peopleMenuToggle')?.setAttribute('aria-expanded', 'true');
   }
@@ -153,12 +153,12 @@ function renderShell() {
       </a>
       <nav class="nav" id="nav">
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group') : ''}
-        ${(can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
+        ${(can('lifegroups:view')||can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
           <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
             ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
           </button>
           <div class="nav__children" id="peopleMenu" hidden>
+             ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
             ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check', true) : ''}
             ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
           </div>
