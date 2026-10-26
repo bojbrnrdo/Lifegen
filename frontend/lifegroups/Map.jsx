@@ -234,7 +234,7 @@ function Dashboard({data,callbacks}){
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
- useEffect(()=>{fit()},[nodes,fit,data.filters.gender,data.filters.status,mobile]);
+ useEffect(()=>{fit()},[nodes.length,expanded.size,fit,data.filters.gender,data.filters.status,mobile]);
  useEffect(()=>{
   const canvas=document.querySelector('.lg-r-canvas');
   if(!canvas || !window.ResizeObserver)return;
@@ -242,7 +242,7 @@ function Dashboard({data,callbacks}){
   observer.observe(canvas);
   return ()=>observer.disconnect();
  },[fit]);
- useEffect(()=>{const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf]);
+ useEffect(()=>{if(mobile)return;const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf,mobile]);
 
  return <div className="lg-r-shell">
   <div className="lg-r-tools">
