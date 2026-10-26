@@ -71,7 +71,7 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   const poster = highlight.match(/data-poster="([^"]+)"/)[1];
   assert.equal(poster, '/brand/gallery/drive/grand-campus-hangout-cover.webp');
   assert.doesNotMatch(page, /<iframe/); // No eager third-party player request.
-  assert.equal((page.match(/data-label="Testimony coming soon"/g) || []).length, 1);
+  assert.equal((page.match(/data-label="Carlo Yarte"/g) || []).length, 1);
 });
 
 test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
