@@ -74,11 +74,10 @@ test('Grand Campus Hangout is in the widescreen highlight frame with a direct fa
   assert.equal((page.match(/data-label="Carlo Yarte"/g) || []).length, 1);
 });
 
-test('Janime Rivera testimony is in the testimony video frame with a direct fallback', () => {
+test('Janime Rivera testimony plays on LIFEGEN without a Google Vids editor link', () => {
   const testimony = page.match(/<div class="story-grid">\s*<article class="vcard reveal"[^>]*>(.*?)<\/article>/s)[1];
-  const url = 'https://docs.google.com/videos/d/1nz7eS6ge9ezqCHZrUnFyVfj28YfqEnHL0sncocPgZKQ/edit?usp=drive_link';
   assert.ok(testimony.includes(`data-video="/brand/videos/janime-rivera-testimony-720p.mp4"`));
-  assert.ok(testimony.includes(`href="${url}"`));
+  assert.doesNotMatch(testimony, /docs\.google\.com\/videos|Open original in Google Vids/);
   assert.match(testimony, /data-ratio="16\/9"/);
   assert.match(testimony, /<h4>Janime Rivera<\/h4>/);
   const poster = testimony.match(/data-poster="([^"]+)"/)[1];
