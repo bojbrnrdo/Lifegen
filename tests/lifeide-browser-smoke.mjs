@@ -112,12 +112,21 @@ try {
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-repository.js')).click()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js');
  await (await import('node:fs/promises')).writeFile(path.join(workspace,'browser-repository.js'),'const externalChange = true;');
  await evaluate("document.getElementById('editor').value='const staleBrowserEdit = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
  await new Promise(r=>setTimeout(r,450));
  assert.equal(await readFile(path.join(workspace,'browser-repository.js'),'utf8'),'const externalChange = true;','Stale editor must not overwrite external changes');
  console.log('PASS LifeIDE repository browser: stale-version save blocked');
+ await evaluate("window.confirm=()=>false;[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('README.md')).click()");
+ await new Promise(r=>setTimeout(r,150));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js','Cancel file-switch must retain the current file');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;','Cancel file-switch must retain the unsaved edit');
+ console.log('PASS LifeIDE repository browser: cancelled file switch preserves unsaved text');
+
  await evaluate("window.confirm=()=>false;document.getElementById('refresh').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;','Cancel refresh must preserve unsaved text');
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
