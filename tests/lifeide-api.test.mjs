@@ -89,7 +89,16 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'hello',version:first.data.version}})).status,200);
   assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'overwrite',version:first.data.version}})).status,409);
   assert.equal(await fs.readFile(path.join(workspace,'src/test.js'),'utf8'),'hello');
-  const tree=await call('/tree?path=src');assert.equal(tree.data.items[0].name,'test.js');
+  await fs.writeFile(path.join(workspace,'src','binary.txt'),Buffer.from([0xff,0xfe]));
+  const bad=await call('/file?path=src%2Fbinary.txt');
+  assert.equal(bad.status,415);
+  const invalidSave=await call('/file',{method:'PUT',body:{
+   path:'src/binary.txt',content:'should not replace invalid text',
+   version:(await import('node:crypto')).createHash('sha256').update(Buffer.from([0xff,0xfe])).digest('hex')
+  }});
+  assert.equal(invalidSave.status,415);
+  assert.deepEqual(await fs.readFile(path.join(workspace,'src','binary.txt')),Buffer.from([0xff,0xfe]));
+  const tree=await call('/tree?path=src');assert.ok(tree.data.items.some(x=>x.name==='test.js'));
   assert.equal((await call('/file?path=..%2Fetc%2Fpasswd')).status,400);
   execFileSync('git',['init','-q'],{cwd:workspace});
   execFileSync('git',['-c','user.name=Test','-c','user.email=test@example.invalid','add','src/test.js'],{cwd:workspace});

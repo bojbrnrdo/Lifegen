@@ -51,6 +51,7 @@ router.get('/file',async(req,res)=>{
  const stat=await fs.stat(absolute);
  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not an editable text file.');
  const bytes=await fs.readFile(absolute);
+ if(bytes.length>512*1024)throw httpError(413,'File is too large to edit.');
  if(bytes.includes(0))throw httpError(415,'Binary files cannot be edited.');
  try{new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
  res.json({path:raw,content:bytes.toString('utf8'),version:crypto.createHash('sha256').update(bytes).digest('hex')});
@@ -62,7 +63,9 @@ router.put('/file',(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){n
  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not editable.');
  const original=await fs.readFile(absolute),hash=crypto.createHash('sha256').update(original).digest('hex');
  if(hash!==version)throw httpError(409,'File changed on disk. Reload before saving.');
+ if(original.length>512*1024)throw httpError(413,'File is too large to edit.');
  if(original.includes(0))throw httpError(415,'Binary file.');
+ try{new TextDecoder('utf-8',{fatal:true}).decode(original);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
  await fs.writeFile(absolute,content,{flag:'w'});
  res.json({ok:true,version:crypto.createHash('sha256').update(content).digest('hex')});
 });
