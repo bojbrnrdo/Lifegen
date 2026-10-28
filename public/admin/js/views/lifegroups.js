@@ -302,10 +302,15 @@ export async function renderLifegroups({main, query}) {
  // hierarchy/overview endpoints used by the administrator map.
  const leader=await api.leaderScope();
  if(leader.kind==='network_leader'||leader.kind==='cell_leader'||(leader.kind==='unassigned'&&leader.linked)){
-  const people=leader.kind==='unassigned'?[]:await api.people({status:'all',limit:2000});
+  const requestedPage=Number(query.page);
+  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?Math.min(requestedPage,100000):1;
+  const perPage=100;
+  const listing=leader.kind==='unassigned'?{rows:[],total:0,has_more:false}:await api.people({status:'all',paged:1,limit:perPage,offset:(page-1)*perPage});
+  const people=listing.rows;
   main.innerHTML=html`<section class="lifegroups-page"><div class="page-header"><div><h1>My Lifegroups</h1><p class="sub">Only members in your assigned active Cells are displayed.</p></div></div>
-   <div class="card"><div class="card__body"><div class="row row--between" style="gap:12px;flex-wrap:wrap"><h2>My People (${people.length})</h2><button class="btn btn--sm" type="button" id="leaderPeopleRefresh">${icon('undo',15)} Refresh people</button></div>
-    ${people.length?html`<div class="people-directory"><table class="table"><thead><tr><th>Person</th><th>Profile</th></tr></thead><tbody>${people.map(p=>html`<tr><td data-label="Person">${esc(fullName(p))}</td><td data-label="Profile"><a class="btn btn--sm" href="#/people/${p.id}">View profile</a></td></tr>`)}</tbody></table></div>`:html`<p class="muted">No active Cell members are assigned to you.</p>`}</div></div></section>`;
+   <div class="card"><div class="card__body"><div class="row row--between" style="gap:12px;flex-wrap:wrap"><h2>My People (${listing.total})</h2><button class="btn btn--sm" type="button" id="leaderPeopleRefresh">${icon('undo',15)} Refresh people</button></div>
+    ${people.length?html`<div class="people-directory"><table class="table"><thead><tr><th>Person</th><th>Profile</th></tr></thead><tbody>${people.map(p=>html`<tr><td data-label="Person">${esc(fullName(p))}</td><td data-label="Profile"><a class="btn btn--sm" href="#/people/${p.id}">View profile</a></td></tr>`)}</tbody></table></div>`:html`<p class="muted">No active Cell members are assigned to you.</p>`}
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:12px">${page>1?html`<a class="btn btn--sm" href="#/lifegroups?page=${page-1}">Previous</a>`:''}<span class="muted">Page ${page}</span>${listing.has_more?html`<a class="btn btn--sm" href="#/lifegroups?page=${page+1}">Next</a>`:''}</div></div></div></section>`;
   main.querySelector('#leaderPeopleRefresh')?.addEventListener('click',()=>renderLifegroups({main,query}).catch(e=>toast(e.message,'error')));
   return;
  }

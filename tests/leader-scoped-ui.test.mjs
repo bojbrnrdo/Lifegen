@@ -9,6 +9,6 @@ test('linked staff management buttons hidden without changing admin grants',()=>
 });
 test('linked leaders use their scoped directory rather than unrestricted map endpoints',()=>{
  assert.match(view,/const leader=await api\.leaderScope\(\)/);
- assert.match(view,/const people=leader\.kind==='unassigned'\?\[\]:await api\.people/);
+ assert.match(view,/const listing=leader\.kind==='unassigned'\?\{rows:\[\],total:0,has_more:false\}:await api\.people/);
  assert.match(view,/Only members in your assigned active Cells/);
 });
