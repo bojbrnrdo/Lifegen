@@ -150,7 +150,7 @@ try {
  assert.equal(Number((await db.query('SELECT count(*) AS n FROM lifegroup_memberships WHERE person_id=920003 AND left_at IS NULL')).rows[0].n),1);
  await db.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role) VALUES (920002,920002,920001,'leader')");
  assert.equal((await call(n,'setTier',[920001,920002,'solid'])).status,403);
- assert.equal((await call(n,'leaveLifegroup',[920001,920002])).status,403); 
+ assert.equal((await call(n,'leaveLifegroup',[920001,920002])).status,403);
  await db.query("UPDATE people SET status='inactive' WHERE id=920002");
  assert.equal((await call(c,'leaderScope')).data.kind,'unassigned');
  assert.equal((await call(c,'lifegroup',[920001])).status,403);

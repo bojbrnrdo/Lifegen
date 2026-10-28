@@ -40,3 +40,7 @@
 - [ ] Deployment approval and production migration/rollback planning.
 
 **Runbook (isolated local database only):** Set `LIFEGEN_INTEGRATION_DATABASE_URL` to a loopback PostgreSQL URL. Run `node tests/leader-migration-local.mjs`, `node tests/leader-http-local.mjs`, and the same HTTP test with `LIFEGEN_BROWSER_TEST=1` (Chrome/optional playwright-core) or `LIFEGEN_SAFARI_TEST=1` (Safari and local safaridriver). Run `npm test` and `npm run build`. Never use production credentials for these tests. Do not merge or deploy until all remaining gates are completed.
+
+## Repeated local HTTP runs
+
+The isolated HTTP harness exercises the real staff-login rate limiter (30 requests per 15-minute window per loopback client). Repeated browser/API test invocations can legitimately return HTTP 429, which indicates the limiter is functioning, not that authorization is broken. Do not disable or relax production login throttling to facilitate tests. Run verification on a fresh disposable database or after its normal rate-limit window resets; record any throttled attempt separately from passed runs.
