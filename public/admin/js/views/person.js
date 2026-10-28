@@ -25,7 +25,7 @@ export async function renderPerson({ main }, id) {
           <div class="row mt-1"><span class="code mono">${p.person_code}</span>${archived ? raw('<span class="badge badge--nodot">Archived</span>') : ''}${raw(statusBadge(p.status))}${p.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
         </div>
       </div>
-      ${can('people:write') ? html`<div class="page-actions">
+      ${can('people:write') && !archived ? html`<div class="page-actions">
         <button class="btn" id="statusBtn">Change status</button>
         <a class="btn btn--primary" href="#/people/${p.id}/edit">${icon('edit')} Edit</a>
       </div>` : ''}
@@ -50,10 +50,10 @@ export async function renderPerson({ main }, id) {
           ${row('School', p.school)}
           ${row('Course / Year', p.course_year)}
           ${row('Occupation', p.occupation)}
-          ${!p.birthdate ? row('Age', p.age, (v) => `${v} yrs (self-reported)`) : ''}
+          ${!p.birthdate ? row('Age', p.age, (v) => `${v} yrs (self-reported)`, true) : ''}
           ${row('Ministry', p.ministry)}
           ${row('Registered', p.date_registered, (v) => fmtDate(v) + (p.registration_source === 'qr' ? ' · via QR registration' : ''))}
-          <div><dt>Privacy consent</dt><dd>${p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
+          <div><dt>Privacy consent</dt><dd>${locked ? html`<span class="locked">${icon('lock', 13)} Restricted</span>` : p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
           <div style="grid-column:1/-1">${row('Address', p.address, (v) => v, true)}</div>
           ${!locked && p.notes ? html`<div style="grid-column:1/-1"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
         </dl></div>
