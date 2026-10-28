@@ -13,7 +13,7 @@ import { createFourFieldNetwork } from './networkFourField.js';
 import { createAddNewModal } from './unifiedAddNew.js';
 import { openRemoveFromLifegroups } from './removeFromLifegroups.js';
 import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
-import { can } from '../app.js';
+import { can, isLinkedLeader } from '../app.js';
 import {
   html, raw, icon, avatar, fullName, statusBadge, fmtDate, fmtNum, emptyState, debounce, toast, confirmDialog,
   openModal, closeModal, withLoading, formData, toISODate,
@@ -615,7 +615,7 @@ export async function renderLifegroup({ main }, id) {
         <div class="lifegroup-detail__identity">
           ${raw(avatar({first_name:(g.leader_name||'Cell').split(' ')[0],last_name:(g.leader_name||'Leader').split(' ').slice(1).join(' '),photo:g.leader_photo}))}
           <div><h1>${g.leader_name || 'Cell Leader not assigned'}</h1>
-            <div class="lifegroup-detail__meta"><span class="lifegroup-detail__role">${icon('user',13)} Cell Leader</span>${genderBadge(g.gender)}${g.network_id ? html`<a href="#/networks/${g.network_id}">${icon('group',13)} ${g.network || 'Network'}</a>` : ''}${g.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${g.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo</span>') : ''}</div>
+            <div class="lifegroup-detail__meta"><span class="lifegroup-detail__role">${icon('user',13)} Cell Leader</span>${genderBadge(g.gender)}${g.network_id && !isLinkedLeader() ? html`<a href="#/networks/${g.network_id}">${icon('group',13)} ${g.network || 'Network'}</a>` : ''}${g.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${g.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo</span>') : ''}</div>
           </div>
         </div>
       </div>
