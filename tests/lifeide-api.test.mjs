@@ -123,6 +123,13 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   execFileSync('git',['checkout','-q','-b','release/test'],{cwd:workspace});
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked on release branch'}})).status,409);
   execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
+  execFileSync('git',['add','src/test.js'],{cwd:workspace});
+  await fs.writeFile(path.join(workspace,'src/test.js'),'changed again');
+  const mixedDiff=await call('/git/diff?path=src%2Ftest.js');
+  assert.equal(mixedDiff.status,200);
+  assert.match(mixedDiff.data.diff,/\+changed\b/);
+  assert.match(mixedDiff.data.diff,/\+changed again/);
+  execFileSync('git',['reset','-q','--','src/test.js'],{cwd:workspace});
   execFileSync('git',['add','src/other.js'],{cwd:workspace});
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked with staged files'}})).status,409);
   execFileSync('git',['reset','-q','--','src/other.js'],{cwd:workspace});
