@@ -19,10 +19,7 @@ export async function authorizeLinkedLeaderTrackerMethod(client,actor,method,arg
  if (actor?.role_id==='admin') return;
  const scope=await resolveLeaderScope(client,actor);
  // Unlinked accounts retain the existing Admin/Staff/Viewer permission model.
- if (scope.kind==='unassigned') {
-  const {rows}=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
-  if (!rows[0]?.person_id) return;
- }
+ if (!scope.linked) return;
  if (method==='people' && scope.kind!=='unassigned') return {allowedCellIds:scope.cellIds};
  if (method==='person') {
   const personId=requiredScopedId(args[0]);

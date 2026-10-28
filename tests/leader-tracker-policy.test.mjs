@@ -66,3 +66,9 @@ test('linked leader assignment rejects other Cells and malformed people IDs',asy
  await assert.rejects(authorize(c,actor,'assignLifegroup',[23,100,{}]),{status:403});
  await assert.rejects(authorize(c,actor,'assignLifegroup',[22,null,{}]),{status:403});
 });
+
+test('linked but unassigned account never inherits legacy tracker access',async()=>{
+ const c=mock(17,[],[],[]);
+ await assert.rejects(authorize(c,actor,'dashboard',[]),{status:403});
+ await assert.rejects(authorize(c,actor,'people',[{}]),{status:403});
+});
