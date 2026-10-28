@@ -59,6 +59,9 @@ router.get('/file',async(req,res)=>{
 router.put('/file',(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){next(e);}},async(req,res)=>{
  const {path:raw,content,version}=req.body||{};
  if(typeof content!=='string'||Buffer.byteLength(content)>512*1024||typeof version!=='string'||!/^[a-f0-9]{64}$/.test(version))throw httpError(400,'Invalid file content or version.');
+ if(content.includes('\0'))throw httpError(415,'Binary content cannot be saved.');
+ const utf8=Buffer.from(content,'utf8');
+ if(utf8.toString('utf8')!==content)throw httpError(415,'Invalid Unicode content cannot be saved.');
  const absolute=await safePath(raw),stat=await fs.stat(absolute);
  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not editable.');
  const original=await fs.readFile(absolute),hash=crypto.createHash('sha256').update(original).digest('hex');

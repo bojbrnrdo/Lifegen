@@ -88,6 +88,8 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   assert.equal(first.status,200);
   assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'hello',version:first.data.version}})).status,200);
   assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'overwrite',version:first.data.version}})).status,409);
+  assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'bad\u0000value',version:first.data.version}})).status,415);
+  assert.equal((await call('/file',{method:'PUT',body:{path:'src/test.js',content:'bad\ud800value',version:first.data.version}})).status,415);
   assert.equal(await fs.readFile(path.join(workspace,'src/test.js'),'utf8'),'hello');
   await fs.writeFile(path.join(workspace,'src','binary.txt'),Buffer.from([0xff,0xfe]));
   const bad=await call('/file?path=src%2Fbinary.txt');
