@@ -26,3 +26,10 @@ test('linked leaders cannot access unscoped operations including all writes',asy
 test('linked people without leadership have no tracker access',async()=>{
  await assert.rejects(authorize(mock(9),actor,'lifegroup',[1]),{status:403});
 });
+test('missing or malformed detail identifiers never authorize collection access',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ for(const value of [undefined,null,'',0,-1,'01','4x',{},[],Number.MAX_SAFE_INTEGER+1]) {
+  await assert.rejects(authorize(c,actor,'network',[value]),{status:403});
+  await assert.rejects(authorize(c,actor,'lifegroup',[value]),{status:403});
+ }
+});
