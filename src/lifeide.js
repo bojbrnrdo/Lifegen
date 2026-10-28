@@ -58,4 +58,15 @@ router.put('/file',(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}
  await fs.writeFile(absolute,content,{flag:'w'});
  res.json({ok:true,version:crypto.createHash('sha256').update(content).digest('hex')});
 });
+
+router.post('/entry',(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}},async(req,res)=>{
+ const {path:raw,type}=req.body||{};
+ if(type!=='file'&&type!=='folder')throw httpError(400,'Invalid entry type.');
+ const absolute=await safePath(raw,{create:true});
+ try{
+  if(type==='folder')await fs.mkdir(absolute);
+  else await fs.writeFile(absolute,'',{flag:'wx'});
+ }catch(e){if(e.code==='EEXIST')throw httpError(409,'An entry with this name already exists.');throw e;}
+ res.status(201).json({ok:true,path:raw,type});
+});
 export default router;

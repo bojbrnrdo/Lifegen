@@ -22,9 +22,9 @@ function closeDialog(){$('dialog').hidden=true;dialogAction=null;}
 function chosenParent(){const f=node(current);return f?f.parent:null;}
 function create(type,name,parent){if(!/^[^\\/\x00-\x1f]+$/.test(name)||name==='.'||name==='..'||name.trim()!==name)throw Error('Use a valid file or folder name.');if(items.some(x=>x.parent===parent&&x.name.toLowerCase()===name.toLowerCase()))throw Error('A file or folder with that name already exists.');const id='item-'+crypto.randomUUID();items.push({id,parent,name,type,content:type==='file'?'':'',modified:Date.now()});if(parent)expanded.add(parent);save();renderTree();if(type==='file')select(id);}
 function remove(id){const descendants=new Set([id]);let changed=true;while(changed){changed=false;for(const x of items)if(descendants.has(x.parent)&&!descendants.has(x.id)){descendants.add(x.id);changed=true;}}items=items.filter(x=>!descendants.has(x.id));opened=opened.filter(x=>!descendants.has(x));if(descendants.has(current)){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}save();renderTabs();renderTree();}
-$('newFile').addEventListener('click',()=>openDialog('New File','File name',name=>create('file',name,chosenParent())));
-$('newFolder').addEventListener('click',()=>openDialog('New Folder','Folder name',name=>create('folder',name,null)));
-$('dialogForm').addEventListener('submit',e=>{e.preventDefault();try{dialogAction($('dialogInput').value);closeDialog();}catch(error){$('dialogError').textContent=error.message;}});
+$('newFile').addEventListener('click',()=>openDialog('New File','File name',async name=>{if(repoMode)return createRepoEntry('file',name);create('file',name,chosenParent());}));
+$('newFolder').addEventListener('click',()=>openDialog('New Folder','Folder name',async name=>{if(repoMode)return createRepoEntry('folder',name);create('folder',name,null);}));
+$('dialogForm').addEventListener('submit',async e=>{e.preventDefault();try{await dialogAction($('dialogInput').value);closeDialog();}catch(error){$('dialogError').textContent=error.message;}});
 $('cancel').addEventListener('click',closeDialog);
 $('dialog').addEventListener('click',e=>{if(e.target===$('dialog'))closeDialog();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if(!repoMode&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save();}});
@@ -49,18 +49,35 @@ async function repoApi(url,options={}){
  if(!response.ok)throw Error(data.message||'Repository request failed.');
  return data;
 }
-async function treeFolder(prefix='',depth=0){
- const result=await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
- for(const item of result.items){
-  const rel=prefix?prefix+'/'+item.name:item.name;
-  const button=document.createElement('button');
-  button.type='button';button.className='node';
-  button.style.paddingLeft=(8+depth*15)+'px';
-  const label=document.createElement('span');label.className='name';label.textContent=(item.type==='folder'?'📁 ':'▤ ')+item.name;
-  button.append(label);
-  button.onclick=async()=>{try{if(item.type==='folder'){const existing=button.nextElementSibling;if(button.dataset.expanded==='yes'){while(button.nextElementSibling?.dataset.parent===rel)button.nextElementSibling.remove();button.dataset.expanded='no';}else{const entries=await repoApi('/tree?path='+encodeURIComponent(rel));let after=button;for(const entry of entries.items){const child=document.createElement('button');child.type='button';child.className='node';child.dataset.parent=rel;child.style.paddingLeft=(23+depth*15)+'px';child.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;child.onclick=()=>entry.type==='file'?openRepoFile(rel+'/'+entry.name):$('status').textContent='Open nested folders from repository root';after.after(child);after=child;}button.dataset.expanded='yes';}}else await openRepoFile(rel);}catch(e){$('status').textContent=e.message;}};
-  $('tree').append(button);
+let repoExpanded=new Set(),repoParent='';
+async function treeFolder(){
+ const tree=$('tree');tree.replaceChildren();
+ async function appendFolder(prefix,depth){
+  const result=await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
+  for(const entry of result.items){
+   const rel=prefix?prefix+'/'+entry.name:entry.name;
+   const el=document.createElement('button');el.type='button';el.className='node';
+   el.style.paddingLeft=(8+depth*15)+'px';
+   const a=document.createElement('span');a.className='arrow';a.textContent=entry.type==='folder'?(repoExpanded.has(rel)?'▾':'▸'):' ';
+   const n=document.createElement('span');n.className='name';n.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
+   el.append(a,n);tree.append(el);
+   el.onclick=async()=>{try{
+    if(entry.type==='folder'){repoParent=rel;repoExpanded.has(rel)?repoExpanded.delete(rel):repoExpanded.add(rel);await treeFolder();}
+    else await openRepoFile(rel);
+   }catch(e){$('status').textContent=e.message;}};
+   if(entry.type==='folder'&&repoExpanded.has(rel))await appendFolder(rel,depth+1);
+  }
  }
+ await appendFolder('',0);
+}
+async function createRepoEntry(type,name){
+ if(!name||name==='.'||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
+ const rel=repoParent?repoParent+'/'+name:name;
+ await repoApi('/entry',{method:'POST',body:JSON.stringify({path:rel,type})});
+ if(type==='folder')repoExpanded.add(rel);
+ await treeFolder();
+ if(type==='file')await openRepoFile(rel);
+ $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
@@ -77,7 +94,7 @@ async function repositoryConnect(){
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
   csrf=auth.csrf_token;
   $('tree').replaceChildren();await treeFolder();
-  repoMode=true;current=null;emptyEditor();$('modeLabel').textContent='REPOSITORY';$('storageInfo').textContent='Real files • Save explicitly (Cmd/Ctrl+S).';$('repositoryMode').textContent='Local Workspace';$('newFile').disabled=true;$('newFolder').disabled=true;
+  repoMode=true;current=null;emptyEditor();$('modeLabel').textContent='REPOSITORY';$('storageInfo').textContent='Real files • Save explicitly (Cmd/Ctrl+S).';$('repositoryMode').textContent='Local Workspace';$('newFile').disabled=false;$('newFolder').disabled=false;
  }catch(e){$('status').textContent=e.message;}
 }
 $('repositoryMode').addEventListener('click',repositoryConnect);
