@@ -23,3 +23,24 @@ test('LifeIDE application routes serve editor assets while repository API stays 
   else process.env.LIFEIDE_LOCAL_EDIT=previous;
  }
 });
+
+test('real application requires a staff session when local repository editing is opted in',async()=>{
+ const old=process.env.LIFEIDE_LOCAL_EDIT,oldNode=process.env.NODE_ENV;
+ process.env.LIFEIDE_LOCAL_EDIT='true';process.env.NODE_ENV='test';
+ const server=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise(resolve=>server.once('listening',resolve));
+  const base='http://127.0.0.1:'+server.address().port;
+  const response=await fetch(base+'/api/lifeide/tree');
+  assert.equal(response.status,401);
+  const write=await fetch(base+'/api/lifeide/entry',{
+   method:'POST',headers:{'content-type':'application/json',origin:base},
+   body:JSON.stringify({path:'test.js',type:'file'})
+  });
+  assert.equal(write.status,401);
+ }finally{
+  await new Promise(resolve=>server.close(resolve));
+  if(old===undefined)delete process.env.LIFEIDE_LOCAL_EDIT;else process.env.LIFEIDE_LOCAL_EDIT=old;
+  if(oldNode===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=oldNode;
+ }
+});
