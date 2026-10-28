@@ -108,6 +108,24 @@ try {
  assert.equal(scoped.status,200);
  assert.ok(scoped.data.rows.some(p=>Number(p.id)===920003));
  assert.ok(!scoped.data.rows.some(p=>Number(p.id)===920004));
+ await db.query("INSERT INTO people(id,person_code,first_name,last_name,status,date_registered,sex) SELECT 930000+g,'PR134-PAGE-'||g,'Paged','Member'||lpad(g::text,3,'0'),'member',CURRENT_DATE,'male' FROM generate_series(1,101) g");
+ await db.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id) SELECT 930000+g,930000+g,920001 FROM generate_series(1,101) g");
+ const firstPage=await call(c,'people',[{status:'all',paged:1,limit:100,offset:0}]);
+ const secondPage=await call(c,'people',[{status:'all',paged:1,limit:100,offset:100}]);
+ const beyondPage=await call(c,'people',[{status:'all',paged:1,limit:100,offset:300}]);
+ for(const page of [firstPage,secondPage,beyondPage])assert.equal(page.status,200);
+ assert.equal(firstPage.data.total,102);
+ assert.equal(firstPage.data.rows.length,100);
+ assert.equal(firstPage.data.has_more,true);
+ assert.equal(secondPage.data.rows.length,2);
+ assert.equal(secondPage.data.has_more,false);
+ assert.equal(beyondPage.data.total,102);
+ assert.equal(beyondPage.data.rows.length,0);
+ const allIds=[...firstPage.data.rows,...secondPage.data.rows].map(p=>Number(p.id));
+ assert.equal(new Set(allIds).size,102,'each assigned Person appears exactly once');
+ assert.ok(!allIds.includes(920004),'other Network Person is excluded from both pages');
+ await db.query('DELETE FROM lifegroup_memberships WHERE id BETWEEN 930001 AND 930101');
+ await db.query('DELETE FROM people WHERE id BETWEEN 930001 AND 930101');
  assert.equal((await call(n,'person',[920004])).status,403);
  assert.equal((await call(c,'person',[920004])).status,403);
  assert.equal((await call(n,'search',['Member'])).status,403);
@@ -144,6 +162,8 @@ try {
 }finally{
  if(server)await new Promise(resolve=>server.close(resolve));
  await db.query('DELETE FROM staff_sessions WHERE user_id IN (920001,920002,920005,920006,920007)').catch(()=>{});
+ await db.query('DELETE FROM lifegroup_memberships WHERE id BETWEEN 930001 AND 930101').catch(()=>{});
+ await db.query('DELETE FROM people WHERE id BETWEEN 930001 AND 930101').catch(()=>{});
  await db.query('DELETE FROM lifegroup_memberships WHERE id IN (920001,920002,920003) OR person_id IN (920003,920004)').catch(()=>{});
  await db.query('DELETE FROM lifegroups WHERE id IN (920001,920002,920005,920006,920007)').catch(()=>{});
  await db.query('DELETE FROM networks WHERE id IN (920001,920002,920005,920006,920007)').catch(()=>{});

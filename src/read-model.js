@@ -152,7 +152,7 @@ export async function peopleList(params = {}, allowedCellIds = null) {
     let total=rows.length?num(rows[0]._total):0;
     if(!rows.length&&offset>0){
       // OFFSET beyond the last row leaves no window-count row available.
-      const count=(await query(`SELECT count(*)::int AS total FROM people p WHERE ${where}`,[...paramsSql,null,null,scopeCells])).rows[0];
+      const count=(await query(`SELECT count(*)::int AS total FROM people p WHERE ${where.replaceAll('$7::bigint[]','$5::bigint[]')}`,[...paramsSql,scopeCells])).rows[0];
       total=num(count?.total);
     }
     return {rows:people,total,limit,offset,has_more:offset+people.length<total};
