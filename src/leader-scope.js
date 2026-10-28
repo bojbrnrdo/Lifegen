@@ -6,10 +6,13 @@ import {httpError} from './domain.js';
 export async function resolveLeaderScope(client,actor) {
  if (!actor || !Number.isSafeInteger(Number(actor.id)) || Number(actor.id)<1)
   throw httpError(401,'Please sign in to the tracker.');
- if (actor.role_id==='admin') return {kind:'admin',networkIds:[],cellIds:[]};
+ if (actor.role_id==='admin') return {kind:'admin',linked:false,networkIds:[],cellIds:[]};
  const {rows:accounts}=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
  const personId=accounts[0]?.person_id;
- if (!personId) return {kind:'unassigned',networkIds:[],cellIds:[]};
+ if (!personId) return {kind:'unassigned',linked:false,networkIds:[],cellIds:[]};
+ const {rows:people}=await client.query('SELECT archived_at,status FROM people WHERE id=$1',[personId]);
+ if(!people[0] || people[0].archived_at || people[0].status==='inactive')
+  return {kind:'unassigned',linked:true,networkIds:[],cellIds:[]};
  const {rows:networks}=await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active=true ORDER BY id',[personId]);
  const {rows:cells}=await client.query('SELECT g.id,g.network_id FROM lifegroups g LEFT JOIN networks n ON n.id=g.network_id WHERE g.leader_person_id=$1 AND g.is_active=true AND (g.network_id IS NULL OR n.is_active=true) ORDER BY g.id',[personId]);
  const networkIds=networks.map(row=>Number(row.id));
@@ -18,7 +21,7 @@ export async function resolveLeaderScope(client,actor) {
   ?await client.query('SELECT id FROM lifegroups WHERE network_id=ANY($1::bigint[]) AND is_active=true ORDER BY id',[networkIds])
   :{rows:[]};
  const cellIds=[...new Set([...ownCellIds,...networkCells.map(row=>Number(row.id))])];
- return {kind:networkIds.length?'network_leader':ownCellIds.length?'cell_leader':'unassigned',networkIds,cellIds};
+ return {kind:networkIds.length?'network_leader':ownCellIds.length?'cell_leader':'unassigned',linked:true,networkIds,cellIds};
 }
 
 export function assertLeaderScope(scope,{networkId,cellId}={}) {

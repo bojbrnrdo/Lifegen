@@ -1,6 +1,8 @@
 import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES,shouldRetryVipCell } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
+import {resolveLeaderScope,assertLeaderScope} from './leader-scope.js';
+import {assertNotLeaderMembership} from './leader-member-guard.js';
 
 const SEX_OF = { boys: 'male', girls: 'female' };
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
@@ -575,6 +577,15 @@ function retryableVipCellConflict(message) {
 
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
+    let leaderScope=null;
+    if(actor?.role_id!=='admin'){
+      const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+      if(linked.rows[0]?.person_id){
+        leaderScope=await resolveLeaderScope(client,actor);
+        assertLeaderScope(leaderScope,{cellId:groupId});
+        if(extra.auto_assign || (extra.role && extra.role!=='member')) throw httpError(403,'Leadership changes require administrator review.');
+      }
+    }
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
     if (!group) throw httpError(404, 'Lifegroup not found.');
     if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Lifegroup is inactive. Activate it before assigning members.') : httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.'));
@@ -633,6 +644,9 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const current = (await client.query(`SELECT m.id,m.lifegroup_id,m.joined_at::text AS joined_at,m.role,m.tier,g.name AS group_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
       WHERE m.person_id=$1 AND m.left_at IS NULL FOR UPDATE OF m`, [personId])).rows[0];
+    if(leaderScope && current && !leaderScope.cellIds.includes(Number(current.lifegroup_id))) throw httpError(403,'Cannot move a member from another leader Cell.');
+    if(leaderScope && (current?.role && current.role!=='member')) throw httpError(403,'Leadership memberships require administrator review.');
+    if(leaderScope && (group.leader_person_id===personId || networkLeadership)) throw httpError(403,'Leader assignments require administrator review.');
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
@@ -747,11 +761,20 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
 async function leaveMember(groupId, personId, leftAt = today(), actor) {
   if (!dateOk(leftAt)) throw httpError(400, 'Left date must be a valid date.');
   await transaction(async (client) => {
+    if (actor?.role_id !== 'admin') {
+      const scope=await resolveLeaderScope(client,actor);
+      if(scope.kind!=='unassigned') assertLeaderScope(scope,{cellId:groupId});
+      else {
+        const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+        if(linked.rows[0]?.person_id) assertLeaderScope(scope,{cellId:groupId});
+      }
+    }
     const current = (await client.query(`SELECT m.id,m.joined_at,g.name,p.first_name,p.last_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
       WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
     if (!current) throw httpError(404, 'No current membership in that Lifegroup.');
     if (leftAt < String(current.joined_at).slice(0,10)) throw httpError(400, 'Left date cannot be before the joined date.');
+    if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
     await client.query('UPDATE lifegroup_memberships SET left_at=$1 WHERE id=$2', [leftAt,current.id]);
     await logAction(client, actor, 'lifegroup_memberships', current.id, 'leave', { person_id: personId, lifegroup_id: groupId, left_at: leftAt });
   });
@@ -1155,6 +1178,14 @@ async function lifegroupMethod(name, args, actor) {
   if (name === 'setTier') {
     const groupId = asId(args[0],'group ID'), personId = asId(args[1],'person ID'), tier = validateTier(args[2]);
     await transaction(async (client) => {
+      if (actor?.role_id !== 'admin') {
+        const leader=await resolveLeaderScope(client,actor);
+        if (leader.kind!=='unassigned') assertLeaderScope(leader,{cellId:groupId});
+        else {
+          const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+          if(linked.rows[0]?.person_id) assertLeaderScope(leader,{cellId:groupId});
+        }
+      }
       const membership = (await client.query(`SELECT m.id,m.tier,p.first_name,p.last_name FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
         WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
       if (!membership) throw httpError(404, 'Current group membership not found.');
@@ -1162,6 +1193,7 @@ async function lifegroupMethod(name, args, actor) {
         const count = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
         if (count >= SOLID_TARGET) throw httpError(409, `Closed cell has reached its ${SOLID_TARGET}-member target.`);
       }
+      if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
       await client.query('UPDATE lifegroup_memberships SET tier=$1 WHERE id=$2', [tier,membership.id]);
       await logAction(client,actor,'lifegroup_memberships',membership.id,'tier_change',{person_id:personId,lifegroup_id:groupId,tier});
     });
