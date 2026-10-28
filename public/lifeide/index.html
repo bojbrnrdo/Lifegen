@@ -9,7 +9,7 @@
 <div class="ide">
   <header class="topbar">
     <a class="brand" href="/admin" title="Back to LIFEGEN admin"><span class="brandmark">L</span><span>Life<span class="accent">IDE</span></span></a>
-    <span class="project-tag">LOCAL WORKSPACE</span>
+    <span class="project-tag" id="modeLabel">LOCAL WORKSPACE</span><button type="button" id="repositoryMode" title="Connect to project source files">Repository</button>
     <div class="top-actions"><button id="newFile" type="button">▣ <span>New File</span></button><button id="newFolder" type="button">▰ <span>New Folder</span></button></div>
   </header>
   <div class="workspace">
@@ -17,7 +17,7 @@
       <div class="sidebar-title"><span>EXPLORER</span><button type="button" id="collapse" aria-label="Toggle sidebar">☰</button></div>
       <div class="sortbar"><span id="projectLabel">LIFEGEN</span><div class="sort-toggle"><button id="sortName" class="active" type="button">Name</button><button id="sortDate" type="button">Date</button></div></div>
       <div id="tree" class="filetree" aria-label="Files and folders"></div>
-      <div class="sidebar-footer">Files are saved in this browser only.</div>
+      <div class="sidebar-footer" id="storageInfo">Files are saved in this browser only.</div>
     </aside>
     <main class="main">
       <div class="editor-toolbar">

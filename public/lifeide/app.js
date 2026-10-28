@@ -27,8 +27,8 @@ $('newFolder').addEventListener('click',()=>openDialog('New Folder','Folder name
 $('dialogForm').addEventListener('submit',e=>{e.preventDefault();try{dialogAction($('dialogInput').value);closeDialog();}catch(error){$('dialogError').textContent=error.message;}});
 $('cancel').addEventListener('click',closeDialog);
 $('dialog').addEventListener('click',e=>{if(e.target===$('dialog'))closeDialog();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save();}});
-$('editor').addEventListener('input',()=>{const f=node(current);if(f){f.content=$('editor').value;f.modified=Date.now();save();}updateLines();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if(!repoMode&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save();}});
+$('editor').addEventListener('input',()=>{const f=repoMode?null:node(current);if(f){f.content=$('editor').value;f.modified=Date.now();save();}updateLines();});
 $('editor').addEventListener('click',updateLines);
 $('editor').addEventListener('keyup',updateLines);
 $('editor').addEventListener('scroll',()=>{$('lineNumbers').scrollTop=$('editor').scrollTop;});
@@ -39,6 +39,57 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){repositoryConnect().then(repositoryConnect);return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+
+// Repository mode uses authenticated same-origin APIs and explicit saves.
+let repoMode=false,repoFiles=new Map(),csrf='';
+async function repoApi(url,options={}){
+ const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(data.message||'Repository request failed.');
+ return data;
+}
+async function treeFolder(prefix='',depth=0){
+ const result=await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
+ for(const item of result.items){
+  const rel=prefix?prefix+'/'+item.name:item.name;
+  const button=document.createElement('button');
+  button.type='button';button.className='node';
+  button.style.paddingLeft=(8+depth*15)+'px';
+  const label=document.createElement('span');label.className='name';label.textContent=(item.type==='folder'?'📁 ':'▤ ')+item.name;
+  button.append(label);
+  button.onclick=async()=>{try{if(item.type==='folder'){const existing=button.nextElementSibling;if(button.dataset.expanded==='yes'){while(button.nextElementSibling?.dataset.parent===rel)button.nextElementSibling.remove();button.dataset.expanded='no';}else{const entries=await repoApi('/tree?path='+encodeURIComponent(rel));let after=button;for(const entry of entries.items){const child=document.createElement('button');child.type='button';child.className='node';child.dataset.parent=rel;child.style.paddingLeft=(23+depth*15)+'px';child.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;child.onclick=()=>entry.type==='file'?openRepoFile(rel+'/'+entry.name):$('status').textContent='Open nested folders from repository root';after.after(child);after=child;}button.dataset.expanded='yes';}}else await openRepoFile(rel);}catch(e){$('status').textContent=e.message;}};
+  $('tree').append(button);
+ }
+}
+async function openRepoFile(rel){
+ const file=await repoApi('/file?path='+encodeURIComponent(rel));
+ repoFiles.set(rel,file);current=rel;
+ $('editor').disabled=false;$('editor').value=file.content;
+ $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
+ $('tabs').replaceChildren();updateLines();
+ $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
+}
+async function repositoryConnect(){
+ if(repoMode){repoMode=false;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
+ try{
+  const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
+  if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
+  csrf=auth.csrf_token;
+  $('tree').replaceChildren();await treeFolder();
+  repoMode=true;current=null;emptyEditor();$('modeLabel').textContent='REPOSITORY';$('storageInfo').textContent='Real files • Save explicitly (Cmd/Ctrl+S).';$('repositoryMode').textContent='Local Workspace';$('newFile').disabled=true;$('newFolder').disabled=true;
+ }catch(e){$('status').textContent=e.message;}
+}
+$('repositoryMode').addEventListener('click',repositoryConnect);
+$('editor').addEventListener('input',()=>{if(repoMode)$('status').textContent='Unsaved repository changes';});
+document.addEventListener('keydown',async e=>{
+ if(!repoMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
+ e.preventDefault();
+ const f=repoFiles.get(current);if(!f)return;
+ try{
+  const result=await repoApi('/file',{method:'PUT',body:JSON.stringify({path:current,content:$('editor').value,version:f.version})});
+  f.version=result.version;f.content=$('editor').value;$('status').textContent='Saved to local repository';
+ }catch(err){$('status').textContent='Save failed: '+err.message;}
+},true);
 renderTree();emptyEditor();
 })();

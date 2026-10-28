@@ -19,6 +19,7 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
+import lifeideRouter from './lifeide.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
@@ -39,6 +40,7 @@ app.use(express.json({limit:'512kb'}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
+app.use('/api/lifeide',lifeideRouter);
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 app.get('/api/auth/status',async(req,res)=>{
  const user=await readStaff(req);const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[Object.keys(DEFAULT_SETTINGS)])).rows.map(r=>[r.key,r.value]));

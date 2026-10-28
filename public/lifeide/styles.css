@@ -33,3 +33,5 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .dialog label{color:#385f40}.dialog input{background:#fbfdf9;border-color:#abcdb2;color:var(--life-dark)}
 .dialog-actions .primary{background:var(--life-mid);color:#fff}
 .error{color:#b91c1c}
+
+#repositoryMode{background:#f1f8e9;border:1px solid var(--life-border);color:var(--life-dark);padding:9px 12px;font-weight:650}
