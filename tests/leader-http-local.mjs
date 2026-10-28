@@ -11,7 +11,7 @@ let server;
 const ids=[920001,920002,920003];
 try {
  const hash=await passwordHash('PR134-local-test-pass-2026');
- await db.query("INSERT INTO people(id,person_code,first_name,last_name,status,date_registered) VALUES (920001,'PR134-NA','Network','A','leader',CURRENT_DATE),(920002,'PR134-CA','Cell','A','leader',CURRENT_DATE),(920003,'PR134-MA','Member','A','member',CURRENT_DATE)");
+ await db.query("INSERT INTO people(id,person_code,first_name,last_name,status,date_registered,sex) VALUES (920001,'PR134-NA','Network','A','leader',CURRENT_DATE,'male'),(920002,'PR134-CA','Cell','A','leader',CURRENT_DATE,'male'),(920003,'PR134-MA','Member','A','member',CURRENT_DATE,'male')");
  await db.query('INSERT INTO staff_users(id,username,display_name,password_hash,role_id,person_id) VALUES (920001,$1,$2,$3,$4,$5),(920002,$6,$7,$3,$4,$8)',['network-pr134@local.test','Network A',hash,'staff',920001,'cell-pr134@local.test','Cell A',920002]);
  await db.query("INSERT INTO networks(id,name,gender,leader_person_id) VALUES (920001,'Network A','boys',920001),(920002,'Network B','boys',NULL)");
  await db.query("INSERT INTO lifegroups(id,name,gender,network_id,leader_person_id) VALUES (920001,'Cell A','boys',920001,920002),(920002,'Cell B','boys',920002,NULL)");
@@ -29,11 +29,23 @@ try {
  assert.equal((await call(c,'network',[920001])).status,403);
  assert.equal((await call(n,'person',[920003])).status,200);
  assert.equal((await call(c,'reportSummary')).status,403);
+ assert.equal((await call(c,'setTier',[920002,920003,'solid'])).status,403);
+ assert.equal((await call(c,'leaveLifegroup',[920002,920003])).status,403);
+ assert.equal((await call(c,'setTier',[920001,920003,'solid'])).status,200);
+ assert.equal((await db.query('SELECT tier FROM lifegroup_memberships WHERE id=920001')).rows[0].tier,'solid');
+ assert.equal((await call(c,'leaveLifegroup',[920001,920003])).status,200);
+ assert.ok((await db.query('SELECT left_at FROM lifegroup_memberships WHERE id=920001')).rows[0].left_at);
+ assert.equal((await call(c,'assignLifegroup',[920002,920003])).status,403);
+ assert.equal((await call(c,'assignLifegroup',[920001,920003])).status,200);
+ assert.equal(Number((await db.query('SELECT count(*) AS n FROM lifegroup_memberships WHERE person_id=920003 AND left_at IS NULL')).rows[0].n),1);
+ await db.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role) VALUES (920002,920002,920001,'leader')");
+ assert.equal((await call(n,'setTier',[920001,920002,'solid'])).status,403);
+ assert.equal((await call(n,'leaveLifegroup',[920001,920002])).status,403); 
  console.log('PASS: authenticated HTTP linked leader access checks');
 }finally{
  if(server)await new Promise(resolve=>server.close(resolve));
  await db.query('DELETE FROM staff_sessions WHERE user_id IN (920001,920002)').catch(()=>{});
- await db.query('DELETE FROM lifegroup_memberships WHERE id=920001').catch(()=>{});
+ await db.query('DELETE FROM lifegroup_memberships WHERE id IN (920001,920002) OR person_id=920003').catch(()=>{});
  await db.query('DELETE FROM lifegroups WHERE id IN (920001,920002)').catch(()=>{});
  await db.query('DELETE FROM networks WHERE id IN (920001,920002)').catch(()=>{});
  await db.query('DELETE FROM staff_users WHERE id IN (920001,920002)').catch(()=>{});
