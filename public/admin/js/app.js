@@ -100,13 +100,13 @@ async function route(options = {}) {
   closeModal();
 
   const match = routes.map((r) => ({ r, m: hashPath.match(r.path) })).find((x) => x.m);
-  if (!match) { location.hash = '#/dashboard'; return; }
+  if (!match) { location.replace(isLinkedLeader()?'#/lifegroups':'#/dashboard'); return; }
   const { r, m } = match;
   if(isLinkedLeader() && !['lifegroups','people'].includes(r.nav) && hashPath!=='/privacy'){
     location.replace('#/lifegroups');return;
   }
   if (r.perm && !can(r.perm)) {
-    main.innerHTML = html`<div class="card"><div class="empty"><div class="empty__icon">${icon('lock', 26)}</div><h3>Restricted</h3><p>Your role (${ROLE_LABELS[state.user.role_id]}) does not have access to this page.</p><a class="btn mt-2" href="#/dashboard">Back to dashboard</a></div></div>`;
+    main.innerHTML = html`<div class="card"><div class="empty"><div class="empty__icon">${icon('lock', 26)}</div><h3>Restricted</h3><p>Your role (${ROLE_LABELS[state.user.role_id]}) does not have access to this page.</p><a class="btn mt-2" href="${isLinkedLeader()?'#/lifegroups':'#/dashboard'}">${isLinkedLeader()?'Back to My Lifegroups':'Back to dashboard'}</a></div></div>`;
     return;
   }
   setActiveNav(r.nav);
