@@ -14,7 +14,7 @@ const ignored=new Set(['.git','node_modules','.env','.vercel','backup','preview-
 function guard(req,res,next){if(!enabled())return res.status(404).json({message:'LifeIDE repository editing is disabled.'});next();}
 function admin(req,res,next){if(req.actor?.role_id!=='admin')return next(httpError(403,'Administrator access is required.'));next();}
 export function resolveLifeIdePath(raw,workspace=path.resolve(process.cwd())){
- if(typeof raw!=='string'||raw.length>300||!raw||raw.includes('\\')||raw.includes('\0')||path.isAbsolute(raw))throw httpError(400,'Invalid path.');
+ if(typeof raw!=='string'||raw.length>300||!raw||raw.includes('\\')||/[\x00-\x1f\x7f]/.test(raw)||path.isAbsolute(raw))throw httpError(400,'Invalid path.');
  const pieces=raw.split('/');
  if(pieces.some(x=>!x||x==='.'||x==='..'||ignored.has(x)||x.startsWith('.')))throw httpError(400,'Restricted path.');
  const resolved=path.resolve(workspace,...pieces);
@@ -52,6 +52,7 @@ router.get('/file',async(req,res)=>{
  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not an editable text file.');
  const bytes=await fs.readFile(absolute);
  if(bytes.includes(0))throw httpError(415,'Binary files cannot be edited.');
+ try{new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
  res.json({path:raw,content:bytes.toString('utf8'),version:crypto.createHash('sha256').update(bytes).digest('hex')});
 });
 router.put('/file',(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){next(e);}},async(req,res)=>{

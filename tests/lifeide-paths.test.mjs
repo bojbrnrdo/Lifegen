@@ -11,7 +11,7 @@ test('temporary repository path rules prevent traversal and hidden files',async(
   await fs.writeFile(path.join(dir,'src','valid.js'),'hello');
   assert.equal(await verifyLifeIdePath('src/valid.js',{workspace:dir}),path.join(dir,'src','valid.js'));
   assert.equal(await verifyLifeIdePath('src/fresh.js',{workspace:dir,create:true}),path.join(dir,'src','fresh.js'));
-  for(const name of ['../outside','src/../../outside','.git/config','src/.env','src//bad','/etc/passwd','node_modules/x','src/\\bad']){
+  for(const name of ['../outside','src/../../outside','.git/config','src/.env','src//bad','/etc/passwd','node_modules/x','src/\\bad','src/bad\nname']){
    assert.throws(()=>resolveLifeIdePath(name,dir),{status:400});
   }
   await assert.rejects(verifyLifeIdePath('src/missing.js',{workspace:dir}),{status:404});
