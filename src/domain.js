@@ -309,6 +309,7 @@ export const domain = {
   }),
   updatePerson: async_((id, body) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before editing.');
     Object.assign(p, validatePerson(body || {}, p), { updated_at: nowSql() }); save();
     return decorate(p);
   }),
@@ -326,11 +327,26 @@ export const domain = {
     }
     return { matches: matches.slice(0, 10) };
   }),
-  archivePerson: async_((id) => { const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.'); if (!p.archived_at) { p.archived_at = nowSql(); p.updated_at = nowSql(); save(); } return decorate(p); }),
+  archivePerson: async_((id) => {
+    const p = findPerson(id);
+    if (!p) throw httpError(404, 'Person not found.');
+    if (!p.archived_at) {
+      const d = load();
+      const leadsNetwork = d.networks.some(n => Number(n.leader_person_id) === p.id && Boolean(n.is_active));
+      const leadsCell = d.lifegroups.some(g => Number(g.leader_person_id) === p.id && Boolean(g.is_active));
+      if (leadsNetwork || leadsCell)
+        throw httpError(409, 'Reassign or deactivate active Network and Cell leadership before archiving this person.');
+      p.archived_at = nowSql();
+      p.updated_at = nowSql();
+      save();
+    }
+    return decorate(p);
+  }),
   restorePerson: async_((id) => { const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.'); if (p.archived_at) { p.archived_at = null; p.updated_at = nowSql(); save(); } return decorate(p); }),
   activity: async_(() => []),
   setPersonStatus: async_((id, status) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before changing status.');
     if (!STATUSES.includes(status)) throw httpError(400, 'Invalid status.');
     p.status = status; p.updated_at = nowSql(); save();
     return decorate(p);
