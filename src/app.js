@@ -22,6 +22,7 @@ import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
+import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
 const ADMIN_ASSET_VERSION='2.4.5';
@@ -323,6 +324,7 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const name=req.params.method;if(!Object.hasOwn(methods,name))throw httpError(404,'Unknown tracker operation.');
  const args=req.body?.args||[];if(!Array.isArray(args)||args.length>6)throw httpError(400,'Invalid operation arguments.');
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
+ await authorizeLinkedLeaderTrackerMethod({query},req.actor,name,args);
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
  const groupResult=await handleLifegroupMethod(name,args,req.actor);

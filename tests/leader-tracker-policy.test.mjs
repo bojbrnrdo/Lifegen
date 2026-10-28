@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {authorizeLinkedLeaderTrackerMethod as authorize} from '../src/leader-tracker-policy.js';
+const actor={id:10,role_id:'staff'};
+const mock=(linked,networks=[],cells=[],networkCells=[])=>({query:async(sql)=>({rows:sql.includes('FROM staff_users')?[{person_id:linked}]:sql.includes('WHERE network_id=ANY')?networkCells:sql.includes('FROM networks')?networks:cells})});
+test('admin remains unrestricted',async()=>assert.doesNotReject(authorize({query:()=>{throw Error('unexpected query')}},{id:1,role_id:'admin'},'network',[999])));
+test('unlinked staff retains legacy permission-based routing',async()=>assert.doesNotReject(authorize(mock(null),actor,'people',[{}])));
+test('network leader sees only assigned network and its cells',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ await assert.doesNotReject(authorize(c,actor,'network',[4]));
+ await assert.doesNotReject(authorize(c,actor,'lifegroup',[22]));
+ await assert.rejects(authorize(c,actor,'network',[6]),{status:403});
+ await assert.rejects(authorize(c,actor,'lifegroup',[23]),{status:403});
+});
+test('cell leader cannot read parent network or other cells',async()=>{
+ const c=mock(7,[],[{id:22,network_id:4}]);
+ await assert.doesNotReject(authorize(c,actor,'lifegroup',[22]));
+ await assert.rejects(authorize(c,actor,'network',[4]),{status:403});
+ await assert.rejects(authorize(c,actor,'lifegroup',[23]),{status:403});
+});
+test('linked leaders cannot access unscoped operations including all writes',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ for(const method of ['people','search','networks','lifegroups','createPerson','updatePerson','assignLifegroup','createNetwork','reportSummary','saveMeeting'])
+  await assert.rejects(authorize(c,actor,method,[]),{status:403});
+});
+test('linked people without leadership have no tracker access',async()=>{
+ await assert.rejects(authorize(mock(9),actor,'lifegroup',[1]),{status:403});
+});
