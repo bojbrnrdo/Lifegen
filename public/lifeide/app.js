@@ -83,6 +83,7 @@ async function createRepoEntry(type,name){
 async function openRepoFile(rel){
  if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
+ selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  $('editor').disabled=false;$('editor').value=file.content;
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();

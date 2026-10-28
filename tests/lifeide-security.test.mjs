@@ -31,3 +31,7 @@ test('Git review remains read only and disabled commit control remains on screen
  const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
  assert.match(html,/id="commit"[^>]*disabled/);
 });
+
+test('opening a repository file clears stale Git commit selections',()=>{
+ assert.match(client,/selectedGit\.clear\(\);\$\('commit'\)\.disabled=true;\s*repoFiles\.set\(rel,file\)/);
+});
