@@ -87,6 +87,15 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
  assert.equal(await evaluate("document.getElementById('editor').value"),'const smoke = true;');
  console.log('PASS LifeIDE browser: tab switching and closing preserve saved files');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','Closing a tab must not delete the file');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('second-smoke.js')).click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'second-smoke.js');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+ await evaluate("location.reload()");
+ for(let i=0;i<50;i++){if(await evaluate("Boolean(document.getElementById('newFile'))"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','File content must survive page reload');
+ console.log('PASS LifeIDE browser: closed files reopen and persist after reload');
+
 
  if(realAuth){
   const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
