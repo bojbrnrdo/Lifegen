@@ -306,6 +306,9 @@ export async function renderLifegroups({main, query}) {
   const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?Math.min(requestedPage,100000):1;
   const perPage=100;
   const listing=leader.kind==='unassigned'?{rows:[],total:0,has_more:false}:await api.people({status:'all',paged:1,limit:perPage,offset:(page-1)*perPage});
+  // Membership changes can invalidate a bookmarked page. Return to the final valid page.
+  const lastPage=Math.max(1,Math.ceil(listing.total/perPage));
+  if(page>lastPage){location.replace('#/lifegroups?page='+lastPage);return;}
   const people=listing.rows;
   main.innerHTML=html`<section class="lifegroups-page"><div class="page-header"><div><h1>My Lifegroups</h1><p class="sub">Only members in your assigned active Cells are displayed.</p></div></div>
    <div class="card"><div class="card__body"><div class="row row--between" style="gap:12px;flex-wrap:wrap"><h2>My People (${listing.total})</h2><button class="btn btn--sm" type="button" id="leaderPeopleRefresh">${icon('undo',15)} Refresh people</button></div>

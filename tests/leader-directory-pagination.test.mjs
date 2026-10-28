@@ -11,3 +11,7 @@ test('leader directory has previous and next navigation',()=>{
  assert.match(ui,/#\/lifegroups\?page=\$\{page-1\}/);
  assert.match(ui,/#\/lifegroups\?page=\$\{page\+1\}/);
 });
+test('invalidated pages redirect to final valid page after membership changes',()=>{
+ assert.match(ui,/const lastPage=Math\.max\(1,Math\.ceil\(listing\.total\/perPage\)\)/);
+ assert.match(ui,/if\(page>lastPage\)\{location\.replace\('#\/lifegroups\?page='\+lastPage\);return;\}/);
+});
