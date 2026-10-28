@@ -117,7 +117,7 @@ router.post('/git/commit',gitWrite,async(req,res)=>{
  if(paths.some(x=>!allowed.has(x)))throw httpError(409,'Refresh Git Changes and select modified or untracked files.');
  await git(['add','--',...paths]);
  const actual=(await git(['diff','--cached','--name-only','-z'])).split('\0').filter(Boolean);
- if(actual.length!==paths.length||actual.some(x=>!paths.includes(x)))throw httpError(409,'Unexpected staged changes. Commit was stopped; inspect the Git index.');
+ if(actual.length!==paths.length||actual.some(x=>!paths.includes(x))){await git(['reset','--quiet','--',...paths]).catch(()=>{});throw httpError(409,'Unexpected staged changes. Commit was stopped; inspect the Git index.');}
  try {
   await git(['commit','-m',message.trim(),'--only','--',...paths]);
  } catch(error) {
