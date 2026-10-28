@@ -93,9 +93,9 @@ router.post('/git/commit',gitWrite,async(req,res)=>{
  if(!Array.isArray(paths)||paths.length<1||paths.length>30||new Set(paths).size!==paths.length)throw httpError(400,'Select 1–30 distinct files.');
  if(typeof message!=='string'||message.trim().length<5||message.length>160||/[\r\n\x00-\x1f]/.test(message))throw httpError(400,'Provide a one-line commit message (5–160 characters).');
  for(const file of paths)await safePath(file);
- const git=async args=>(await runGit('git',args,{cwd:base,maxBuffer:512000,timeout:10000})).stdout;
+ const git=async args=>(await runGit('git',['-c','core.hooksPath=/dev/null',...args],{cwd:base,maxBuffer:512000,timeout:10000})).stdout;
  const branch=(await git(['branch','--show-current'])).trim();
- if(!branch||branch==='main'||branch==='master')throw httpError(409,'Switch to a feature branch before committing.');
+ if(!branch||branch==='main'||branch==='master'||branch.startsWith('release/'))throw httpError(409,'Switch to a feature branch before committing.');
  const staged=(await git(['diff','--cached','--name-only','-z'])).split('\0').filter(Boolean);
  if(staged.length)throw httpError(409,'Existing staged files detected. Commit or unstage them outside LifeIDE first.');
  const changed=(await git(['status','--porcelain=v1','-z','--untracked-files=normal'])).split('\0').filter(Boolean);
@@ -104,7 +104,12 @@ router.post('/git/commit',gitWrite,async(req,res)=>{
  await git(['add','--',...paths]);
  const actual=(await git(['diff','--cached','--name-only','-z'])).split('\0').filter(Boolean);
  if(actual.length!==paths.length||actual.some(x=>!paths.includes(x)))throw httpError(409,'Unexpected staged changes. Commit was stopped; inspect the Git index.');
- await git(['commit','-m',message.trim(),'--only','--',...paths]);
+ try {
+  await git(['commit','-m',message.trim(),'--only','--',...paths]);
+ } catch(error) {
+  await git(['reset','--quiet','--',...paths]).catch(()=>{});
+  throw error;
+ }
  const hash=(await git(['rev-parse','--short','HEAD'])).trim();
  res.json({ok:true,branch,commit:hash});
 });
