@@ -38,3 +38,12 @@ test('linked leader People query is constrained to assigned cells',async()=>{
  const result=await authorize(mock(2,[{id:4}],[],[{id:22},{id:23}]),actor,'people',[{}]);
  assert.deepEqual(result,{allowedCellIds:[22,23]});
 });
+
+test('individual profile denies out-of-scope People and permits active assigned membership',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ const original=c.query;
+ c.query=async(sql,params)=>sql.includes('FROM lifegroup_memberships')?{rows:params[0]===100?[{one:1}]:[]}:original(sql,params);
+ await assert.doesNotReject(authorize(c,actor,'person',[100]));
+ await assert.rejects(authorize(c,actor,'person',[101]),{status:403});
+ for(const bad of [null,undefined,{},'01',0])await assert.rejects(authorize(c,actor,'person',[bad]),{status:403});
+});
