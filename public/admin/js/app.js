@@ -72,6 +72,10 @@ let activeRouteHash = '';
 async function route(options = {}) {
   const live = options?.live === true; const oldY = window.scrollY;
   const hashPath = (location.hash.replace(/^#/, '') || '/dashboard').split('?')[0];
+  // Linked leaders cannot use the global dashboard endpoint.
+  if(state.user?.person_id && state.user.role_id!=='admin' && hashPath==='/dashboard'){
+    location.replace('#/lifegroups');return;
+  }
   const query = Object.fromEntries(new URLSearchParams((location.hash.split('?')[1] || '')));
   const main = document.getElementById('main');
 
@@ -254,6 +258,8 @@ export async function boot() {
     return;
   }
   state.user = status.user;
+  if(state.user.person_id && state.user.role_id!=='admin' && (!location.hash || location.hash==='#/dashboard'))
+    history.replaceState(null,'',location.pathname+location.search+'#/lifegroups');
   renderShell();
   route();
 }
