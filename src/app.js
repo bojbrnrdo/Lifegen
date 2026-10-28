@@ -23,6 +23,7 @@ import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
+import {resolveLeaderScope} from './leader-scope.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
 const ADMIN_ASSET_VERSION='2.4.5';
@@ -92,7 +93,7 @@ const methods={
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
  registrations:['registrations:manage',false],registerAdminVip:['registrations:manage',true],
- lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
+ leaderScope:['lifegroups:view',false],lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
  removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],setDiscipleshipClassification:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
@@ -324,6 +325,7 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const name=req.params.method;if(!Object.hasOwn(methods,name))throw httpError(404,'Unknown tracker operation.');
  const args=req.body?.args||[];if(!Array.isArray(args)||args.length>6)throw httpError(400,'Invalid operation arguments.');
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
+ if(name==='leaderScope')return res.json(await resolveLeaderScope({query},req.actor));
  await authorizeLinkedLeaderTrackerMethod({query},req.actor,name,args);
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
