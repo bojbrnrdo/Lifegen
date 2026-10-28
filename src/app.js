@@ -343,7 +343,7 @@ app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,
 // Uploads are raw image bodies, matching how /api/deploy/archive already accepts
 // a ZIP: no multipart parser, and express.json() is bypassed for this path.
 const vipDesigns=express.Router();
-vipDesigns.use(requireStaff,(req,res,next)=>{try{requirePermission(req.actor,'settings:manage');next();}catch(e){next(e);}});
+vipDesigns.use(requireStaff,async(req,res,next)=>{try{requirePermission(req.actor,'settings:manage');await assertGlobalExportAccess({query},req.actor);next();}catch(e){next(e);}});
 const designWrite=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
 vipDesigns.get('/',async(req,res)=>res.json({
  storage:storageKind(),storage_bucket:storageKind()==='supabase'?(process.env.SUPABASE_STORAGE_BUCKET||'vip-designs'):null,

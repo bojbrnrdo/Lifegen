@@ -27,7 +27,7 @@ export async function authorizeLinkedLeaderTrackerMethod(client,actor,method,arg
  if (method==='person') {
   const personId=requiredScopedId(args[0]);
   if (scope.kind==='unassigned' || !scope.cellIds.length) throw httpError(403,'This Person is outside your assigned Cells.');
-  const {rows}=await client.query('SELECT 1 FROM lifegroup_memberships lm JOIN lifegroups g ON g.id=lm.lifegroup_id WHERE lm.person_id=$1 AND lm.left_at IS NULL AND g.is_active=true AND g.id=ANY($2::bigint[]) LIMIT 1',[personId,scope.cellIds]);
+  const {rows}=await client.query('SELECT 1 FROM lifegroup_memberships lm JOIN lifegroups g ON g.id=lm.lifegroup_id JOIN people p ON p.id=lm.person_id WHERE lm.person_id=$1 AND p.archived_at IS NULL AND lm.left_at IS NULL AND g.is_active=true AND g.id=ANY($2::bigint[]) LIMIT 1',[personId,scope.cellIds]);
   if (!rows.length) throw httpError(403,'This Person is outside your assigned Cells.');
   return;
  }
