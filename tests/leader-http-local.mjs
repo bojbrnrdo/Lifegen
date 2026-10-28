@@ -49,6 +49,9 @@ try {
    if(size.width===390){
     await page.locator('#menuToggle').click();
     assert.ok(await page.locator('#sidebar').evaluate(el=>el.classList.contains('open')||el.classList.contains('is-open')||el.getAttribute('aria-hidden')==='false'),'mobile menu opens');
+    assert.ok(await page.locator('#backdrop').evaluate(el=>el.classList.contains('show')),'mobile backdrop appears');
+    await page.locator('#backdrop').click({position:{x:380,y:300}});
+    assert.equal(await page.locator('#sidebar').evaluate(el=>el.classList.contains('open')),false,'mobile menu closes when backdrop clicked');
    }
    console.log('PASS: Chrome linked leader directory at '+size.width+'px');
    await page.close();

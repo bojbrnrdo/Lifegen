@@ -30,3 +30,7 @@
 ## Execution status
 
 The automated unit/regression suite and build are necessary but not sufficient. Real authenticated integration testing is **not executed** by this checklist. Run it only after local PostgreSQL and disposable accounts are available. Keep PR #134 in draft until all checks pass.
+
+## Safari browser gate
+
+Safari 26.5 was present on the Mac, but safaridriver rejected an automation session because **Allow Remote Automation** was disabled. This is an outstanding browser test, not a Safari compatibility pass. To enable a future local run, open Safari → Settings → Developer, enable **Allow Remote Automation**, then repeat sign-in, My Lifegroups directory, restricted Person profile, profile back navigation, and mobile-width sidebar checks. Do not alter Safari's security settings as part of unattended tests.
