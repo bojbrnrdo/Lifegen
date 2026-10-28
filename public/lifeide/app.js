@@ -42,7 +42,7 @@ function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.f
 $('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false;
+let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
@@ -143,11 +143,17 @@ $('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status'
 document.addEventListener('keydown',async e=>{
  if(!repoMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
  e.preventDefault();
- const f=repoFiles.get(current);if(!f)return;
+ if(saveBusy)return;
+ const path=current,f=repoFiles.get(path);if(!f)return;
+ const content=$('editor').value;
+ saveBusy=true;
  try{
-  const result=await repoApi('/file',{method:'PUT',body:JSON.stringify({path:current,content:$('editor').value,version:f.version})});
-  f.version=result.version;f.content=$('editor').value;repoDirty=false;$('status').textContent='Saved to local repository';
+  const result=await repoApi('/file',{method:'PUT',body:JSON.stringify({path,content,version:f.version})});
+  f.version=result.version;f.content=content;
+  if(current===path&&$('editor').value===content){repoDirty=false;$('status').textContent='Saved to local repository';}
+  else $('status').textContent='File saved; newer edits remain unsaved.';
  }catch(err){$('status').textContent='Save failed: '+err.message;}
+ finally{saveBusy=false;}
 },true);
 renderTree();emptyEditor();
 })();

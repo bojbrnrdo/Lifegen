@@ -44,3 +44,9 @@ test('commit button is disabled while a commit request is pending',()=>{
  assert.match(client,/commitBusy=true;\$\('commit'\)\.disabled=true/);
  assert.match(client,/finally\{commitBusy=false/);
 });
+
+test('repository save captures path and content before awaiting and preserves new edits',()=>{
+ assert.match(client,/const path=current,f=repoFiles\.get\(path\)/);
+ assert.match(client,/if\(current===path&&\$\('editor'\)\.value===content\)/);
+ assert.match(client,/finally\{saveBusy=false;\}/);
+});
