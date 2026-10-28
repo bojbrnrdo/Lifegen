@@ -24,7 +24,8 @@
     "assets:version": "node scripts/version-assets.mjs",
     "video:add": "node scripts/add-video.mjs",
     "test:lifeide-browser": "node tests/lifeide-browser-smoke.mjs",
-    "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css"
+    "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css",
+    "dev:local": "node scripts/start-local-demo.mjs"
   },
   "dependencies": {
     "compression": "1.8.2",
