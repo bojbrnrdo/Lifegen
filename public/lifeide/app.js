@@ -39,10 +39,10 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){repositoryConnect().then(repositoryConnect);return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoFiles.clear();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set();
+let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false;
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
@@ -80,15 +80,16 @@ async function createRepoEntry(type,name){
  $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
+ if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
- repoFiles.set(rel,file);current=rel;
+ repoFiles.set(rel,file);current=rel;repoDirty=false;
  $('editor').disabled=false;$('editor').value=file.content;
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
  $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
 }
 async function repositoryConnect(){
- if(repoMode){repoMode=false;selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
@@ -101,6 +102,7 @@ $('repositoryMode').addEventListener('click',repositoryConnect);
 $('gitChanges').addEventListener('click',async()=>{
  if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
  try{
+  if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
   const result=await repoApi('/git/status');
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
   const view=$('tabs');view.replaceChildren();selectedGit.clear();$('commit').disabled=true;
@@ -130,14 +132,14 @@ $('commit').addEventListener('click',async()=>{
   $('gitChanges').click();
  }catch(e){$('status').textContent='Commit rejected: '+e.message;}
 });
-$('editor').addEventListener('input',()=>{if(repoMode)$('status').textContent='Unsaved repository changes';});
+$('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent='Unsaved repository changes';}});
 document.addEventListener('keydown',async e=>{
  if(!repoMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
  e.preventDefault();
  const f=repoFiles.get(current);if(!f)return;
  try{
   const result=await repoApi('/file',{method:'PUT',body:JSON.stringify({path:current,content:$('editor').value,version:f.version})});
-  f.version=result.version;f.content=$('editor').value;$('status').textContent='Saved to local repository';
+  f.version=result.version;f.content=$('editor').value;repoDirty=false;$('status').textContent='Saved to local repository';
  }catch(err){$('status').textContent='Save failed: '+err.message;}
 },true);
 renderTree();emptyEditor();
