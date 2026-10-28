@@ -43,3 +43,7 @@ test('archived, inactive and missing linked People have no leader privileges',as
   assert.throws(()=>assertLeaderScope(scope,{cellId:4}),{status:403});
  }
 });
+test('missing or deactivated staff account cannot silently regain legacy access',async()=>{
+ const db={query:async(sql)=>({rows:sql.includes('FROM staff_users')?[]:[{id:4}]})};
+ await assert.rejects(resolveLeaderScope(db,actor()),{status:403});
+});

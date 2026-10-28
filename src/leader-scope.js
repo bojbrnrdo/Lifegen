@@ -8,6 +8,7 @@ export async function resolveLeaderScope(client,actor) {
   throw httpError(401,'Please sign in to the tracker.');
  if (actor.role_id==='admin') return {kind:'admin',linked:false,networkIds:[],cellIds:[]};
  const {rows:accounts}=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+ if(!accounts.length)throw httpError(403,'This staff account is no longer active.');
  const personId=accounts[0]?.person_id;
  if (!personId) return {kind:'unassigned',linked:false,networkIds:[],cellIds:[]};
  const {rows:people}=await client.query('SELECT archived_at,status FROM people WHERE id=$1',[personId]);
