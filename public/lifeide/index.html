@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>LifeIDE · LIFEGEN</title>
+<link rel="stylesheet" href="/lifeide/styles.css">
+</head>
+<body>
+<div class="ide">
+  <header class="topbar">
+    <a class="brand" href="/admin" title="Back to LIFEGEN admin"><span class="brandmark">L</span><span>Life<span class="accent">IDE</span></span></a>
+    <span class="project-tag">LOCAL WORKSPACE</span>
+    <div class="top-actions"><button id="newFile" type="button">▣ <span>New File</span></button><button id="newFolder" type="button">▰ <span>New Folder</span></button></div>
+  </header>
+  <div class="workspace">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-title"><span>EXPLORER</span><button type="button" id="collapse" aria-label="Toggle sidebar">☰</button></div>
+      <div class="sortbar"><span id="projectLabel">LIFEGEN</span><div class="sort-toggle"><button id="sortName" class="active" type="button">Name</button><button id="sortDate" type="button">Date</button></div></div>
+      <div id="tree" class="filetree" aria-label="Files and folders"></div>
+      <div class="sidebar-footer">Files are saved in this browser only.</div>
+    </aside>
+    <main class="main">
+      <div class="editor-toolbar">
+        <span class="editor-heading">Editor</span><div class="file-title" id="fileTitle">No file selected</div>
+        <div class="editor-tools"><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button><button id="refresh" type="button" title="Reload saved workspace">↻</button><button id="commit" type="button" disabled title="Git commits require a secure server integration">⇩ Commit</button></div>
+      </div>
+      <div class="tabs" id="tabs"></div>
+      <div class="editor-wrap" id="editorWrap"><div id="lineNumbers" class="lines" aria-hidden="true">1<br>2</div><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code editor" disabled># Welcome to LifeIDE!
+# Create or select a file to begin.</textarea></div>
+      <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
+    </main>
+  </div>
+</div>
+<div id="dialog" class="modal" hidden><form id="dialogForm" class="dialog"><h2 id="dialogTitle">New File</h2><label for="dialogInput" id="dialogLabel">Name</label><input id="dialogInput" maxlength="120" required autocomplete="off"><p class="error" id="dialogError" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary" id="confirm">Create</button></div></form></div>
+<script src="/lifeide/app.js" defer></script>
+</body></html>
