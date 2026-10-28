@@ -34,7 +34,7 @@ export const state = {
   deployHelper: false,
   serverToday: null,
 };
-export const can = (perm) => Boolean(state.user?.permissions?.includes(perm));
+export const can = (perm) => Boolean(state.user?.permissions?.includes(perm)) && !(state.user?.person_id && state.user.role_id!=='admin' && ['people:write','people:delete','lifegroups:manage'].includes(perm));
 
 // ---------------------------------------------------------------------------
 // Routes
