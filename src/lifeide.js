@@ -97,8 +97,12 @@ router.get('/git/status',async(req,res)=>{
 router.get('/git/diff',async(req,res)=>{
  const raw=req.query.path;
  await safePath(raw);
- const {stdout}=await runGit('git',['diff','--no-ext-diff','--',raw],{cwd:base,maxBuffer:512000,timeout:5000});
- res.json({path:raw,diff:stdout});
+ const options={cwd:base,maxBuffer:512000,timeout:5000};
+ const [{stdout:unstaged},{stdout:staged}]=await Promise.all([
+  runGit('git',['diff','--no-ext-diff','--',raw],options),
+  runGit('git',['diff','--cached','--no-ext-diff','--',raw],options)
+ ]);
+ res.json({path:raw,diff:[staged,unstaged].filter(Boolean).join('\n')});
 });
 // Git changes are local-only, admin-only, and require the existing CSRF safeguards.
 const gitWrite=(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){next(e);}};
