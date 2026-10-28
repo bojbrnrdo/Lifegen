@@ -94,7 +94,7 @@ async function repositoryConnect(){
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
   csrf=auth.csrf_token;
-  const previousTree=$('tree').replaceChildren();
+  $('tree').replaceChildren();
   try{await treeFolder();}catch(error){renderTree();throw error;}
   repoMode=true;current=null;emptyEditor();$('modeLabel').textContent='REPOSITORY';$('storageInfo').textContent='Real files • Save explicitly (Cmd/Ctrl+S).';$('repositoryMode').textContent='Local Workspace';$('newFile').disabled=false;$('newFolder').disabled=false;
  }catch(e){$('status').textContent=e.message;}
@@ -104,7 +104,7 @@ $('gitChanges').addEventListener('click',async()=>{
  if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
  try{
   if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
-  repoDirty=false;
+  repoDirty=false;current=null;repoFiles.clear();emptyEditor();
   const result=await repoApi('/git/status');
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
   const view=$('tabs');view.replaceChildren();selectedGit.clear();$('commit').disabled=true;
