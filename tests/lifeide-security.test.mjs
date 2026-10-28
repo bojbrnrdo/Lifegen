@@ -35,3 +35,7 @@ test('Git review remains read only and disabled commit control remains on screen
 test('opening a repository file clears stale Git commit selections',()=>{
  assert.match(client,/selectedGit\.clear\(\);\$\('commit'\)\.disabled=true;\s*repoFiles\.set\(rel,file\)/);
 });
+
+test('Git commit requires no unsaved repository edits',()=>{
+ assert.match(client,/if\(repoDirty\)\{\$\('status'\)\.textContent='Save or discard unsaved changes before committing\.'/);
+});
