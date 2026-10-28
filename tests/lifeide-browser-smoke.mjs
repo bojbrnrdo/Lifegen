@@ -89,6 +89,13 @@ try {
  assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
  assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
  console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
+ await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:320,height:700,deviceScaleFactor:2,mobile:true}}));});
+ const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:document.getElementById('editor').getBoundingClientRect().width})");
+ assert.equal(narrow.width,320,'Small phones must use their real viewport width');
+ assert.equal(narrow.overflow,false,'Small phones must not overflow horizontally');
+ assert.ok(narrow.editor>80,'Editor must remain visible on small phones');
+ console.log('PASS LifeIDE narrow mobile viewport: 320px');
+
 
 
 }finally{
