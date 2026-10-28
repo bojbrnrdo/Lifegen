@@ -129,6 +129,7 @@ $('gitChanges').addEventListener('click',async()=>{
 });
 $('commit').addEventListener('click',async()=>{
  if(commitBusy||!repoMode||!selectedGit.size)return;
+ if(saveBusy){$('status').textContent='Wait for the current save to finish before committing.';return;}
  if(repoDirty){$('status').textContent='Save or discard unsaved changes before committing.';return;}
  const paths=[...selectedGit];
  const message=prompt('Commit message for '+paths.length+' selected file(s):');

@@ -60,3 +60,7 @@ test('repository refresh and entry creation refuse pending saves',()=>{
  assert.match(client,/if\(repoMode\)\{if\(saveBusy\)/);
  assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\)/);
 });
+
+test('Git commit waits for an active repository save',()=>{
+ assert.match(client,/if\(saveBusy\)\{\$\('status'\)\.textContent='Wait for the current save to finish before committing\.'/);
+});
