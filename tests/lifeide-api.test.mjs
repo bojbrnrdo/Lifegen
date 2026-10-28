@@ -120,6 +120,9 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   await fs.writeFile(path.join(workspace,'src/other.js'),'unrelated');
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'x'}})).status,400);
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Change test file'},token:false})).status,403);
+  execFileSync('git',['checkout','-q','main'],{cwd:workspace});
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Reject main branch'}})).status,409);
+  execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
   execFileSync('git',['checkout','-q','-b','release/test'],{cwd:workspace});
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked on release branch'}})).status,409);
   execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
