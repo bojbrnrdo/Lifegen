@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {resolve} from 'node:path';
 
 const file=resolve(process.cwd(),'.env.lifeide.local');
-const loaded=config({path:file,override:false});
+const loaded=config({path:file,override:true});
 if(loaded.error)throw Error('Missing .env.lifeide.local. Create a private local-only DATABASE_URL first.');
 const url=new URL(process.env.DATABASE_URL||'');
 if(!['127.0.0.1','localhost','::1'].includes(url.hostname))throw Error('Refusing to connect to a non-local database.');
