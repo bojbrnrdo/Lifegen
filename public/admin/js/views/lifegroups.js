@@ -534,7 +534,7 @@ async function drawAllPeople(body) {
    pager.innerHTML=html`<span class="small muted">Showing ${rows.length?offset+1:0}–${offset+rows.length} of ${total}</span><div class="row"><button class="btn btn--sm" type="button" data-prev ${offset===0?'disabled':''}>Previous</button><button class="btn btn--sm" type="button" data-next ${offset+rows.length>=total?'disabled':''}>Next</button></div>`;
    pager.querySelector('[data-prev]').onclick=()=>{offset=Math.max(0,offset-PAGE);load();};
    pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
-  }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
+  }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${e.message||'Unable to load People.'}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
  }
  input.addEventListener('input',debounce(()=>{offset=0;load();},250));
  status.addEventListener('change',()=>{offset=0;load();});

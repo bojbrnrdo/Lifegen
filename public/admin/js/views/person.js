@@ -43,8 +43,8 @@ export async function renderPerson({ main }, id) {
       <div class="card">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
-          ${row('Contact number', p.contact_number, (v) => raw(`<a href="tel:${v.replace(/\s/g, '')}">${v}</a>`))}
-          ${row('Email', p.email, (v) => raw(`<a href="mailto:${v}">${v}</a>`))}
+          ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`)}
+          ${row('Email', p.email, (v) => html`<a href="mailto:${v}">${v}</a>`)}
           ${row('Birthday', p.birthdate, (v) => `${fmtDate(v)} · ${age(v)} yrs`)}
           ${row('Sex', p.sex, (v) => v[0].toUpperCase() + v.slice(1))}
           ${row('School', p.school)}
