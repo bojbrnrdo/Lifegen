@@ -7,7 +7,7 @@ import express from 'express';
 import {execFileSync} from 'node:child_process';
 import {createLifeIdeRouter} from '../src/lifeide.js';
 import {login,readStaff,setStaffCookie,requireStaff,checkOrigin,rateLimit} from '../src/auth.js';
-import cookieParser from 'cookie-parser';
+import {rateLimit as expressRateLimit} from 'express-rate-limit';
 import {closePool} from '../src/db.js';
 
 const chromePath=process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -24,7 +24,16 @@ if(realAuth){
  if(!['127.0.0.1','localhost','::1'].includes(db.hostname)||process.env.LOCAL_DEMO!=='true')
   throw Error('Real-auth browser test requires LOCAL_DEMO=true and a loopback-only database');
 }
-const app=express();app.use(express.json());app.use(cookieParser());
+const app=express();
+app.use(express.json());
+app.use(expressRateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-7',legacyHeaders:false}));
+if(realAuth){
+ app.use((req,res,next)=>{
+  const cookie=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('lg_staff='));
+  req.cookies=cookie?{lg_staff:decodeURIComponent(cookie.slice('lg_staff='.length))}:{};
+  next();
+ });
+}
 if(realAuth){
  app.post('/api/auth/login',async(req,res)=>{try{checkOrigin(req);await rateLimit(req,'lifeide-browser-login',10);const result=await login(req.body);setStaffCookie(req,res,result.token);res.json({user:result.user,csrf_token:result.csrf_token});}catch(e){res.status(e.status||500).json({message:e.message});}});
  app.get('/api/auth/status',async(req,res)=>{const actor=await readStaff(req);res.json({user:actor,csrf_token:actor?.csrf_token});});
