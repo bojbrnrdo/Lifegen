@@ -39,7 +39,7 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoFiles.clear();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false;
@@ -89,12 +89,13 @@ async function openRepoFile(rel){
  $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
 }
 async function repositoryConnect(){
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;repoFiles.clear();repoExpanded.clear();$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
   csrf=auth.csrf_token;
-  $('tree').replaceChildren();await treeFolder();
+  const previousTree=$('tree').replaceChildren();
+  try{await treeFolder();}catch(error){renderTree();throw error;}
   repoMode=true;current=null;emptyEditor();$('modeLabel').textContent='REPOSITORY';$('storageInfo').textContent='Real files • Save explicitly (Cmd/Ctrl+S).';$('repositoryMode').textContent='Local Workspace';$('newFile').disabled=false;$('newFolder').disabled=false;
  }catch(e){$('status').textContent=e.message;}
 }
@@ -103,6 +104,7 @@ $('gitChanges').addEventListener('click',async()=>{
  if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
  try{
   if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
+  repoDirty=false;
   const result=await repoApi('/git/status');
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
   const view=$('tabs');view.replaceChildren();selectedGit.clear();$('commit').disabled=true;
