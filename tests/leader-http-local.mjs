@@ -30,6 +30,7 @@ try {
   const run=async(script,args=[])=>wd(sid+'/execute/sync','POST',{script,args});
   try{
    await wd(sid+'/url','POST',{url:base+'/admin/'});
+   for(let i=0;i<30;i++){if(await run('return !!document.querySelector("#u")'))break;await new Promise(r=>setTimeout(r,200));}
    await run("document.querySelector('#u').value='cell-pr134@local.test';document.querySelector('#p').value='PR134-local-test-pass-2026';document.querySelector('#loginForm button[type=submit]').click()");
    let status='';
    for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,250));status=await run('return location.hash+"|"+document.body.innerText.slice(0,450)');if(status.includes('My Lifegroups'))break;}
@@ -39,6 +40,15 @@ try {
    await run("document.querySelector('a[href=\"#/people/920003\"]').click()");
    for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,250));status=await run('return location.hash+"|"+document.body.innerText.slice(0,900)');if(status.includes('Restricted'))break;}
    assert.match(status,/Restricted/,'Safari profile hides private fields');
+   await wd(sid+'/window/rect','POST',{width:390,height:844});
+   const mobile=await run('return {width:window.innerWidth,scroll:document.documentElement.scrollWidth,menu:!!document.querySelector("#menuToggle")}');
+   assert.ok(mobile.width<=500,'Safari uses a narrow mobile-sized window');
+   assert.ok(mobile.scroll<=mobile.width+1,'Safari mobile layout has no page-level horizontal overflow');
+   assert.ok(mobile.menu,'Safari mobile menu is available');
+   await run('document.querySelector("#menuToggle").click()');
+   assert.equal(await run('return document.querySelector("#sidebar").classList.contains("open")'),true,'Safari sidebar opens');
+   await run('document.querySelector("#backdrop").click()');
+   assert.equal(await run('return document.querySelector("#sidebar").classList.contains("open")'),false,'Safari sidebar closes');
    console.log('PASS: Safari 26.5 linked leader sign-in, scoped directory and protected profile');
   }finally{await wd(sid,'DELETE');}
  }
