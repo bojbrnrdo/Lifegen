@@ -54,3 +54,9 @@ test('linked leader can update tier only within assigned Cell',async()=>{
  await assert.rejects(authorize(c,actor,'setTier',[23,100,'solid']),{status:403});
  await assert.rejects(authorize(c,actor,'setTier',[22,{},'solid']),{status:403});
 });
+test('linked leader removal requires own Cell and valid member ID',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ await assert.doesNotReject(authorize(c,actor,'leaveLifegroup',[22,100]));
+ await assert.rejects(authorize(c,actor,'leaveLifegroup',[23,100]),{status:403});
+ await assert.rejects(authorize(c,actor,'leaveLifegroup',[22,{}]),{status:403});
+});

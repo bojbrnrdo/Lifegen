@@ -748,6 +748,14 @@ async function autoAssignMember(personId, prefs = {}, actor = null) {
 async function leaveMember(groupId, personId, leftAt = today(), actor) {
   if (!dateOk(leftAt)) throw httpError(400, 'Left date must be a valid date.');
   await transaction(async (client) => {
+    if (actor?.role_id !== 'admin') {
+      const scope=await resolveLeaderScope(client,actor);
+      if(scope.kind!=='unassigned') assertLeaderScope(scope,{cellId:groupId});
+      else {
+        const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+        if(linked.rows[0]?.person_id) assertLeaderScope(scope,{cellId:groupId});
+      }
+    }
     const current = (await client.query(`SELECT m.id,m.joined_at,g.name,p.first_name,p.last_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
       WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
