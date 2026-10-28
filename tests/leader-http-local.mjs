@@ -12,6 +12,7 @@ const ids=[920001,920002,920003];
 try {
  const hash=await passwordHash('PR134-local-test-pass-2026');
  await db.query("INSERT INTO people(id,person_code,first_name,last_name,status,date_registered,sex) VALUES (920001,'PR134-NA','Network','A','leader',CURRENT_DATE,'male'),(920002,'PR134-CA','Cell','A','leader',CURRENT_DATE,'male'),(920003,'PR134-MA','Member','A','member',CURRENT_DATE,'male')");
+ await db.query('UPDATE people SET email=$1, contact_number=$2 WHERE id=$3',['member-pr134@local.test','09170000000',920003]);
  await db.query('INSERT INTO staff_users(id,username,display_name,password_hash,role_id,person_id) VALUES (920001,$1,$2,$3,$4,$5),(920002,$6,$7,$3,$4,$8)',['network-pr134@local.test','Network A',hash,'staff',920001,'cell-pr134@local.test','Cell A',920002]);
  await db.query("INSERT INTO networks(id,name,gender,leader_person_id) VALUES (920001,'Network A','boys',920001),(920002,'Network B','boys',NULL)");
  await db.query("INSERT INTO lifegroups(id,name,gender,network_id,leader_person_id) VALUES (920001,'Cell A','boys',920001,920002),(920002,'Cell B','boys',920002,NULL)");
@@ -27,7 +28,11 @@ try {
  assert.equal((await call(c,'lifegroup',[920001])).status,200);
  assert.equal((await call(n,'lifegroup',[920002])).status,403);
  assert.equal((await call(c,'network',[920001])).status,403);
- assert.equal((await call(n,'person',[920003])).status,200);
+ const scopedPerson=await call(n,'person',[920003]);
+ assert.equal(scopedPerson.status,200);
+ assert.equal(scopedPerson.data.contact_number,undefined);
+ assert.equal(scopedPerson.data.email,undefined);
+ assert.equal(scopedPerson.data.private_hidden,undefined);
  assert.equal((await call(c,'reportSummary')).status,403);
  assert.equal((await call(c,'setTier',[920002,920003,'solid'])).status,403);
  assert.equal((await call(c,'leaveLifegroup',[920002,920003])).status,403);
