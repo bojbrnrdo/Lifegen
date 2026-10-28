@@ -644,6 +644,8 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
       WHERE m.person_id=$1 AND m.left_at IS NULL FOR UPDATE OF m`, [personId])).rows[0];
     if(leaderScope && current && !leaderScope.cellIds.includes(Number(current.lifegroup_id))) throw httpError(403,'Cannot move a member from another leader Cell.');
+    if(leaderScope && (current?.role && current.role!=='member')) throw httpError(403,'Leadership memberships require administrator review.');
+    if(leaderScope && (group.leader_person_id===personId || networkLeadership)) throw httpError(403,'Leader assignments require administrator review.');
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
