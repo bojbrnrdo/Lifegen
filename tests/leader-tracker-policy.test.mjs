@@ -47,3 +47,10 @@ test('individual profile denies out-of-scope People and permits active assigned 
  await assert.rejects(authorize(c,actor,'person',[101]),{status:403});
  for(const bad of [null,undefined,{},'01',0])await assert.rejects(authorize(c,actor,'person',[bad]),{status:403});
 });
+
+test('linked leader can update tier only within assigned Cell',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ await assert.doesNotReject(authorize(c,actor,'setTier',[22,100,'solid']));
+ await assert.rejects(authorize(c,actor,'setTier',[23,100,'solid']),{status:403});
+ await assert.rejects(authorize(c,actor,'setTier',[22,{},'solid']),{status:403});
+});

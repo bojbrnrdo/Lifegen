@@ -1,6 +1,7 @@
 import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES,shouldRetryVipCell } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
+import {resolveLeaderScope,assertLeaderScope} from './leader-scope.js';
 
 const SEX_OF = { boys: 'male', girls: 'female' };
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
@@ -1155,6 +1156,14 @@ async function lifegroupMethod(name, args, actor) {
   if (name === 'setTier') {
     const groupId = asId(args[0],'group ID'), personId = asId(args[1],'person ID'), tier = validateTier(args[2]);
     await transaction(async (client) => {
+      if (actor?.role_id !== 'admin') {
+        const leader=await resolveLeaderScope(client,actor);
+        if (leader.kind!=='unassigned') assertLeaderScope(leader,{cellId:groupId});
+        else {
+          const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+          if(linked.rows[0]?.person_id) assertLeaderScope(leader,{cellId:groupId});
+        }
+      }
       const membership = (await client.query(`SELECT m.id,m.tier,p.first_name,p.last_name FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
         WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
       if (!membership) throw httpError(404, 'Current group membership not found.');

@@ -31,6 +31,11 @@ export async function authorizeLinkedLeaderTrackerMethod(client,actor,method,arg
   if (!rows.length) throw httpError(403,'This Person is outside your assigned Cells.');
   return;
  }
+ if (method==='setTier') {
+  const cellId=requiredScopedId(args[0]);
+  requiredScopedId(args[1]);
+  return assertLeaderScope(scope,{cellId});
+ }
  if (method==='network') return assertLeaderScope(scope,{networkId:requiredScopedId(args[0])});
  if (method==='lifegroup') return assertLeaderScope(scope,{cellId:requiredScopedId(args[0])});
  throw httpError(403,'This action requires a scope-aware leader implementation.');
