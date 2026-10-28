@@ -13,7 +13,7 @@ try {
  const hash=await passwordHash('PR134-local-test-pass-2026');
  await db.query("INSERT INTO people(id,person_code,first_name,last_name,status,date_registered,sex) VALUES (920001,'PR134-NA','Network','A','leader',CURRENT_DATE,'male'),(920002,'PR134-CA','Cell','A','leader',CURRENT_DATE,'male'),(920003,'PR134-MA','Member','A','member',CURRENT_DATE,'male'),(920004,'PR134-MB','Member','B','member',CURRENT_DATE,'male'),(920005,'PR134-UA','Unassigned','A','member',CURRENT_DATE,'male')");
  await db.query('UPDATE people SET email=$1, contact_number=$2 WHERE id=$3',['member-pr134@local.test','09170000000',920003]);
- await db.query('INSERT INTO staff_users(id,username,display_name,password_hash,role_id,person_id) VALUES (920001,$1,$2,$3,$4,$5),(920002,$6,$7,$3,$4,$8),(920005,$9,$10,$3,$4,$11)',['network-pr134@local.test','Network A',hash,'staff',920001,'cell-pr134@local.test','Cell A',920002,'unassigned-pr134@local.test','Unassigned A',920005]);
+ await db.query('INSERT INTO staff_users(id,username,display_name,password_hash,role_id,person_id) VALUES (920001,$1,$2,$3,$4,$5),(920002,$6,$7,$3,$4,$8),(920005,$9,$10,$3,$4,$11),(920006,$12,$13,$3,\'staff\',NULL),(920007,$14,$15,$3,\'admin\',NULL)',['network-pr134@local.test','Network A',hash,'staff',920001,'cell-pr134@local.test','Cell A',920002,'unassigned-pr134@local.test','Unassigned A',920005,'legacy-pr134@local.test','Legacy Staff','admin-pr134@local.test','Local Admin']);
  await db.query("INSERT INTO networks(id,name,gender,leader_person_id) VALUES (920001,'Network A','boys',920001),(920002,'Network B','boys',NULL)");
  await db.query("INSERT INTO lifegroups(id,name,gender,network_id,leader_person_id) VALUES (920001,'Cell A','boys',920001,920002),(920002,'Cell B','boys',920002,NULL)");
  await db.query('INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id) VALUES (920001,920003,920001),(920003,920004,920002)');
@@ -21,7 +21,7 @@ try {
  const base=`http://127.0.0.1:${server.address().port}`;
  async function login(username){const response=await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({username,password:'PR134-local-test-pass-2026'})});assert.equal(response.status,200);return response.json();}
  async function call(a,method,args=[]){const response=await fetch(base+'/api/tracker/'+method,{method:'POST',headers:{'content-type':'application/json',origin:base,'x-lifegen-preview-session':a.preview_session_token,'x-csrf-token':a.csrf_token},body:JSON.stringify({args})});return {status:response.status,data:await response.json()};}
- const n=await login('network-pr134@local.test'),c=await login('cell-pr134@local.test'),u=await login('unassigned-pr134@local.test');
+ const n=await login('network-pr134@local.test'),c=await login('cell-pr134@local.test'),u=await login('unassigned-pr134@local.test'),legacy=await login('legacy-pr134@local.test'),admin=await login('admin-pr134@local.test');
  if(process.env.LIFEGEN_SAFARI_TEST==='1'){
   const driver='http://127.0.0.1:55435';
   async function wd(path,method='GET',body){const r=await fetch(driver+path,{method,headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json();if(j.value?.error)throw Error(j.value.message);return j.value;}
@@ -88,6 +88,12 @@ try {
   }
  }finally{await browser.close();}
  }
+ assert.equal((await call(legacy,'leaderScope')).data.linked,false);
+ assert.equal((await call(admin,'leaderScope')).data.kind,'admin');
+ assert.equal((await call(legacy,'person',[920004])).status,200,'unlinked Staff retains cross-network access');
+ assert.equal((await call(admin,'person',[920004])).status,200,'admin retains cross-network access');
+ assert.equal((await call(legacy,'search',['Member'])).status,200,'unlinked Staff retains global search');
+ assert.equal((await call(admin,'search',['Member'])).status,200,'admin retains global search');
  assert.equal((await call(u,'leaderScope')).data.kind,'unassigned');
  assert.equal((await call(u,'people',[{paged:1,limit:100}])).status,403);
  assert.equal((await call(u,'lifegroup',[920001])).status,403);
@@ -137,11 +143,11 @@ try {
  console.log('PASS: authenticated HTTP linked leader access checks');
 }finally{
  if(server)await new Promise(resolve=>server.close(resolve));
- await db.query('DELETE FROM staff_sessions WHERE user_id IN (920001,920002,920005)').catch(()=>{});
+ await db.query('DELETE FROM staff_sessions WHERE user_id IN (920001,920002,920005,920006,920007)').catch(()=>{});
  await db.query('DELETE FROM lifegroup_memberships WHERE id IN (920001,920002,920003) OR person_id IN (920003,920004)').catch(()=>{});
- await db.query('DELETE FROM lifegroups WHERE id IN (920001,920002,920005)').catch(()=>{});
- await db.query('DELETE FROM networks WHERE id IN (920001,920002,920005)').catch(()=>{});
- await db.query('DELETE FROM staff_users WHERE id IN (920001,920002,920005)').catch(()=>{});
+ await db.query('DELETE FROM lifegroups WHERE id IN (920001,920002,920005,920006,920007)').catch(()=>{});
+ await db.query('DELETE FROM networks WHERE id IN (920001,920002,920005,920006,920007)').catch(()=>{});
+ await db.query('DELETE FROM staff_users WHERE id IN (920001,920002,920005,920006,920007)').catch(()=>{});
  await db.query('DELETE FROM people WHERE id=ANY($1::bigint[])',[ids]).catch(()=>{});
  await db.end();await closePool();
 }
