@@ -46,6 +46,10 @@ try {
    await page.locator('a[href="#/lifegroups"]').filter({hasText:'My Lifegroups'}).first().click();
    await page.waitForURL(/#\/lifegroups/);
    await page.getByRole('heading',{name:'My Lifegroups'}).waitFor();
+   if(size.width===390){
+    await page.locator('#menuToggle').click();
+    assert.ok(await page.locator('#sidebar').evaluate(el=>el.classList.contains('open')||el.classList.contains('is-open')||el.getAttribute('aria-hidden')==='false'),'mobile menu opens');
+   }
    console.log('PASS: Chrome linked leader directory at '+size.width+'px');
    await page.close();
   }
