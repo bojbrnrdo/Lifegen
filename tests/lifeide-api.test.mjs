@@ -23,6 +23,23 @@ test('repository editing gate rejects requests when opt-in is disabled',async()=
  }
 });
 
+test('repository editing remains disabled in production even with explicit opt-in',async()=>{
+ const previousEdit=process.env.LIFEIDE_LOCAL_EDIT,previousNode=process.env.NODE_ENV;
+ process.env.LIFEIDE_LOCAL_EDIT='true';process.env.NODE_ENV='production';
+ const app=express();
+ app.use('/api/lifeide',createLifeIdeRouter({authenticate:(req,res,next)=>next(),checkRole:(req,res,next)=>next()}));
+ const server=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise(resolve=>server.once('listening',resolve));
+  const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/lifeide/tree');
+  assert.equal(response.status,404);
+ }finally{
+  await new Promise(resolve=>server.close(resolve));
+  if(previousEdit===undefined)delete process.env.LIFEIDE_LOCAL_EDIT;else process.env.LIFEIDE_LOCAL_EDIT=previousEdit;
+  if(previousNode===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousNode;
+ }
+});
+
 test('real administrator role middleware denies non-admin actors',async()=>{
  const old=process.env.LIFEIDE_LOCAL_EDIT;
  const oldNode=process.env.NODE_ENV;
