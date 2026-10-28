@@ -23,6 +23,29 @@ test('repository editing gate rejects requests when opt-in is disabled',async()=
  }
 });
 
+test('real administrator role middleware denies non-admin actors',async()=>{
+ const old=process.env.LIFEIDE_LOCAL_EDIT;
+ const oldNode=process.env.NODE_ENV;
+ process.env.LIFEIDE_LOCAL_EDIT='true';
+ process.env.NODE_ENV='test';
+ const app=express();
+ app.use('/api/lifeide',createLifeIdeRouter({
+  authenticate:(req,res,next)=>{req.actor={role_id:req.get('x-test-role')||'viewer'};next();}
+ }));
+ app.use((err,req,res,next)=>res.status(err.status||500).json({message:err.message}));
+ const listener=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise(resolve=>listener.once('listening',resolve));
+  const base='http://127.0.0.1:'+listener.address().port+'/api/lifeide/tree';
+  const denied=await fetch(base,{headers:{'x-test-role':'viewer'}});
+  assert.equal(denied.status,403);
+ }finally{
+  await new Promise(resolve=>listener.close(resolve));
+  if(old===undefined)delete process.env.LIFEIDE_LOCAL_EDIT;else process.env.LIFEIDE_LOCAL_EDIT=old;
+  if(oldNode===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=oldNode;
+ }
+});
+
 test('isolated HTTP API: access, creation, save, conflict and Git review',async()=>{
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'lifegen-ide-http-'));
  const app=express();app.use(express.json());
