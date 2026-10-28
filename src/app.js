@@ -124,7 +124,7 @@ async function customMethod(req,name,args) {
  if(name==='updateService')return updateService(args[0],args[1]||{},actor);
  if(name==='reportYears')return reportYears();
  if(name==='reportSummary')return reportSummary(args[0]||{});
- if(name==='people')return peopleList(args[0]||{});
+ if(name==='people')return peopleList(args[0]||{},req.leaderCellIds??null);
  if(name==='search')return peopleSearch(args[0],args[1]||{});
  if(name==='calendarEvents'){
   const months=Math.min(Math.max(Number(args[0]?.months)||13,1),25);
@@ -326,7 +326,8 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const args=req.body?.args||[];if(!Array.isArray(args)||args.length>6)throw httpError(400,'Invalid operation arguments.');
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
  if(name==='leaderScope')return res.json(await resolveLeaderScope({query},req.actor));
- await authorizeLinkedLeaderTrackerMethod({query},req.actor,name,args);
+ const leaderPolicy=await authorizeLinkedLeaderTrackerMethod({query},req.actor,name,args);
+ if(name==='people' && leaderPolicy?.allowedCellIds)req.leaderCellIds=leaderPolicy.allowedCellIds;
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
  const groupResult=await handleLifegroupMethod(name,args,req.actor);

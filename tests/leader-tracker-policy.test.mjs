@@ -20,7 +20,7 @@ test('cell leader cannot read parent network or other cells',async()=>{
 });
 test('linked leaders cannot access unscoped operations including all writes',async()=>{
  const c=mock(2,[{id:4}],[],[{id:22}]);
- for(const method of ['people','search','networks','lifegroups','createPerson','updatePerson','assignLifegroup','createNetwork','reportSummary','saveMeeting'])
+ for(const method of ['search','networks','lifegroups','createPerson','updatePerson','assignLifegroup','createNetwork','reportSummary','saveMeeting'])
   await assert.rejects(authorize(c,actor,method,[]),{status:403});
 });
 test('linked people without leadership have no tracker access',async()=>{
@@ -32,4 +32,9 @@ test('missing or malformed detail identifiers never authorize collection access'
   await assert.rejects(authorize(c,actor,'network',[value]),{status:403});
   await assert.rejects(authorize(c,actor,'lifegroup',[value]),{status:403});
  }
+});
+
+test('linked leader People query is constrained to assigned cells',async()=>{
+ const result=await authorize(mock(2,[{id:4}],[],[{id:22},{id:23}]),actor,'people',[{}]);
+ assert.deepEqual(result,{allowedCellIds:[22,23]});
 });

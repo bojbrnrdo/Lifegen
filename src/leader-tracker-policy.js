@@ -23,6 +23,7 @@ export async function authorizeLinkedLeaderTrackerMethod(client,actor,method,arg
   const {rows}=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
   if (!rows[0]?.person_id) return;
  }
+ if (method==='people' && scope.kind!=='unassigned') return {allowedCellIds:scope.cellIds};
  if (method==='network') return assertLeaderScope(scope,{networkId:requiredScopedId(args[0])});
  if (method==='lifegroup') return assertLeaderScope(scope,{cellId:requiredScopedId(args[0])});
  throw httpError(403,'This action requires a scope-aware leader implementation.');
