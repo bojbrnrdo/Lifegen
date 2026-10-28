@@ -44,3 +44,9 @@
 ## Repeated local HTTP runs
 
 The isolated HTTP harness exercises the real staff-login rate limiter (30 requests per 15-minute window per loopback client). Repeated browser/API test invocations can legitimately return HTTP 429, which indicates the limiter is functioning, not that authorization is broken. Do not disable or relax production login throttling to facilitate tests. Run verification on a fresh disposable database or after its normal rate-limit window resets; record any throttled attempt separately from passed runs.
+
+## Fresh-database release-gate verification
+
+A new disposable PostgreSQL 15 instance on loopback port 55450 was created separately from the existing local databases. The migration runner applied all twelve SQL migration files (001 through 011), the identity-link migration repeatability check passed, and authenticated linked-leader HTTP integration tests passed. This cleared the previous local login-throttle blocker without relaxing the limiter. The fresh container is disposable and must not be mistaken for production.
+
+**Production migration considerations:** `011_staff_people_link.sql` adds a nullable `staff_users.person_id` foreign key and a partial unique index, so existing accounts remain unlinked until explicitly assigned. Confirm a tested backup and maintenance/rollback plan before production; reverting the application alone does not undo the column or index. Do not remove the new column or index in a routine rollback without evaluating any links saved after deployment. Actual production schema state and data were not inspected during this verification.
