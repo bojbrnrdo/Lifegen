@@ -68,6 +68,13 @@ try {
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit (isolated mock admin)');
+ await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:390,height:844,deviceScaleFactor:3,mobile:true}}));});
+ const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:document.getElementById('editor').getBoundingClientRect().width})");
+ assert.equal(mobile.viewport,390);
+ assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
+ assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
+ console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
+
 
 }finally{
  ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});

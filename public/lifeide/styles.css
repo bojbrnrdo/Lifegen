@@ -39,3 +39,12 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .tabs input[type=checkbox]{margin:0 3px 0 12px;accent-color:var(--life-mid);align-self:center}
 
 .tab-open{background:transparent;border:0;border-radius:0;color:inherit;font:inherit;padding:0;min-width:0;text-align:left}.tab-open:hover:not(:disabled){background:transparent}.tab:focus-within{outline-offset:-2px}
+@media(max-width:680px){
+ .ide{width:100%;min-width:0}
+ .topbar{height:auto;min-height:56px;flex-wrap:wrap;gap:6px;padding:8px}
+ .topbar>*{min-width:0}
+ .top-actions{margin-left:auto}
+ .workspace,.main,.editor-toolbar,.editor-tools{min-width:0}
+ .editor-toolbar{overflow-x:auto}
+ .editor-tools{flex-shrink:0}
+}
