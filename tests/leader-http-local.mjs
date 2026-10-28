@@ -39,6 +39,13 @@ try {
    assert.equal(await page.getByText('Member B').count(),0,'other Network Person is hidden');
    const widths=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,inner:window.innerWidth}));
    assert.ok(widths.scroll<=widths.inner+1,'no page-level horizontal overflow at '+size.width);
+   await page.locator('a[href="#/people/920003"]').first().click();
+   await page.waitForURL(/#\/people\/920003/);
+   await page.getByRole('heading',{name:'Member A'}).waitFor();
+   assert.ok(await page.getByText('Restricted',{exact:true}).count()>0,'private details are marked restricted');
+   await page.locator('a[href="#/lifegroups"]').filter({hasText:'My Lifegroups'}).first().click();
+   await page.waitForURL(/#\/lifegroups/);
+   await page.getByRole('heading',{name:'My Lifegroups'}).waitFor();
    console.log('PASS: Chrome linked leader directory at '+size.width+'px');
    await page.close();
   }
