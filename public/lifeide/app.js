@@ -42,7 +42,7 @@ function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.f
 $('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false;
+let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false;
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
@@ -125,17 +125,19 @@ $('gitChanges').addEventListener('click',async()=>{
  }catch(e){$('status').textContent=e.message;}
 });
 $('commit').addEventListener('click',async()=>{
- if(!repoMode||!selectedGit.size)return;
+ if(commitBusy||!repoMode||!selectedGit.size)return;
  if(repoDirty){$('status').textContent='Save or discard unsaved changes before committing.';return;}
  const paths=[...selectedGit];
  const message=prompt('Commit message for '+paths.length+' selected file(s):');
  if(message===null)return;
  if(!confirm('Commit ONLY these files locally?\n'+paths.join('\n')))return;
+ commitBusy=true;$('commit').disabled=true;
  try{
   const result=await repoApi('/git/commit',{method:'POST',body:JSON.stringify({paths,message})});
   selectedGit.clear();$('commit').disabled=true;$('status').textContent='Created local commit '+result.commit+' on '+result.branch;
   $('gitChanges').click();
  }catch(e){$('status').textContent='Commit rejected: '+e.message;}
+ finally{commitBusy=false;$('commit').disabled=!repoMode||selectedGit.size===0;}
 });
 $('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent='Unsaved repository changes';}});
 document.addEventListener('keydown',async e=>{

@@ -39,3 +39,8 @@ test('opening a repository file clears stale Git commit selections',()=>{
 test('Git commit requires no unsaved repository edits',()=>{
  assert.match(client,/if\(repoDirty\)\{\$\('status'\)\.textContent='Save or discard unsaved changes before committing\.'/);
 });
+
+test('commit button is disabled while a commit request is pending',()=>{
+ assert.match(client,/commitBusy=true;\$\('commit'\)\.disabled=true/);
+ assert.match(client,/finally\{commitBusy=false/);
+});
