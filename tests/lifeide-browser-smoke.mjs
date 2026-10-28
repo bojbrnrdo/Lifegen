@@ -3,10 +3,22 @@ import {spawn} from 'node:child_process';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import app from '../src/app.js';
+import express from 'express';
+import {execFileSync} from 'node:child_process';
+import {createLifeIdeRouter} from '../src/lifeide.js';
 
 const chromePath=process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const profile=await mkdtemp(path.join(os.tmpdir(),'lifeide-browser-'));
+const workspace=await mkdtemp(path.join(os.tmpdir(),'lifeide-repo-'));
+const git=(...args)=>execFileSync('git',args,{cwd:workspace,encoding:'utf8'}).trim();
+git('init','-q');git('config','user.name','LifeIDE Browser Test');git('config','user.email','lifeide@example.invalid');
+await (await import('node:fs/promises')).writeFile(path.join(workspace,'README.md'),'LifeIDE browser repository test');
+git('add','README.md');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
+const app=express();app.use(express.json());
+app.get('/api/auth/status',(req,res)=>res.json({user:{role_id:'admin'},csrf_token:'test-csrf'}));
+app.use('/api/lifeide',createLifeIdeRouter({workspace,access:(req,res,next)=>next(),authenticate:(req,res,next)=>{req.actor={role_id:'admin',csrf_token:'test-csrf'};next();},origin:(req)=>{},csrf:(req)=>{if(req.get('x-csrf-token')!=='test-csrf')throw Error('Missing test CSRF');}}));
+app.use('/lifeide',express.static(new URL('../public/lifeide/',import.meta.url).pathname));
+app.use((err,req,res,next)=>res.status(err.status||500).json({message:err.message}));
 const server=app.listen(0,'127.0.0.1');
 let chrome,ws;
 try {
@@ -37,6 +49,26 @@ try {
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1);
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
+ await evaluate("document.getElementById('repositoryMode').click()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('modeLabel').textContent==='REPOSITORY'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
+ await evaluate("document.getElementById('newFile').click()");
+ await evaluate("document.getElementById('dialogInput').value='browser-repository.js';document.getElementById('dialogForm').requestSubmit()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js');
+ await evaluate("document.getElementById('editor').value='const browserRepository = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
+ for(let i=0;i<50;i++){if((await readFile(path.join(workspace,'browser-repository.js'),'utf8'))==='const browserRepository = true;')break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await readFile(path.join(workspace,'browser-repository.js'),'utf8'),'const browserRepository = true;');
+ await evaluate("document.getElementById('gitChanges').click()");
+ for(let i=0;i<50;i++){if(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"))break;await new Promise(r=>setTimeout(r,100));}
+ await evaluate("document.querySelector('#tabs input[type=checkbox]').click()");
+ assert.equal(await evaluate("document.getElementById('commit').disabled"),false);
+ await evaluate("window.prompt=()=> 'Verify browser commit';window.confirm=()=>true;document.getElementById('commit').click()");
+ for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
+ console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit (isolated mock admin)');
+
 }finally{
- ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});
+ ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});
 }
