@@ -15,7 +15,7 @@ const slice=(begin,end)=>{
 };
 
 test('sidebar and page are named Lifegroups, without changing its route',()=>{
- assert.match(nav, /navLink\('#\/lifegroups', 'lifegroups', 'Lifegroups', 'group'\)/);
+ assert.match(nav, /navLink\('#\/lifegroups',\s*'lifegroups',\s*'Lifegroups',\s*'group'(?:,\s*true)?\)/);
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page, /<h1>Lifegroups<\/h1>/);
  assert.match(page, /id="treeCanvas"/);

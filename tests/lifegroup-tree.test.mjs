@@ -25,13 +25,14 @@ test('assigning a Lifegroup to a Network makes the cell leader visible on expans
   assert.equal(findUnassignedGroups([network], [connected]).length, 0);
 });
 
-test('network leader own Lifegroup is not duplicated as a cell leader', () => {
+test('network leader own Cell remains visible without duplicating its Person record', () => {
   const n = { ...network, leader_person_id: 7 };
   const own = { ...group, id: 11, leader_person_id: 7, network_id: n.id };
   const other = { ...group, id: 12, leader_person_id: 8, network_id: n.id };
   const roots = build([n], [own, other], new Set(['network:1']));
-  assert.equal(roots[0].children.length, 1);
-  assert.equal(roots[0].children[0].key, 'group:12');
+  assert.equal(roots.length, 1);
+  assert.deepEqual(roots[0].children.map(cell => cell.key), ['group:11', 'group:12']);
+  assert.equal(roots[0].record.leader_person_id, 7);
 });
 
 test('member statuses and assistant leadership display correctly after expansion', () => {
