@@ -7,7 +7,7 @@ test('repository routes are disabled except on opted-in local development',()=>{
  assert.match(server,/LIFEIDE_LOCAL_EDIT==='true'/);
  assert.match(server,/NODE_ENV!=='production'/);
  assert.match(server,/!process\.env\.VERCEL/);
- assert.match(server,/router\.use\(access,authenticate,checkRole\)/);
+ assert.match(server,/router\.use\(access,authenticate,checkRole,requestLimit\)/);
 });
 test('writes require origin, csrf, and optimistic file version checks',()=>{
  assert.match(server,/origin\(req\);csrf\(req\)/);
@@ -73,4 +73,10 @@ test('file tabs use sibling buttons for open and close controls',()=>{
  assert.match(client,/const tab=document.createElement\('div'\)/);
  assert.match(client,/const open=document.createElement\('button'\)/);
  assert.match(client,/tab.append\(open,close\)/);
+});
+
+test('repository operations are rate-limited and avoid following file symlinks',()=>{
+ assert.match(server,/expressRateLimit\(/);
+ assert.match(server,/O_NOFOLLOW/);
+ assert.match(server,/handle\.stat\(\)/);
 });

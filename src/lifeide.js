@@ -4,6 +4,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {rateLimit as expressRateLimit} from 'express-rate-limit';
+import {constants as fileFlags} from 'node:fs';
 const runGit=promisify(execFile);
 import {requireStaff,checkOrigin,checkCsrf} from './auth.js';
 import {httpError} from './domain.js';
@@ -37,7 +39,8 @@ export function createLifeIdeRouter({workspace=path.resolve(process.cwd()),authe
  const router=express.Router();
  const base=workspace;
  const safePath=(raw,options={})=>verifyLifeIdePath(raw,{...options,workspace:base});
- router.use(access,authenticate,checkRole);
+ const requestLimit=expressRateLimit({windowMs:60_000,limit:90,standardHeaders:'draft-7',legacyHeaders:false,message:{message:'Too many LifeIDE requests. Retry shortly.'}});
+ router.use(access,authenticate,checkRole,requestLimit);
 router.get('/tree',async(req,res)=>{
  const dir=typeof req.query.path==='string'&&req.query.path?req.query.path:null;
  const absolute=dir?await safePath(dir):base;
@@ -48,9 +51,13 @@ router.get('/tree',async(req,res)=>{
 });
 router.get('/file',async(req,res)=>{
  const raw=req.query.path,absolute=await safePath(raw);
- const stat=await fs.stat(absolute);
- if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not an editable text file.');
- const bytes=await fs.readFile(absolute);
+ const handle=await fs.open(absolute,fileFlags.O_RDONLY|fileFlags.O_NOFOLLOW);
+ let bytes;
+ try{
+  const stat=await handle.stat();
+  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not an editable text file.');
+  bytes=await handle.readFile();
+ }finally{await handle.close();}
  if(bytes.length>512*1024)throw httpError(413,'File is too large to edit.');
  if(bytes.includes(0))throw httpError(415,'Binary files cannot be edited.');
  try{new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
@@ -62,14 +69,19 @@ router.put('/file',(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){n
  if(content.includes('\0'))throw httpError(415,'Binary content cannot be saved.');
  const utf8=Buffer.from(content,'utf8');
  if(utf8.toString('utf8')!==content)throw httpError(415,'Invalid Unicode content cannot be saved.');
- const absolute=await safePath(raw),stat=await fs.stat(absolute);
- if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not editable.');
- const original=await fs.readFile(absolute),hash=crypto.createHash('sha256').update(original).digest('hex');
- if(hash!==version)throw httpError(409,'File changed on disk. Reload before saving.');
- if(original.length>512*1024)throw httpError(413,'File is too large to edit.');
- if(original.includes(0))throw httpError(415,'Binary file.');
- try{new TextDecoder('utf-8',{fatal:true}).decode(original);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
- await fs.writeFile(absolute,content,{flag:'w'});
+ const absolute=await safePath(raw);
+ const handle=await fs.open(absolute,fileFlags.O_RDWR|fileFlags.O_NOFOLLOW);
+ try{
+  const stat=await handle.stat();
+  if(!stat.isFile()||stat.size>512*1024)throw httpError(413,'File is not editable.');
+  const original=await handle.readFile(),hash=crypto.createHash('sha256').update(original).digest('hex');
+  if(hash!==version)throw httpError(409,'File changed on disk. Reload before saving.');
+  if(original.length>512*1024)throw httpError(413,'File is too large to edit.');
+  if(original.includes(0))throw httpError(415,'Binary file.');
+  try{new TextDecoder('utf-8',{fatal:true}).decode(original);}catch{throw httpError(415,'Only UTF-8 text files are editable.');}
+  await handle.write(utf8,0,utf8.length,0);
+  await handle.truncate(utf8.length);
+ }finally{await handle.close();}
  res.json({ok:true,version:crypto.createHash('sha256').update(content).digest('hex')});
 });
 

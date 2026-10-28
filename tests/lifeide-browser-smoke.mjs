@@ -6,7 +6,7 @@ import path from 'node:path';
 import express from 'express';
 import {execFileSync} from 'node:child_process';
 import {createLifeIdeRouter} from '../src/lifeide.js';
-import {login,readStaff,setStaffCookie,requireStaff} from '../src/auth.js';
+import {login,readStaff,setStaffCookie,requireStaff,checkOrigin,rateLimit} from '../src/auth.js';
 import cookieParser from 'cookie-parser';
 import {closePool} from '../src/db.js';
 
@@ -26,7 +26,7 @@ if(realAuth){
 }
 const app=express();app.use(express.json());app.use(cookieParser());
 if(realAuth){
- app.post('/api/auth/login',async(req,res)=>{try{const result=await login(req.body);setStaffCookie(req,res,result.token);res.json({user:result.user,csrf_token:result.csrf_token});}catch(e){res.status(e.status||500).json({message:e.message});}});
+ app.post('/api/auth/login',async(req,res)=>{try{checkOrigin(req);await rateLimit(req,'lifeide-browser-login',10);const result=await login(req.body);setStaffCookie(req,res,result.token);res.json({user:result.user,csrf_token:result.csrf_token});}catch(e){res.status(e.status||500).json({message:e.message});}});
  app.get('/api/auth/status',async(req,res)=>{const actor=await readStaff(req);res.json({user:actor,csrf_token:actor?.csrf_token});});
  app.use('/api/lifeide',createLifeIdeRouter({workspace,authenticate:requireStaff}));
 }else{
@@ -67,7 +67,7 @@ try {
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  if(realAuth){
   const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
-  const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify("+credentials+")});return r.status})()");
+  const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:location.origin},body:JSON.stringify("+credentials+")});return r.status})()");
   assert.equal(loginStatus,200,'Real database-backed admin login should succeed');
  }
  await evaluate("document.getElementById('repositoryMode').click()");
