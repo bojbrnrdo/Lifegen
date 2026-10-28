@@ -24,6 +24,7 @@ import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
 import {resolveLeaderScope} from './leader-scope.js';
+import {assertGlobalExportAccess} from './leader-export-policy.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
 const ADMIN_ASSET_VERSION='2.4.5';
@@ -336,8 +337,8 @@ app.post('/api/tracker/:method',async(req,res)=>{
  if(!req.actor.permissions.includes('people:view_private'))result=redactForViewer(result);
  res.json(result??{});
 });
-app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
-app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
+app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');await assertGlobalExportAccess({query},req.actor);const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
+app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');await assertGlobalExportAccess({query},req.actor);res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
 // ---- VIP Design Library (administrator only) --------------------------------
 // Uploads are raw image bodies, matching how /api/deploy/archive already accepts
 // a ZIP: no multipart parser, and express.json() is bypassed for this path.
