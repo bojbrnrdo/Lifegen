@@ -22,6 +22,26 @@ try {
  async function login(username){const response=await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({username,password:'PR134-local-test-pass-2026'})});assert.equal(response.status,200);return response.json();}
  async function call(a,method,args=[]){const response=await fetch(base+'/api/tracker/'+method,{method:'POST',headers:{'content-type':'application/json',origin:base,'x-lifegen-preview-session':a.preview_session_token,'x-csrf-token':a.csrf_token},body:JSON.stringify({args})});return {status:response.status,data:await response.json()};}
  const n=await login('network-pr134@local.test'),c=await login('cell-pr134@local.test');
+ if(process.env.LIFEGEN_SAFARI_TEST==='1'){
+  const driver='http://127.0.0.1:55435';
+  async function wd(path,method='GET',body){const r=await fetch(driver+path,{method,headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json();if(j.value?.error)throw Error(j.value.message);return j.value;}
+  const session=await wd('/session','POST',{capabilities:{alwaysMatch:{browserName:'safari'}}});
+  const sid='/session/'+session.sessionId;
+  const run=async(script,args=[])=>wd(sid+'/execute/sync','POST',{script,args});
+  try{
+   await wd(sid+'/url','POST',{url:base+'/admin/'});
+   await run("document.querySelector('#u').value='cell-pr134@local.test';document.querySelector('#p').value='PR134-local-test-pass-2026';document.querySelector('#loginForm button[type=submit]').click()");
+   let status='';
+   for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,250));status=await run('return location.hash+"|"+document.body.innerText.slice(0,450)');if(status.includes('My Lifegroups'))break;}
+   assert.match(status,/My Lifegroups/,'Safari sign-in reaches the scoped directory');
+   assert.ok(status.includes('Member A'),'Safari shows assigned People');
+   assert.ok(!status.includes('Member B'),'Safari hides other Network People');
+   await run("document.querySelector('a[href=\"#/people/920003\"]').click()");
+   for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,250));status=await run('return location.hash+"|"+document.body.innerText.slice(0,900)');if(status.includes('Restricted'))break;}
+   assert.match(status,/Restricted/,'Safari profile hides private fields');
+   console.log('PASS: Safari 26.5 linked leader sign-in, scoped directory and protected profile');
+  }finally{await wd(sid,'DELETE');}
+ }
  if(process.env.LIFEGEN_BROWSER_TEST==='1'){
  const {chromium}=await import('playwright-core');
  const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});

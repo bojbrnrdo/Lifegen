@@ -34,3 +34,5 @@ The automated unit/regression suite and build are necessary but not sufficient. 
 ## Safari browser gate
 
 Safari 26.5 was present on the Mac, but safaridriver rejected an automation session because **Allow Remote Automation** was disabled. This is an outstanding browser test, not a Safari compatibility pass. To enable a future local run, open Safari → Settings → Developer, enable **Allow Remote Automation**, then repeat sign-in, My Lifegroups directory, restricted Person profile, profile back navigation, and mobile-width sidebar checks. Do not alter Safari's security settings as part of unattended tests.
+
+Safari verification update: On macOS Safari 26.5, enabling **Allow Remote Automation** permitted a real WebDriver test to authenticate as a linked Cell Leader, display only assigned People, and show protected Person details as Restricted. Run with `LIFEGEN_SAFARI_TEST=1 LIFEGEN_INTEGRATION_DATABASE_URL=<local-loopback-Postgres-URL> node tests/leader-http-local.mjs` while local `safaridriver` is running on port 55435. Safari mobile-width layout and touch-device behavior remain unverified.
