@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {authorizeLinkedLeaderTrackerMethod as authorize} from '../src/leader-tracker-policy.js';
 const actor={id:10,role_id:'staff'};
-const mock=(linked,networks=[],cells=[],networkCells=[])=>({query:async(sql)=>({rows:sql.includes('FROM staff_users')?[{person_id:linked}]:sql.includes('WHERE network_id=ANY')?networkCells:sql.includes('FROM networks')?networks:cells})});
+const mock=(linked,networks=[],cells=[],networkCells=[])=>({query:async(sql)=>({rows:sql.includes('FROM staff_users')?[{person_id:linked}]:sql.includes('FROM people WHERE')?[{archived_at:null,status:'active'}]:sql.includes('WHERE network_id=ANY')?networkCells:sql.includes('FROM networks')?networks:cells})});
 test('admin remains unrestricted',async()=>assert.doesNotReject(authorize({query:()=>{throw Error('unexpected query')}},{id:1,role_id:'admin'},'network',[999])));
 test('unlinked staff retains legacy permission-based routing',async()=>assert.doesNotReject(authorize(mock(null),actor,'people',[{}])));
 test('network leader sees only assigned network and its cells',async()=>{

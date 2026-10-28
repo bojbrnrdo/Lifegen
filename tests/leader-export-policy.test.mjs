@@ -8,6 +8,7 @@ test('unlinked legacy staff retains report permission behavior',async()=>assert.
 test('linked staff global export denied regardless of active leadership',async()=>{
  const db={query:async(sql)=>{
   if(sql.includes('FROM staff_users'))return {rows:[{person_id:17}]};
+  if(sql.includes('FROM people WHERE'))return {rows:[{archived_at:null,status:'active'}]};
   return {rows:[]};
  }};
  await assert.rejects(assertGlobalExportAccess(db,{id:5,role_id:'staff'}),{status:403});

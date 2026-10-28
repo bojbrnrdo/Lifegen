@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveLeaderScope,assertLeaderScope} from '../src/leader-scope.js';
 const actor=(role_id='staff')=>({id:7,role_id});
-const client=(personId,networks=[],cells=[],networkCells=[])=>({query:async(sql)=>({rows:sql.includes('FROM staff_users')?[{person_id:personId}]:sql.includes('WHERE network_id=ANY')?networkCells:sql.includes('FROM networks')?networks:cells})});
+const client=(personId,networks=[],cells=[],networkCells=[])=>({query:async(sql)=>({rows:sql.includes('FROM staff_users')?[{person_id:personId}]:sql.includes('FROM people WHERE')?[{archived_at:null,status:'active'}]:sql.includes('WHERE network_id=ANY')?networkCells:sql.includes('FROM networks')?networks:cells})});
 test('admin scope is privileged and does not query leadership tables',async()=>{
  const scope=await resolveLeaderScope({query:()=>{throw Error('unnecessary lookup')}},actor('admin'));
  assert.equal(scope.kind,'admin');assert.doesNotThrow(()=>assertLeaderScope(scope,{networkId:999}));
@@ -32,4 +32,14 @@ test('network leaders can access cells in their network, never other networks',a
  assert.deepEqual(scope.cellIds,[10,11]);
  assert.doesNotThrow(()=>assertLeaderScope(scope,{cellId:11}));
  assert.throws(()=>assertLeaderScope(scope,{cellId:12}),{status:403});
+});
+
+test('archived, inactive and missing linked People have no leader privileges',async()=>{
+ for(const person of [{archived_at:'2026-10-01',status:'active'},{archived_at:null,status:'inactive'},null]){
+  const db={query:async sql=>({rows:sql.includes('FROM staff_users')?[{person_id:3}]:sql.includes('FROM people WHERE')?(person?[person]:[]):[{id:4}]})};
+  const scope=await resolveLeaderScope(db,actor());
+  assert.equal(scope.linked,true);assert.equal(scope.kind,'unassigned');
+  assert.deepEqual(scope.cellIds,[]);
+  assert.throws(()=>assertLeaderScope(scope,{cellId:4}),{status:403});
+ }
 });
