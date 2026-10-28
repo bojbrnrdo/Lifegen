@@ -95,6 +95,9 @@ try {
  for(let i=0;i<50;i++){if(await evaluate("Boolean(document.getElementById('newFile'))"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','File content must survive page reload');
  console.log('PASS LifeIDE browser: closed files reopen and persist after reload');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('second-smoke.js')).click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+
 
 
  if(realAuth){
@@ -105,6 +108,8 @@ try {
  await evaluate("document.getElementById('repositoryMode').click()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('modeLabel').textContent==='REPOSITORY'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','Switching to repository must preserve browser-local files');
+
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='browser-repository.js';document.getElementById('dialogForm').requestSubmit()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
