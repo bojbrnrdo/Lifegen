@@ -50,3 +50,8 @@ test('repository save captures path and content before awaiting and preserves ne
  assert.match(client,/if\(current===path&&\$\('editor'\)\.value===content\)/);
  assert.match(client,/finally\{saveBusy=false;\}/);
 });
+
+test('repository navigation blocks file and workspace switches while a save is in flight',()=>{
+ assert.match(client,/async function openRepoFile\(rel\)\{\s*if\(saveBusy\)/);
+ assert.match(client,/async function repositoryConnect\(\)\{\s*if\(saveBusy\)/);
+});

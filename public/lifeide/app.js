@@ -81,6 +81,7 @@ async function createRepoEntry(type,name){
  $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
+ if(saveBusy){$('status').textContent='Wait for the current save to finish before changing files.';return;}
  if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
  selectedGit.clear();$('commit').disabled=true;
@@ -91,6 +92,7 @@ async function openRepoFile(rel){
  $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
 }
 async function repositoryConnect(){
+ if(saveBusy){$('status').textContent='Wait for the current save to finish before switching workspaces.';return;}
  if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;repoFiles.clear();repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
