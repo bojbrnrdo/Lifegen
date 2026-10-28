@@ -54,7 +54,7 @@ const ensureEnabled=async(req,res,next)=>{try{
  if(await verified())return next();
  return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side integration token.'});
  }catch(e){next(e);}};
-export const writesAllowed=(env=process.env)=>env.VERCEL_ENV!=='production'&&env.NODE_ENV!=='production'&&env.LIFEGEN_DEV_WRITES_ENABLED==='true'&&env.VERCEL_ENV==='preview';
+export const writesAllowed=(env=process.env)=>env.VERCEL_ENV!=='production'&&env.NODE_ENV!=='production'&&env.LIFEGEN_DEV_WRITES_ENABLED==='true'&&env.LIFEGEN_DEV_DATABASE_ISOLATED==='true'&&env.VERCEL_ENV==='preview';
 const checkWrite=(req,res,next)=>{try{
  if(!writesAllowed())return res.status(403).json({error:'Developer Git writes are disabled on this environment. Enable them only in an isolated development deployment.'});
  checkOrigin(req);checkCsrf(req);next();
@@ -80,15 +80,17 @@ export function registerDevWorkspace(app){
   const connected=configured?await verified():false;
   const isPreview=process.env.VERCEL_ENV==='preview'&&process.env.NODE_ENV!=='production';
   const explicitWrites=process.env.LIFEGEN_DEV_WRITES_ENABLED==='true';
+  const isolatedDbAcknowledged=process.env.LIFEGEN_DEV_DATABASE_ISOLATED==='true';
   res.set('Cache-Control','no-store').json({
    checks:[
     {id:'preview',label:'Isolated Vercel preview environment',ready:isPreview},
     {id:'token',label:'Server-side GitHub token configured',ready:configured},
     {id:'repository',label:'GitHub develop branch accessible',ready:connected},
-    {id:'writes',label:'Developer writes explicitly enabled',ready:explicitWrites&&isPreview}
+    {id:'database',label:'Isolated preview database acknowledged by administrator',ready:isolatedDbAcknowledged&&isPreview},
+    {id:'writes',label:'Developer writes explicitly enabled',ready:explicitWrites&&isPreview&&isolatedDbAcknowledged}
    ],
    canBrowse:connected,canWrite:connected&&writesAllowed(),
-   note:'Database isolation and GitHub write permissions require separate verification. This check does not modify GitHub or Supabase.'
+   note:'The isolation flag is an administrator acknowledgment, not proof of database isolation. Database isolation and GitHub write permissions require separate verification. This check does not modify GitHub or Supabase.'
   });
  }));
  app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{

@@ -31,7 +31,9 @@ test('Git writes are fail-closed outside explicitly enabled preview deployments'
  assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'production',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
  assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'false'}),false);
  assert.equal(writesAllowed({VERCEL_ENV:'development',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
- assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),true);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true',LIFEGEN_DEV_DATABASE_ISOLATED:'false'}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true',LIFEGEN_DEV_DATABASE_ISOLATED:'true'}),true);
 });
 
 test('Vercel build never executes a database migration',async()=>{
