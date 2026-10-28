@@ -536,7 +536,15 @@ async function drawAllPeople(body) {
    pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
   }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${e.message||'Unable to load People.'}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
  }
- input.addEventListener('input',debounce(()=>{offset=0;load();},250));
+ const debouncedSearch=debounce(()=>{offset=0;load();},250);
+ input.addEventListener('input',()=>{
+  // Invalidate the in-flight request immediately, not after the debounce.
+  // Otherwise an old search can repaint stale People while the user is typing.
+  requestId++;
+  result.innerHTML='<div class="loading">Searching People…</div>';
+  pager.innerHTML='';
+  debouncedSearch();
+ });
  status.addEventListener('change',()=>{offset=0;load();});
  await load();
 }
