@@ -2,6 +2,9 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+const runGit=promisify(execFile);
 import {requireStaff,checkOrigin,checkCsrf} from './auth.js';
 import {httpError} from './domain.js';
 const router=express.Router();
@@ -68,5 +71,15 @@ router.post('/entry',(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next()
   else await fs.writeFile(absolute,'',{flag:'wx'});
  }catch(e){if(e.code==='EEXIST')throw httpError(409,'An entry with this name already exists.');throw e;}
  res.status(201).json({ok:true,path:raw,type});
+});
+router.get('/git/status',async(req,res)=>{
+ const {stdout}=await runGit('git',['status','--porcelain=v1','--untracked-files=normal'],{cwd:base,maxBuffer:200000,timeout:5000});
+ res.json({entries:stdout.split('\n').filter(Boolean).map(line=>({status:line.slice(0,2),path:line.slice(3)})).filter(item=>{try{target(item.path);return true;}catch{return false;}})});
+});
+router.get('/git/diff',async(req,res)=>{
+ const raw=req.query.path;
+ await safePath(raw);
+ const {stdout}=await runGit('git',['diff','--no-ext-diff','--',raw],{cwd:base,maxBuffer:512000,timeout:5000});
+ res.json({path:raw,diff:stdout});
 });
 export default router;

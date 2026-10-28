@@ -98,6 +98,25 @@ async function repositoryConnect(){
  }catch(e){$('status').textContent=e.message;}
 }
 $('repositoryMode').addEventListener('click',repositoryConnect);
+$('gitChanges').addEventListener('click',async()=>{
+ if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
+ try{
+  const result=await repoApi('/git/status');
+  const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
+  const view=$('tabs');view.replaceChildren();
+  if(!entries.length){$('status').textContent='Git working tree is clean';return;}
+  for(const entry of entries){
+   const b=document.createElement('button');b.className='tab';b.type='button';b.textContent=entry.status+' '+entry.path;
+   b.onclick=async()=>{try{
+    const response=await repoApi('/git/diff?path='+encodeURIComponent(entry.path));
+    $('editor').value=response.diff||'No unstaged diff for this file (it may be staged or untracked).';
+    $('editor').disabled=true;$('fileTitle').textContent='Diff: '+entry.path;current=null;updateLines();
+   }catch(e){$('status').textContent=e.message;}};
+   view.append(b);
+  }
+  $('status').textContent=entries.length+' changed file(s) in Git';
+ }catch(e){$('status').textContent=e.message;}
+});
 $('editor').addEventListener('input',()=>{if(repoMode)$('status').textContent='Unsaved repository changes';});
 document.addEventListener('keydown',async e=>{
  if(!repoMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
