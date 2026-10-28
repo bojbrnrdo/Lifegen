@@ -60,3 +60,9 @@ test('linked leader removal requires own Cell and valid member ID',async()=>{
  await assert.rejects(authorize(c,actor,'leaveLifegroup',[23,100]),{status:403});
  await assert.rejects(authorize(c,actor,'leaveLifegroup',[22,{}]),{status:403});
 });
+test('linked leader assignment rejects other Cells and malformed people IDs',async()=>{
+ const c=mock(2,[{id:4}],[],[{id:22}]);
+ await assert.doesNotReject(authorize(c,actor,'assignLifegroup',[22,100,{}]));
+ await assert.rejects(authorize(c,actor,'assignLifegroup',[23,100,{}]),{status:403});
+ await assert.rejects(authorize(c,actor,'assignLifegroup',[22,null,{}]),{status:403});
+});

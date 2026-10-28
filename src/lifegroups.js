@@ -576,6 +576,15 @@ function retryableVipCellConflict(message) {
 
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
+    let leaderScope=null;
+    if(actor?.role_id!=='admin'){
+      const linked=await client.query('SELECT person_id FROM staff_users WHERE id=$1 AND is_active=true',[actor.id]);
+      if(linked.rows[0]?.person_id){
+        leaderScope=await resolveLeaderScope(client,actor);
+        assertLeaderScope(leaderScope,{cellId:groupId});
+        if(extra.auto_assign || (extra.role && extra.role!=='member')) throw httpError(403,'Leadership changes require administrator review.');
+      }
+    }
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
     if (!group) throw httpError(404, 'Lifegroup not found.');
     if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Lifegroup is inactive. Activate it before assigning members.') : httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.'));
@@ -634,6 +643,7 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const current = (await client.query(`SELECT m.id,m.lifegroup_id,m.joined_at::text AS joined_at,m.role,m.tier,g.name AS group_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
       WHERE m.person_id=$1 AND m.left_at IS NULL FOR UPDATE OF m`, [personId])).rows[0];
+    if(leaderScope && current && !leaderScope.cellIds.includes(Number(current.lifegroup_id))) throw httpError(403,'Cannot move a member from another leader Cell.');
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
