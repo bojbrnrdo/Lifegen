@@ -21,3 +21,13 @@ test('People contact links use escaped HTML templates rather than raw HTML strin
   assert.doesNotMatch(line, /=> raw`/);
  }
 });
+
+test('archived People profiles do not offer editing or status modification controls', () => {
+ assert.match(source, /can\('people:write'\) && !archived \? html`<div class="page-actions">/);
+});
+
+test('restricted People profiles hide self-reported age and privacy consent timestamp', () => {
+ const ageLine = source.split('\n').find(x => x.includes("row('Age', p.age"));
+ assert.match(ageLine, /, true\)/);
+ assert.match(source, /locked \? html`<span class="locked">/);
+});
