@@ -34,7 +34,8 @@ export const state = {
   deployHelper: false,
   serverToday: null,
 };
-export const can = (perm) => Boolean(state.user?.permissions?.includes(perm)) && !(state.user?.person_id && state.user.role_id!=='admin' && ['people:write','people:delete','lifegroups:manage'].includes(perm));
+export const isLinkedLeader = () => Boolean(state.user?.person_id && state.user.role_id!=='admin');
+export const can = (perm) => Boolean(state.user?.permissions?.includes(perm)) && !(isLinkedLeader() && ['people:write','people:delete','lifegroups:manage','attendance:view','attendance:write','reports:view','registrations:manage','calendar:manage','settings:manage','dashboard:view'].includes(perm));
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -101,6 +102,9 @@ async function route(options = {}) {
   const match = routes.map((r) => ({ r, m: hashPath.match(r.path) })).find((x) => x.m);
   if (!match) { location.hash = '#/dashboard'; return; }
   const { r, m } = match;
+  if(isLinkedLeader() && !['lifegroups','people'].includes(r.nav) && hashPath!=='/privacy'){
+    location.replace('#/lifegroups');return;
+  }
   if (r.perm && !can(r.perm)) {
     main.innerHTML = html`<div class="card"><div class="empty"><div class="empty__icon">${icon('lock', 26)}</div><h3>Restricted</h3><p>Your role (${ROLE_LABELS[state.user.role_id]}) does not have access to this page.</p><a class="btn mt-2" href="#/dashboard">Back to dashboard</a></div></div>`;
     return;
@@ -145,18 +149,18 @@ function renderShell() {
   app.innerHTML = `
     <header class="topbar">
       <button class="icon-btn" id="menuToggle" aria-label="Open menu">${icon('menu', 22).value}</button>
-      <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
+      <a class="brand brand--compact" href="${isLinkedLeader()?'#/lifegroups':'#/dashboard'}"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
       <span class="topbar__spacer"></span>
       <a class="btn btn--sm portal-home-link" href="/">Website</a>
     </header>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-      <a class="brand" href="#/dashboard">
+      <a class="brand" href="${isLinkedLeader()?'#/lifegroups':'#/dashboard'}">
         <span class="brand__mark">${brandMark}</span>
         <span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span>
       </a>
       <nav class="nav" id="nav">
-        ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
+        ${isLinkedLeader()?'':navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${(can('lifegroups:view')||can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
           <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
             ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
@@ -168,10 +172,10 @@ function renderShell() {
           </div>
         </div>`:''}
         ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
-        ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
+        ${isLinkedLeader()?'':navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
-        ${navLink('#/settings', 'settings', 'Settings', 'settings')}
+        ${isLinkedLeader()?'':navLink('#/settings', 'settings', 'Settings', 'settings')}
         ${u.role_id==='admin' ? `<div class="nav__people"><button type="button" class="nav__parent" id="devMenuToggle" aria-expanded="false" aria-controls="devMenu">${icon('code',19).value}<span>Dev</span><span class="nav__chevron" aria-hidden="true">▾</span></button><div class="nav__children" id="devMenu" hidden>${navLink('#/dev/ide','dev-ide','LifeIDE',null,true)}${navLink('#/dev/git','dev-git','Git',null,true)}${navLink('#/dev/packaging','dev-packaging','Packaging',null,true)}</div></div>` : ''}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
