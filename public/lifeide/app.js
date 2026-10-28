@@ -107,6 +107,7 @@ async function repositoryConnect(){
 $('repositoryMode').addEventListener('click',repositoryConnect);
 $('gitChanges').addEventListener('click',async()=>{
  if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
+ if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before reviewing Git changes.';return;}
  try{
   if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
   repoDirty=false;current=null;repoFiles.clear();emptyEditor();

@@ -64,3 +64,7 @@ test('repository refresh and entry creation refuse pending saves',()=>{
 test('Git commit waits for an active repository save',()=>{
  assert.match(client,/if\(saveBusy\)\{\$\('status'\)\.textContent='Wait for the current save to finish before committing\.'/);
 });
+
+test('Git review cannot replace the editor during an active save or commit',()=>{
+ assert.match(client,/if\(saveBusy\|\|commitBusy\)\{\$\('status'\)\.textContent='Finish the pending save or commit before reviewing Git changes\.'/);
+});
