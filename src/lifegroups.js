@@ -602,9 +602,9 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
+    if (person.status === 'inactive')
+      throw httpError(409, 'Reactivate this person before assigning them to a Cell.');
     if (extra.auto_assign) {
-      if (person.status === 'inactive')
-        throw httpError(409, 'Inactive People records cannot be automatically assigned.');
       const personLeadership = (await client.query(`SELECT id FROM networks
         WHERE leader_person_id=$1 AND is_active
         UNION ALL SELECT id FROM lifegroups
