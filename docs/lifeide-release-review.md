@@ -22,8 +22,8 @@ Branch: `feature/lifeide-workspace` (review against `origin/main`).
 - Separately verified an isolated database-backed administrator API session through file creation, save, Git review and commit in a disposable Git repository.
 
 ## Before merge
-- Perform an interactive browser check with a **real** database-backed administrator login/cookie, against an isolated local LifeGen database and disposable Git repository.
-- Confirm UI behavior on mobile and a desktop browser, including save conflicts, unsaved-change prompts and Git confirmation.
+- **Completed:** Chrome browser flow with a real database-backed demo administrator, local PostgreSQL, and disposable Git repository (file create, save, Git review, commit).
+- **Automated:** Desktop Chrome and 320px/390px mobile viewport checks; stale-save conflicts, unsaved-change cancellation, and Git confirmation. Manual cross-browser usability review remains recommended.
 - Review the complete feature diff and verify the destination branch is current.
 - Merge only following explicit approval. Do not enable local repository editing in production; the feature intentionally disables these APIs there.
 

@@ -19,6 +19,11 @@ await (await import('node:fs/promises')).writeFile(path.join(workspace,'README.m
 git('add','README.md');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
 const realAuth=process.env.LIFEIDE_BROWSER_REAL_AUTH==='true';
 if(realAuth&&(!process.env.LIFEIDE_TEST_USERNAME||!process.env.LIFEIDE_TEST_PASSWORD||!process.env.DATABASE_URL))throw Error('Real-auth browser test requires disposable DATABASE_URL and LIFEIDE_TEST_USERNAME/PASSWORD');
+if(realAuth){
+ const db=new URL(process.env.DATABASE_URL);
+ if(!['127.0.0.1','localhost','::1'].includes(db.hostname)||process.env.LOCAL_DEMO!=='true')
+  throw Error('Real-auth browser test requires LOCAL_DEMO=true and a loopback-only database');
+}
 const app=express();app.use(express.json());app.use(cookieParser());
 if(realAuth){
  app.post('/api/auth/login',async(req,res)=>{try{const result=await login(req.body);setStaffCookie(req,res,result.token);res.json({user:result.user,csrf_token:result.csrf_token});}catch(e){res.status(e.status||500).json({message:e.message});}});
@@ -83,7 +88,7 @@ try {
  await evaluate("window.prompt=()=> 'Verify browser commit';window.confirm=()=>true;document.getElementById('commit').click()");
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
- console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit (isolated mock admin)');
+ console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
  await (await import('node:fs/promises')).writeFile(path.join(workspace,'browser-repository.js'),'const externalChange = true;');
  await evaluate("document.getElementById('editor').value='const staleBrowserEdit = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
