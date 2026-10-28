@@ -100,6 +100,14 @@ try {
 
 
 
+ await evaluate("window.confirm=()=>false;[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-smoke.js')).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).filter(f=>f.name==='browser-smoke.js').length"),1,'Cancelled delete must preserve file');
+ await evaluate("window.confirm=()=>true;[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-smoke.js')).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).filter(f=>f.name==='browser-smoke.js').length"),0,'Confirmed delete must remove selected file');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','Other files must be preserved');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+ console.log('PASS LifeIDE browser: cancelled and targeted file deletion');
+
  if(realAuth){
   const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
   const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:location.origin},body:JSON.stringify("+credentials+")});return r.status})()");
