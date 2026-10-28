@@ -302,8 +302,9 @@ export async function renderLifegroups({main, query}) {
  // hierarchy/overview endpoints used by the administrator map.
  const leader=await api.leaderScope();
  if(leader.kind==='network_leader'||leader.kind==='cell_leader'||(leader.kind==='unassigned'&&leader.linked)){
-  const requestedPage=Number(query.page);
-  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?Math.min(requestedPage,100000):1;
+  const pageInput=String(query?.page??'1');
+  const requestedPage=/^[1-9][0-9]{0,5}$/.test(pageInput)?Number(pageInput):1;
+  const page=Math.min(requestedPage,100000);
   const perPage=100;
   const listing=leader.kind==='unassigned'?{rows:[],total:0,has_more:false}:await api.people({status:'all',paged:1,limit:perPage,offset:(page-1)*perPage});
   // Membership changes can invalidate a bookmarked page. Return to the final valid page.

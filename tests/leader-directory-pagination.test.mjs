@@ -15,3 +15,8 @@ test('invalidated pages redirect to final valid page after membership changes',(
  assert.match(ui,/const lastPage=Math\.max\(1,Math\.ceil\(listing\.total\/perPage\)\)/);
  assert.match(ui,/if\(page>lastPage\)\{location\.replace\('#\/lifegroups\?page='\+lastPage\);return;\}/);
 });
+test('leader directory accepts only canonical positive integer pages',()=>{
+ assert.match(ui,/const pageInput=String\(query\?\.page\?\?'1'\)/);
+ assert.match(ui,/\^\[1-9\]\[0-9\]\{0,5\}\$/);
+ assert.match(ui,/const page=Math\.min\(requestedPage,100000\)/);
+});
