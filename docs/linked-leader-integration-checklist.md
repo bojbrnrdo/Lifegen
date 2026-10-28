@@ -27,12 +27,16 @@
 - [ ] Sign-in, browser back/forward, direct URLs and mobile navigation stay inside scoped views.
 - [ ] Test desktop and mobile layouts; verify no personal information appears in console logs.
 
-## Execution status
+## Execution status (local only)
 
-The automated unit/regression suite and build are necessary but not sufficient. Real authenticated integration testing is **not executed** by this checklist. Run it only after local PostgreSQL and disposable accounts are available. Keep PR #134 in draft until all checks pass.
+- [x] Isolated loopback PostgreSQL migration applied and replayed successfully (`node tests/leader-migration-local.mjs`).
+- [x] Authenticated local API checks: cross-Network visibility, in-scope membership mutations, blocked leadership mutations, protected Person fields, and inactive account revocation (`node tests/leader-http-local.mjs`).
+- [x] Chrome desktop 1440px and mobile-width 390px: linked Cell Leader sign-in, scoped directory, Person profile privacy and back navigation. Mobile sidebar open/dismiss and overflow checks (`LIFEGEN_BROWSER_TEST=1`).
+- [x] Safari 26.5 desktop: authenticated Cell Leader sign-in, scoped directory and restricted Person profile (`LIFEGEN_SAFARI_TEST=1`, with safaridriver on loopback port 55435).
+- [x] Safari 26.5 at mobile-width 390px: no page-level overflow and sidebar opens/closes.
+- [x] Automated suite (333 tests at 3625d93) and production build.
+- [ ] Complete the remaining individual checklist items not explicitly covered above, including administrator and unlinked Staff browser regression, 101+ members, malformed inputs and all auxiliary routes.
+- [ ] Physical iPhone/Android touch-device verification; desktop Safari resized to 390px is not iOS Safari.
+- [ ] Deployment approval and production migration/rollback planning.
 
-## Safari browser gate
-
-Safari 26.5 was present on the Mac, but safaridriver rejected an automation session because **Allow Remote Automation** was disabled. This is an outstanding browser test, not a Safari compatibility pass. To enable a future local run, open Safari → Settings → Developer, enable **Allow Remote Automation**, then repeat sign-in, My Lifegroups directory, restricted Person profile, profile back navigation, and mobile-width sidebar checks. Do not alter Safari's security settings as part of unattended tests.
-
-Safari verification update: On macOS Safari 26.5, enabling **Allow Remote Automation** permitted a real WebDriver test to authenticate as a linked Cell Leader, display only assigned People, and show protected Person details as Restricted. Run with `LIFEGEN_SAFARI_TEST=1 LIFEGEN_INTEGRATION_DATABASE_URL=<local-loopback-Postgres-URL> node tests/leader-http-local.mjs` while local `safaridriver` is running on port 55435. Safari mobile-width layout and touch-device behavior remain unverified.
+**Runbook (isolated local database only):** Set `LIFEGEN_INTEGRATION_DATABASE_URL` to a loopback PostgreSQL URL. Run `node tests/leader-migration-local.mjs`, `node tests/leader-http-local.mjs`, and the same HTTP test with `LIFEGEN_BROWSER_TEST=1` (Chrome/optional playwright-core) or `LIFEGEN_SAFARI_TEST=1` (Safari and local safaridriver). Run `npm test` and `npm run build`. Never use production credentials for these tests. Do not merge or deploy until all remaining gates are completed.

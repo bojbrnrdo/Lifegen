@@ -9,6 +9,6 @@ test('integration harness rejects remote connection and direct database targets'
  assert.match(script,/localhost.*127\.0\.0\.1/);
 });
 test('leader release gate explicitly requires isolated sign-in and scope checks',()=>{
- for(const item of ['isolated','Network Leader','Cell Leader','Direct API','mobile','not executed'])
+ for(const item of ['isolated','Network Leader','Cell Leader','Direct API','mobile','physical iPhone/Android touch-device verification'])
   assert.ok(plan.toLowerCase().includes(item.toLowerCase()),item);
 });
