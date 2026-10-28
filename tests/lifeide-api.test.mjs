@@ -7,6 +7,22 @@ import express from 'express';
 import {execFileSync} from 'node:child_process';
 import {createLifeIdeRouter} from '../src/lifeide.js';
 
+test('repository editing gate rejects requests when opt-in is disabled',async()=>{
+ const previous=process.env.LIFEIDE_LOCAL_EDIT;
+ delete process.env.LIFEIDE_LOCAL_EDIT;
+ const app=express();
+ app.use('/api/lifeide',createLifeIdeRouter({authenticate:(req,res,next)=>next(),checkRole:(req,res,next)=>next()}));
+ const listener=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise(resolve=>listener.once('listening',resolve));
+  const response=await fetch('http://127.0.0.1:'+listener.address().port+'/api/lifeide/tree');
+  assert.equal(response.status,404);
+ }finally{
+  await new Promise(resolve=>listener.close(resolve));
+  if(previous===undefined)delete process.env.LIFEIDE_LOCAL_EDIT;else process.env.LIFEIDE_LOCAL_EDIT=previous;
+ }
+});
+
 test('isolated HTTP API: access, creation, save, conflict and Git review',async()=>{
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'lifegen-ide-http-'));
  const app=express();app.use(express.json());
