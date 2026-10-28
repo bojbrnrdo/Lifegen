@@ -49,6 +49,12 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   await fs.writeFile(path.join(workspace,'src/other.js'),'unrelated');
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'x'}})).status,400);
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Change test file'},token:false})).status,403);
+  execFileSync('git',['checkout','-q','-b','release/test'],{cwd:workspace});
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked on release branch'}})).status,409);
+  execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
+  execFileSync('git',['add','src/other.js'],{cwd:workspace});
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked with staged files'}})).status,409);
+  execFileSync('git',['reset','-q','--','src/other.js'],{cwd:workspace});
   const committed=await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Update test file'}});
   assert.equal(committed.status,200,JSON.stringify(committed.data));
   assert.ok(committed.data.commit);
