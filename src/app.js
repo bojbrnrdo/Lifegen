@@ -296,6 +296,7 @@ app.get('/',(req,res)=>{
  return page(res,'lifegen');
 });
 app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
+app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'lifeide'));
 // Fullscreen VIP announcement projector. Deliberately public and read-only: it
 // exposes only the VIP full name and inviter that are already projected in the
 // room, and pulls them live from /api/public/vip-announcement. No contact
