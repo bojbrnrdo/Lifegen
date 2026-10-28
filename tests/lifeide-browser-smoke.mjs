@@ -74,6 +74,20 @@ try {
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1);
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
+ await evaluate("document.getElementById('newFile').click()");
+ await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='second-smoke.js'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'second-smoke.js');
+ await evaluate("document.getElementById('editor').value='const second = 2;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ await evaluate("[...document.querySelectorAll('.tab-open')].find(b=>b.textContent==='browser-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const smoke = true;');
+ await evaluate("[...document.querySelectorAll('.tab-open')].find(b=>b.textContent==='second-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+ await evaluate("[...document.querySelectorAll('#tabs .close')].find(b=>b.getAttribute('aria-label')==='Close second-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const smoke = true;');
+ console.log('PASS LifeIDE browser: tab switching and closing preserve saved files');
+
  if(realAuth){
   const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
   const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:location.origin},body:JSON.stringify("+credentials+")});return r.status})()");
