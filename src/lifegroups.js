@@ -2,6 +2,7 @@ import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES,
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
 import {resolveLeaderScope,assertLeaderScope} from './leader-scope.js';
+import {assertNotLeaderMembership} from './leader-member-guard.js';
 
 const SEX_OF = { boys: 'male', girls: 'female' };
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
@@ -773,6 +774,7 @@ async function leaveMember(groupId, personId, leftAt = today(), actor) {
       WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
     if (!current) throw httpError(404, 'No current membership in that Lifegroup.');
     if (leftAt < String(current.joined_at).slice(0,10)) throw httpError(400, 'Left date cannot be before the joined date.');
+    if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
     await client.query('UPDATE lifegroup_memberships SET left_at=$1 WHERE id=$2', [leftAt,current.id]);
     await logAction(client, actor, 'lifegroup_memberships', current.id, 'leave', { person_id: personId, lifegroup_id: groupId, left_at: leftAt });
   });
@@ -1191,6 +1193,7 @@ async function lifegroupMethod(name, args, actor) {
         const count = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
         if (count >= SOLID_TARGET) throw httpError(409, `Closed cell has reached its ${SOLID_TARGET}-member target.`);
       }
+      if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
       await client.query('UPDATE lifegroup_memberships SET tier=$1 WHERE id=$2', [tier,membership.id]);
       await logAction(client,actor,'lifegroup_memberships',membership.id,'tier_change',{person_id:personId,lifegroup_id:groupId,tier});
     });
