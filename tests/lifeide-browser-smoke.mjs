@@ -183,6 +183,7 @@ try {
  assert.equal(mobile.viewport,390);
  assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
  assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
+ assert.equal(await evaluate("[...document.querySelectorAll('.explorer-entry')].every(el=>el.scrollWidth<=el.clientWidth+1)"),true,'Explorer entries must not overflow their own width');
  console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:320,height:700,deviceScaleFactor:2,mobile:true}}));});
  const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:document.getElementById('editor').getBoundingClientRect().width})");
