@@ -1,6 +1,6 @@
 # Proposed pull request: Add LifeIDE workspace and local repository editing
 
-**Source:** `feature/lifeide-workspace`  
+**Source:** `feature/lifeide-workspace`
 **Target:** `main` (confirm current upstream branch and rebase/conflicts immediately before opening)
 
 ## Summary
