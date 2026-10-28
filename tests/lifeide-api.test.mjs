@@ -126,6 +126,9 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   execFileSync('git',['add','src/other.js'],{cwd:workspace});
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked with staged files'}})).status,409);
   execFileSync('git',['reset','-q','--','src/other.js'],{cwd:workspace});
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js','src/test.js'],message:'Duplicate path attempt'}})).status,400);
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/other.js'],message:'Untracked file commit'}})).status,200);
+  await fs.writeFile(path.join(workspace,'src/other.js'),'another change');
   const committed=await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Update test file'}});
   assert.equal(committed.status,200,JSON.stringify(committed.data));
   assert.ok(committed.data.commit);
