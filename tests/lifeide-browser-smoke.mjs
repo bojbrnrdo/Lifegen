@@ -6,6 +6,9 @@ import path from 'node:path';
 import express from 'express';
 import {execFileSync} from 'node:child_process';
 import {createLifeIdeRouter} from '../src/lifeide.js';
+import {login,readStaff,setStaffCookie,requireStaff} from '../src/auth.js';
+import cookieParser from 'cookie-parser';
+import {closePool} from '../src/db.js';
 
 const chromePath=process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const profile=await mkdtemp(path.join(os.tmpdir(),'lifeide-browser-'));
@@ -14,9 +17,17 @@ const git=(...args)=>execFileSync('git',args,{cwd:workspace,encoding:'utf8'}).tr
 git('init','-q');git('config','user.name','LifeIDE Browser Test');git('config','user.email','lifeide@example.invalid');
 await (await import('node:fs/promises')).writeFile(path.join(workspace,'README.md'),'LifeIDE browser repository test');
 git('add','README.md');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
-const app=express();app.use(express.json());
-app.get('/api/auth/status',(req,res)=>res.json({user:{role_id:'admin'},csrf_token:'test-csrf'}));
-app.use('/api/lifeide',createLifeIdeRouter({workspace,access:(req,res,next)=>next(),authenticate:(req,res,next)=>{req.actor={role_id:'admin',csrf_token:'test-csrf'};next();},origin:(req)=>{},csrf:(req)=>{if(req.get('x-csrf-token')!=='test-csrf')throw Error('Missing test CSRF');}}));
+const realAuth=process.env.LIFEIDE_BROWSER_REAL_AUTH==='true';
+if(realAuth&&(!process.env.LIFEIDE_TEST_USERNAME||!process.env.LIFEIDE_TEST_PASSWORD||!process.env.DATABASE_URL))throw Error('Real-auth browser test requires disposable DATABASE_URL and LIFEIDE_TEST_USERNAME/PASSWORD');
+const app=express();app.use(express.json());app.use(cookieParser());
+if(realAuth){
+ app.post('/api/auth/login',async(req,res)=>{try{const result=await login(req.body);setStaffCookie(req,res,result.token);res.json({user:result.user,csrf_token:result.csrf_token});}catch(e){res.status(e.status||500).json({message:e.message});}});
+ app.get('/api/auth/status',async(req,res)=>{const actor=await readStaff(req);res.json({user:actor,csrf_token:actor?.csrf_token});});
+ app.use('/api/lifeide',createLifeIdeRouter({workspace,authenticate:requireStaff}));
+}else{
+ app.get('/api/auth/status',(req,res)=>res.json({user:{role_id:'admin'},csrf_token:'test-csrf'}));
+ app.use('/api/lifeide',createLifeIdeRouter({workspace,access:(req,res,next)=>next(),authenticate:(req,res,next)=>{req.actor={role_id:'admin',csrf_token:'test-csrf'};next();},origin:(req)=>{},csrf:(req)=>{if(req.get('x-csrf-token')!=='test-csrf')throw Error('Missing test CSRF');}}));
+}
 app.use('/lifeide',express.static(new URL('../public/lifeide/',import.meta.url).pathname));
 app.use((err,req,res,next)=>res.status(err.status||500).json({message:err.message}));
 const server=app.listen(0,'127.0.0.1');
@@ -49,6 +60,11 @@ try {
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1);
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
+ if(realAuth){
+  const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
+  const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify("+credentials+")});return r.status})()");
+  assert.equal(loginStatus,200,'Real database-backed admin login should succeed');
+ }
  await evaluate("document.getElementById('repositoryMode').click()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('modeLabel').textContent==='REPOSITORY'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
@@ -99,5 +115,5 @@ try {
 
 
 }finally{
- ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});
+ ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});if(realAuth)await closePool();
 }
