@@ -334,7 +334,10 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const groupResult=await handleLifegroupMethod(name,args,req.actor);
  const custom=groupResult===undefined?await customMethod(req,name,args):groupResult;
  let result=custom===undefined?await runDomain(name,args,req.actor,write):custom;
- if(!req.actor.permissions.includes('people:view_private') || (req.actor.role_id!=='admin' && req.actor.person_id))result=redactForViewer(result);
+ if(!req.actor.permissions.includes('people:view_private') || (req.actor.role_id!=='admin' && req.actor.person_id)){
+  result=redactForViewer(result);
+  if(name==='person' && result && typeof result==='object')result.private_hidden=true;
+ }
  res.json(result??{});
 });
 app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');await assertGlobalExportAccess({query},req.actor);const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});

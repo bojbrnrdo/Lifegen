@@ -39,7 +39,7 @@ try {
  assert.equal(scopedPerson.status,200);
  assert.equal(scopedPerson.data.contact_number,undefined);
  assert.equal(scopedPerson.data.email,undefined);
- assert.equal(scopedPerson.data.private_hidden,undefined);
+ assert.equal(scopedPerson.data.private_hidden,true);
  assert.equal((await call(c,'reportSummary')).status,403);
  assert.equal((await call(c,'setTier',[920002,920003,'solid'])).status,403);
  assert.equal((await call(c,'leaveLifegroup',[920002,920003])).status,403);
