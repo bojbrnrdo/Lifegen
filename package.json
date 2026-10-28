@@ -23,6 +23,7 @@
     "test:community-integration": "node tests/community-board-integration.mjs",
     "assets:version": "node scripts/version-assets.mjs",
     "video:add": "node scripts/add-video.mjs",
+    "test:lifeide-browser": "node tests/lifeide-browser-smoke.mjs",
     "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css"
   },
   "dependencies": {

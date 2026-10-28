@@ -20,6 +20,7 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
+import lifeideRouter from './lifeide.js';
 import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
@@ -45,6 +46,7 @@ app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
+app.use('/api/lifeide',lifeideRouter);
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 // Read-only environment metadata. Never expose environment variables or secret values.
 app.get('/api/admin/developer-info', requireStaff, (req,res)=>{
@@ -392,6 +394,7 @@ app.get('/',(req,res)=>{
  return page(res,'lifegen');
 });
 app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
+app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'lifeide'));
 // Fullscreen VIP announcement projector. Deliberately public and read-only: it
 // exposes only the VIP full name and inviter that are already projected in the
 // room, and pulls them live from /api/public/vip-announcement. No contact
