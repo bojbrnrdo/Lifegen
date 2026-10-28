@@ -7,10 +7,10 @@ test('repository routes are disabled except on opted-in local development',()=>{
  assert.match(server,/LIFEIDE_LOCAL_EDIT==='true'/);
  assert.match(server,/NODE_ENV!=='production'/);
  assert.match(server,/!process\.env\.VERCEL/);
- assert.match(server,/router\.use\(guard,requireStaff,admin\)/);
+ assert.match(server,/router\.use\(access,authenticate,checkRole\)/);
 });
 test('writes require origin, csrf, and optimistic file version checks',()=>{
- assert.match(server,/checkOrigin\(req\);checkCsrf\(req\)/);
+ assert.match(server,/origin\(req\);csrf\(req\)/);
  assert.match(server,/hash!==version/);
  assert.match(server,/status\(409\)|httpError\(409/);
 });
