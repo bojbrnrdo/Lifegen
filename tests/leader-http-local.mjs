@@ -41,6 +41,13 @@ try {
  await db.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role) VALUES (920002,920002,920001,'leader')");
  assert.equal((await call(n,'setTier',[920001,920002,'solid'])).status,403);
  assert.equal((await call(n,'leaveLifegroup',[920001,920002])).status,403); 
+ await db.query("UPDATE people SET status='inactive' WHERE id=920002");
+ assert.equal((await call(c,'leaderScope')).data.kind,'unassigned');
+ assert.equal((await call(c,'lifegroup',[920001])).status,403);
+ await db.query("UPDATE people SET status='leader',archived_at=now() WHERE id=920002");
+ assert.equal((await call(c,'lifegroup',[920001])).status,403);
+ await db.query("UPDATE staff_users SET is_active=false WHERE id=920002");
+ assert.equal((await call(c,'leaderScope')).status,401);
  console.log('PASS: authenticated HTTP linked leader access checks');
 }finally{
  if(server)await new Promise(resolve=>server.close(resolve));
