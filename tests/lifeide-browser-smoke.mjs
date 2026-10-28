@@ -118,6 +118,14 @@ try {
  assert.equal(await evaluate("document.querySelector('.tab-open').textContent"),'renamed-smoke.ts');
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='renamed-smoke.ts')?.content"),'const second = 2;');
  console.log('PASS LifeIDE browser: rename preserves content and rejects duplicates');
+ await evaluate("[...document.querySelectorAll('.folder-rename')].find(b=>b.getAttribute('aria-label')==='Rename folder examples').click()");
+ await evaluate("document.getElementById('dialogInput').value='samples';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.id==='examples')?.name"),'samples');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.id==='sample')?.content"),'// LifeIDE example\nconsole.log("Hello LIFEGEN!");\n');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('hello.js')).click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'samples/hello.js');
+ console.log('PASS LifeIDE browser: folder rename preserves descendants and updates paths');
+
 
 
  if(realAuth){
