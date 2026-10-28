@@ -309,6 +309,7 @@ export const domain = {
   }),
   updatePerson: async_((id, body) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before editing.');
     Object.assign(p, validatePerson(body || {}, p), { updated_at: nowSql() }); save();
     return decorate(p);
   }),
@@ -331,6 +332,7 @@ export const domain = {
   activity: async_(() => []),
   setPersonStatus: async_((id, status) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before changing status.');
     if (!STATUSES.includes(status)) throw httpError(400, 'Invalid status.');
     p.status = status; p.updated_at = nowSql(); save();
     return decorate(p);
