@@ -31,3 +31,9 @@ test('restricted People profiles hide self-reported age and privacy consent time
  assert.match(ageLine, /, true\)/);
  assert.match(source, /locked \? html`<span class="locked">/);
 });
+
+test('People edit view refuses archived records', () => {
+ const formSource = readFileSync(new URL('../public/admin/js/views/personForm.js', import.meta.url), 'utf8');
+ assert.match(formSource, /if \(person\.archived_at\)/);
+ assert.match(formSource, /Restore the record before editing/);
+});
