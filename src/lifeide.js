@@ -78,8 +78,15 @@ router.post('/entry',(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e)
  res.status(201).json({ok:true,path:raw,type});
 });
 router.get('/git/status',async(req,res)=>{
- const {stdout}=await runGit('git',['status','--porcelain=v1','--untracked-files=normal'],{cwd:base,maxBuffer:200000,timeout:5000});
- res.json({entries:stdout.split('\n').filter(Boolean).map(line=>({status:line.slice(0,2),path:line.slice(3)})).filter(item=>{try{resolveLifeIdePath(item.path,base);return true;}catch{return false;}})});
+ const {stdout}=await runGit('git',['status','--porcelain=v1','-z','--untracked-files=normal'],{cwd:base,maxBuffer:200000,timeout:5000});
+ const fields=stdout.split('\0'),entries=[];
+ for(let i=0;i<fields.length;i++){
+  const line=fields[i];if(!line)continue;
+  const status=line.slice(0,2),file=line.slice(3);
+  if(status.includes('R')||status.includes('C')){i++;continue;}
+  try{resolveLifeIdePath(file,base);entries.push({status,path:file});}catch{}
+ }
+ res.json({entries});
 });
 router.get('/git/diff',async(req,res)=>{
  const raw=req.query.path;

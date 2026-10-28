@@ -53,6 +53,9 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   assert.equal(committed.status,200,JSON.stringify(committed.data));
   assert.ok(committed.data.commit);
   const finalStatus=await call('/git/status');
+  await fs.writeFile(path.join(workspace,'src','name with spaces.js'),'export default 1;');
+  const spaced=await call('/git/status');
+  assert.ok(spaced.data.entries.some(x=>x.path==='src/name with spaces.js'));
   assert.ok(finalStatus.data.entries.some(x=>x.path==='src/other.js'));
   assert.ok(!finalStatus.data.entries.some(x=>x.path==='src/test.js'));
 
