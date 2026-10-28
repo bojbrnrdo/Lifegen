@@ -10,8 +10,8 @@ export async function renderPerson({ main }, id) {
   const archived = Boolean(p.archived_at);
   const present = p.history.filter((h) => h.status === 'present');
 
-  const row = (label, value, fmt = (x) => x) => {
-    if (locked && value === undefined) return html`<div><dt>${label}</dt><dd class="locked">${icon('lock', 13)} Restricted</dd></div>`;
+  const row = (label, value, fmt = (x) => x, sensitive = false) => {
+    if (locked && (sensitive || value === undefined)) return html`<div><dt>${label}</dt><dd class="locked">${icon('lock', 13)} Restricted</dd></div>`;
     return html`<div><dt>${label}</dt>${value ? html`<dd>${fmt(value)}</dd>` : raw('<dd class="none">—</dd>')}</div>`;
   };
 
@@ -43,9 +43,9 @@ export async function renderPerson({ main }, id) {
       <div class="card">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
-          ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`)}
-          ${row('Email', p.email, (v) => html`<a href="mailto:${v}">${v}</a>`)}
-          ${row('Birthday', p.birthdate, (v) => `${fmtDate(v)} · ${age(v)} yrs`)}
+          ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`, true)}
+          ${row('Email', p.email, (v) => html`<a href="mailto:${v}">${v}</a>`, true)}
+          ${row('Birthday', p.birthdate, (v) => `${fmtDate(v)} · ${age(v)} yrs`, true)}
           ${row('Sex', p.sex, (v) => v[0].toUpperCase() + v.slice(1))}
           ${row('School', p.school)}
           ${row('Course / Year', p.course_year)}
@@ -54,7 +54,7 @@ export async function renderPerson({ main }, id) {
           ${row('Ministry', p.ministry)}
           ${row('Registered', p.date_registered, (v) => fmtDate(v) + (p.registration_source === 'qr' ? ' · via QR registration' : ''))}
           <div><dt>Privacy consent</dt><dd>${p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
-          <div style="grid-column:1/-1">${row('Address', p.address)}</div>
+          <div style="grid-column:1/-1">${row('Address', p.address, (v) => v, true)}</div>
           ${!locked && p.notes ? html`<div style="grid-column:1/-1"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
         </dl></div>
       </div>
