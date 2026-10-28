@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { can } from '../app.js';
+import { can, isLinkedLeader } from '../app.js';
 import { html, raw, icon, avatar, statusBadge, classBadge, fmtDate, fmtDateTime, fmtNum, fmtPct, age, toast, confirmDialog, openModal, closeModal, withLoading, STATUS_LABELS, DAY_LABELS, DAY_SHORT, TIME_LABELS, fmtSchedule } from '../ui.js';
 
 /** Person profile: who they are, how often they attend, and their Sunday history. */
@@ -20,7 +20,7 @@ export async function renderPerson({ main }, id) {
       <div class="profile-head">
         ${raw(avatar(p, 'lg'))}
         <div class="info">
-          <a class="small" href="#/people">${icon('back', 14)} People</a>
+          <a class="small" href="${isLinkedLeader()?'#/lifegroups':'#/people'}">${icon('back', 14)} ${isLinkedLeader()?'My Lifegroups':'People'}</a>
           <h1 class="mt-1">${p.first_name} ${p.middle_name ? p.middle_name + ' ' : ''}${p.last_name}</h1>
           <div class="row mt-1"><span class="code mono">${p.person_code}</span>${archived ? raw('<span class="badge badge--nodot">Archived</span>') : ''}${raw(statusBadge(p.status))}${p.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
         </div>
