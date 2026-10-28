@@ -68,3 +68,9 @@ test('Git commit waits for an active repository save',()=>{
 test('Git review cannot replace the editor during an active save or commit',()=>{
  assert.match(client,/if\(saveBusy\|\|commitBusy\)\{\$\('status'\)\.textContent='Finish the pending save or commit before reviewing Git changes\.'/);
 });
+
+test('file tabs use sibling buttons for open and close controls',()=>{
+ assert.match(client,/const tab=document.createElement\('div'\)/);
+ assert.match(client,/const open=document.createElement\('button'\)/);
+ assert.match(client,/tab.append\(open,close\)/);
+});

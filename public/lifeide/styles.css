@@ -37,3 +37,5 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 #repositoryMode{background:#f1f8e9;border:1px solid var(--life-border);color:var(--life-dark);padding:9px 12px;font-weight:650}
 
 .tabs input[type=checkbox]{margin:0 3px 0 12px;accent-color:var(--life-mid);align-self:center}
+
+.tab-open{background:transparent;border:0;border-radius:0;color:inherit;font:inherit;padding:0;min-width:0;text-align:left}.tab-open:hover:not(:disabled){background:transparent}.tab:focus-within{outline-offset:-2px}
