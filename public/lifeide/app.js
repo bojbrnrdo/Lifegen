@@ -39,7 +39,7 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy){$('status').textContent='Wait for the current save to finish before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
@@ -71,6 +71,7 @@ async function treeFolder(){
  await appendFolder('',0);
 }
 async function createRepoEntry(type,name){
+ if(saveBusy)throw Error('Wait for the current save to finish before creating files.');
  if(repoDirty)throw Error('Save or discard your current repository edits before creating another entry.');
  if(!name||name.startsWith('.')||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
  const rel=repoParent?repoParent+'/'+name:name;
