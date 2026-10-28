@@ -16,7 +16,7 @@ function admin(req,res,next){if(req.actor?.role_id!=='admin')return next(httpErr
 function target(raw){
  if(typeof raw!=='string'||raw.length>300||!raw||raw.includes('\\')||raw.includes('\0')||path.isAbsolute(raw))throw httpError(400,'Invalid path.');
  const pieces=raw.split('/');
- if(pieces.some(x=>!x||x==='.'||x==='..'||ignored.has(x)||x.startsWith('.env')))throw httpError(400,'Restricted path.');
+ if(pieces.some(x=>!x||x==='.'||x==='..'||ignored.has(x)||x.startsWith('.')))throw httpError(400,'Restricted path.');
  const resolved=path.resolve(base,...pieces);
  if(!resolved.startsWith(base+path.sep))throw httpError(400,'Invalid path.');
  return resolved;
@@ -39,7 +39,7 @@ router.get('/tree',async(req,res)=>{
  const absolute=dir?await safePath(dir):base;
  if(!(await fs.stat(absolute)).isDirectory())throw httpError(400,'Not a directory.');
  const entries=await fs.readdir(absolute,{withFileTypes:true});
- const items=entries.filter(e=>!ignored.has(e.name)&&!e.name.startsWith('.env')&&!e.isSymbolicLink()).map(e=>({name:e.name,type:e.isDirectory()?'folder':e.isFile()?'file':'other'})).filter(e=>e.type!=='other').sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='folder'?-1:1);
+ const items=entries.filter(e=>!ignored.has(e.name)&&!e.name.startsWith('.')&&!e.isSymbolicLink()).map(e=>({name:e.name,type:e.isDirectory()?'folder':e.isFile()?'file':'other'})).filter(e=>e.type!=='other').sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='folder'?-1:1);
  res.json({path:dir||'',items});
 });
 router.get('/file',async(req,res)=>{

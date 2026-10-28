@@ -71,7 +71,7 @@ async function treeFolder(){
  await appendFolder('',0);
 }
 async function createRepoEntry(type,name){
- if(!name||name==='.'||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
+ if(!name||name.startsWith('.')||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
  const rel=repoParent?repoParent+'/'+name:name;
  await repoApi('/entry',{method:'POST',body:JSON.stringify({path:rel,type})});
  if(type==='folder')repoExpanded.add(rel);
