@@ -86,6 +86,28 @@ router.get('/git/diff',async(req,res)=>{
  const {stdout}=await runGit('git',['diff','--no-ext-diff','--',raw],{cwd:base,maxBuffer:512000,timeout:5000});
  res.json({path:raw,diff:stdout});
 });
+// Git changes are local-only, admin-only, and require the existing CSRF safeguards.
+const gitWrite=(req,res,next)=>{try{origin(req);csrf(req);next();}catch(e){next(e);}};
+router.post('/git/commit',gitWrite,async(req,res)=>{
+ const paths=req.body?.paths,message=req.body?.message;
+ if(!Array.isArray(paths)||paths.length<1||paths.length>30||new Set(paths).size!==paths.length)throw httpError(400,'Select 1–30 distinct files.');
+ if(typeof message!=='string'||message.trim().length<5||message.length>160||/[\r\n\x00-\x1f]/.test(message))throw httpError(400,'Provide a one-line commit message (5–160 characters).');
+ for(const file of paths)await safePath(file);
+ const git=async args=>(await runGit('git',args,{cwd:base,maxBuffer:512000,timeout:10000})).stdout;
+ const branch=(await git(['branch','--show-current'])).trim();
+ if(!branch||branch==='main'||branch==='master')throw httpError(409,'Switch to a feature branch before committing.');
+ const staged=(await git(['diff','--cached','--name-only','-z'])).split('\0').filter(Boolean);
+ if(staged.length)throw httpError(409,'Existing staged files detected. Commit or unstage them outside LifeIDE first.');
+ const changed=(await git(['status','--porcelain=v1','-z','--untracked-files=normal'])).split('\0').filter(Boolean);
+ const allowed=new Set(changed.filter(x=>!x.startsWith('R')&&!x.startsWith('C')).map(x=>x.slice(3)));
+ if(paths.some(x=>!allowed.has(x)))throw httpError(409,'Refresh Git Changes and select modified or untracked files.');
+ await git(['add','--',...paths]);
+ const actual=(await git(['diff','--cached','--name-only','-z'])).split('\0').filter(Boolean);
+ if(actual.length!==paths.length||actual.some(x=>!paths.includes(x)))throw httpError(409,'Unexpected staged changes. Commit was stopped; inspect the Git index.');
+ await git(['commit','-m',message.trim(),'--only','--',...paths]);
+ const hash=(await git(['rev-parse','--short','HEAD'])).trim();
+ res.json({ok:true,branch,commit:hash});
+});
 return router;
 }
 export default createLifeIdeRouter();

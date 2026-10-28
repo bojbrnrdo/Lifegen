@@ -42,7 +42,7 @@ function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.f
 $('refresh').addEventListener('click',()=>{if(repoMode){repositoryConnect().then(repositoryConnect);return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,repoFiles=new Map(),csrf='';
+let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set();
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
@@ -88,7 +88,7 @@ async function openRepoFile(rel){
  $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
 }
 async function repositoryConnect(){
- if(repoMode){repoMode=false;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
+ if(repoMode){repoMode=false;selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
@@ -103,9 +103,10 @@ $('gitChanges').addEventListener('click',async()=>{
  try{
   const result=await repoApi('/git/status');
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
-  const view=$('tabs');view.replaceChildren();
+  const view=$('tabs');view.replaceChildren();selectedGit.clear();$('commit').disabled=true;
   if(!entries.length){$('status').textContent='Git working tree is clean';return;}
   for(const entry of entries){
+   const check=document.createElement('input');check.type='checkbox';check.title='Include '+entry.path+' in commit';check.setAttribute('aria-label','Stage '+entry.path);check.onchange=()=>{check.checked?selectedGit.add(entry.path):selectedGit.delete(entry.path);$('commit').disabled=selectedGit.size===0;};view.append(check);
    const b=document.createElement('button');b.className='tab';b.type='button';b.textContent=entry.status+' '+entry.path;
    b.onclick=async()=>{try{
     const response=await repoApi('/git/diff?path='+encodeURIComponent(entry.path));
@@ -114,8 +115,20 @@ $('gitChanges').addEventListener('click',async()=>{
    }catch(e){$('status').textContent=e.message;}};
    view.append(b);
   }
-  $('status').textContent=entries.length+' changed file(s) in Git';
+  $('status').textContent=entries.length+' changed file(s) in Git. Select files to commit.';
  }catch(e){$('status').textContent=e.message;}
+});
+$('commit').addEventListener('click',async()=>{
+ if(!repoMode||!selectedGit.size)return;
+ const paths=[...selectedGit];
+ const message=prompt('Commit message for '+paths.length+' selected file(s):');
+ if(message===null)return;
+ if(!confirm('Commit ONLY these files locally?\n'+paths.join('\n')))return;
+ try{
+  const result=await repoApi('/git/commit',{method:'POST',body:JSON.stringify({paths,message})});
+  selectedGit.clear();$('commit').disabled=true;$('status').textContent='Created local commit '+result.commit+' on '+result.branch;
+  $('gitChanges').click();
+ }catch(e){$('status').textContent='Commit rejected: '+e.message;}
 });
 $('editor').addEventListener('input',()=>{if(repoMode)$('status').textContent='Unsaved repository changes';});
 document.addEventListener('keydown',async e=>{

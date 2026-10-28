@@ -38,6 +38,7 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   execFileSync('git',['init','-q'],{cwd:workspace});
   execFileSync('git',['-c','user.name=Test','-c','user.email=test@example.invalid','add','src/test.js'],{cwd:workspace});
   execFileSync('git',['-c','user.name=Test','-c','user.email=test@example.invalid','commit','-qm','baseline'],{cwd:workspace});
+  execFileSync('git',['checkout','-qb','feature/test-lifeide'],{cwd:workspace});
   await fs.writeFile(path.join(workspace,'src/test.js'),'changed');
   const status=await call('/git/status');
   assert.equal(status.status,200);
@@ -45,5 +46,15 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   const diff=await call('/git/diff?path=src%2Ftest.js');
   assert.equal(diff.status,200);
   assert.match(diff.data.diff,/changed/);
+  await fs.writeFile(path.join(workspace,'src/other.js'),'unrelated');
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'x'}})).status,400);
+  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Change test file'},token:false})).status,403);
+  const committed=await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Update test file'}});
+  assert.equal(committed.status,200,JSON.stringify(committed.data));
+  assert.ok(committed.data.commit);
+  const finalStatus=await call('/git/status');
+  assert.ok(finalStatus.data.entries.some(x=>x.path==='src/other.js'));
+  assert.ok(!finalStatus.data.entries.some(x=>x.path==='src/test.js'));
+
  }finally{await new Promise(resolve=>listener.close(resolve));await fs.rm(workspace,{recursive:true,force:true});}
 });
