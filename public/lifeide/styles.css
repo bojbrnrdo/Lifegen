@@ -48,3 +48,8 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
  .editor-toolbar{overflow-x:auto}
  .editor-tools{flex-shrink:0}
 }
+
+/* Folder rename remains a separate, keyboard-accessible action. */
+.folder-rename{display:inline-flex;align-items:center;justify-content:center;min-width:28px;min-height:28px;margin-left:4px;vertical-align:middle;cursor:pointer}
+
+.explorer-entry{display:flex;align-items:center;min-width:0;width:100%}.explorer-entry>.node{flex:1;min-width:0;width:auto}.explorer-entry>.folder-rename{flex:none;margin:0 2px;min-width:28px;min-height:32px;padding:3px 5px}@media(max-width:680px){.explorer-entry>.folder-rename{min-width:30px;min-height:36px}}

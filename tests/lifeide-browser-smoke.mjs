@@ -118,6 +118,14 @@ try {
  assert.equal(await evaluate("document.querySelector('.tab-open').textContent"),'renamed-smoke.ts');
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='renamed-smoke.ts')?.content"),'const second = 2;');
  console.log('PASS LifeIDE browser: rename preserves content and rejects duplicates');
+ await evaluate("[...document.querySelectorAll('.folder-rename')].find(b=>b.getAttribute('aria-label')==='Rename folder examples').click()");
+ await evaluate("document.getElementById('dialogInput').value='samples';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.id==='examples')?.name"),'samples');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.id==='sample')?.content"),'// LifeIDE example\nconsole.log("Hello LIFEGEN!");\n');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('hello.js')).click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'samples/hello.js');
+ console.log('PASS LifeIDE browser: folder rename preserves descendants and updates paths');
+
 
 
  if(realAuth){
@@ -175,6 +183,7 @@ try {
  assert.equal(mobile.viewport,390);
  assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
  assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
+ assert.equal(await evaluate("[...document.querySelectorAll('.explorer-entry')].every(el=>el.scrollWidth<=el.clientWidth+1)"),true,'Explorer entries must not overflow their own width');
  console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:320,height:700,deviceScaleFactor:2,mobile:true}}));});
  const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:document.getElementById('editor').getBoundingClientRect().width})");
