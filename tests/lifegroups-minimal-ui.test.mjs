@@ -15,22 +15,24 @@ const slice=(begin,end)=>{
 };
 
 test('sidebar and page are named Lifegroups, without changing its route',()=>{
- assert.match(nav, /navLink\('#\/lifegroups', 'lifegroups', 'Lifegroups', 'group'\)/);
+ assert.match(nav, /navLink\('#\/lifegroups',\s*'lifegroups',\s*'Lifegroups',\s*'group'(?:,\s*true)?\)/);
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page, /<h1>Lifegroups<\/h1>/);
  assert.match(page, /id="treeCanvas"/);
- assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters,\{onRemove:can\('lifegroups:manage'\)\?/);
+ assert.match(page, /loadReactLifegroups\(\)/);
+ assert.match(page, /mount\(canvas,\{/);
+ assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters,\{onRemove:removeContext\}\)/);
  assert.match(page, /createAddNewModal/);
  assert.match(page, /id="treeRefresh"/);
  assert.match(page, /id="treeStatus"/);
 });
 
-test('diagram remains a three-level interactive SVG network with accessible focus and fit tools',()=>{
+test('diagram remains a three-level interactive SVG network with always-fit tools',()=>{
  assert.match(tree, /<svg class="lfg__svg"/);
- for(const name of ['focus','fit','collapse','plus','minus'])assert.match(tree,new RegExp('data-action="'+name+'"'));
+ for(const name of ['fit','collapse','plus','minus'])assert.match(tree,new RegExp('data-action="'+name+'"'));
  assert.match(tree, /treeControlIcon/);
  assert.match(tree, /aria-label="Interactive Lifegroup network/);
- assert.match(tree, /target\.querySelector\('\[data-action="focus"\]'\)\.onclick/);
+ assert.doesNotMatch(tree, /data-action="focus"/);
  assert.match(tree, /target\.querySelector\('\[data-action="fit"\]'\)\.onclick/);
  assert.match(tree, /profileAvatar\(n\)/);
  assert.match(tree, /target\.querySelector\('\.lfg__svg'\)/);

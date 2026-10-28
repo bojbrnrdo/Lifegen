@@ -1537,3 +1537,34 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .cboard tr.cboard--hidden .cboard__post p{color:var(--ink-400);font-style:italic}
 .cboard .row-actions{white-space:nowrap}
 @media(max-width:720px){.cboard__post{min-width:200px}}
+
+/* People navigation group: accessible single-parent sidebar structure. */
+.nav .nav__parent {
+  display:flex; align-items:center; gap:12px; width:100%; border:0;
+  padding:9px 12px; margin:0 0 2px; border-radius:9px;
+  font:inherit; font-weight:500; font-size:.92rem; text-align:left;
+  color:inherit; background:transparent; cursor:pointer;
+}
+.nav .nav__parent:hover, .nav .nav__parent:focus-visible { background:rgba(120,140,130,.13); }
+.nav .nav__parent:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.nav .nav__parent > svg { width:19px; height:19px; flex:none; }
+.nav .nav__parent .nav__chevron { margin-left:auto; transition:transform .15s; }
+.nav .nav__parent[aria-expanded="true"] .nav__chevron { transform:rotate(180deg); }
+.nav .nav__children[hidden] { display:none; }
+.nav .nav__children a.sub { display:flex; }
+
+
+/* People directory: readable cards rather than a sideways-scrolling table on phones. */
+@media (max-width: 620px) {
+  .people-directory { overflow-x: visible; }
+  .people-directory .table { display: block; width: 100%; }
+  .people-directory thead { display: none; }
+  .people-directory tbody { display: grid; gap: 10px; }
+  .people-directory tr { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px 12px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .people-directory td { display: block; width: auto; min-width: 0; padding: 0; border: 0; }
+  .people-directory td[data-label="Person"] { grid-column: 1 / -1; }
+  .people-directory td[data-label="Status"] { grid-column: 1; }
+  .people-directory td[data-label="Profile"] { grid-column: 2; text-align: right; }
+  .people-directory .person-cell { min-width: 0; }
+  .people-directory .person-cell > div { min-width: 0; }
+}

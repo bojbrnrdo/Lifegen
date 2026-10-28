@@ -1,0 +1,54 @@
+name: LIFEGEN validation
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [feature/people-workflows-reorganization, feature/people-workflows-release-validation]
+permissions:
+  contents: read
+jobs:
+  build-and-unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Check changed JavaScript syntax
+        run: |
+          node --check src/dev-workspace.js
+          node --check public/admin/js/views/devWorkspace.js
+          node --check public/admin/js/app.js
+          node --check src/app.js
+          node --check src/public-api.js
+          node --check src/lifegroups.js
+          node --check src/lifegroup-match.js
+          node --check public/admin/js/views/unifiedAddNew.js
+          node --check public/admin/js/views/registrations.js
+          node --check public/admin/js/views/lifegroups.js
+          node --check public/admin/js/views/attendance.js
+          node --check public/admin/js/api.js
+      - name: Run deterministic matching tests
+        run: node --test tests/lifegroup-match.test.mjs
+      - name: Run deployment input security regression tests
+        run: node --test tests/deployment-request-security.test.mjs
+
+      - name: Run developer workspace security tests
+        run: node --test tests/dev-workspace-security.test.mjs
+
+      - name: Run People pagination regression tests
+        run: node --test tests/people-pagination.test.mjs
+
+      - name: Run dual leadership policy tests
+        run: node --test tests/dual-leadership-policy.test.mjs
+
+      - name: Verify VIP parent Network eligibility
+        run: node --test tests/vip-parent-network-eligibility.test.mjs
+
+      - name: Test VIP retryable Cell conflicts
+        run: node --test tests/vip-retryable-conflicts.test.mjs

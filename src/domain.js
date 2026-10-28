@@ -6,7 +6,11 @@ const load = () => { const c=domainContext.getStore(); if(!c) throw new Error('D
 const save = () => { domainContext.getStore().dirty = true; };
 const nextId = (table) => ++load().seq[table];
 const ADMIN = new Proxy({}, {get:(_,k)=>domainContext.getStore()?.actor?.[k] ?? ({id:null,display_name:'Imported / system'})[k]});
-const STATUSES = ['first_timer','new_believer','regular','visitor_3','visitor_2','visitor_1','no_returns','member','leader','volunteer','inactive'];
+// Keep write validation aligned with database/001_init.sql. The visitor outcome
+// labels that appeared in an older import format remain readable for legacy
+// display/filter compatibility, but cannot be written as current statuses.
+const STATUSES = ['first_timer','new_believer','regular','member','leader','volunteer','inactive'];
+const LEGACY_DISPLAY_STATUSES = ['visitor_3','visitor_2','visitor_1','no_returns'];
 // Promote linked VIP profiles after five distinct Sunday attendances (more than four visits).
 export const VIP_MEMBER_ATTENDANCE_THRESHOLD = 5;
 const VIP_PROMOTION_STATUSES = new Set(['first_timer','new_believer','regular']);
@@ -146,7 +150,7 @@ function listPeople(params = {}) {
   else {
     rows = rows.filter((p) => !p.archived_at);
     if (status === 'active') rows = rows.filter((p) => p.status !== 'inactive');
-    else if (status !== 'all' && STATUSES.includes(status)) rows = rows.filter((p) => p.status === status);
+    else if (status !== 'all' && (STATUSES.includes(status) || LEGACY_DISPLAY_STATUSES.includes(status))) rows = rows.filter((p) => p.status === status);
   }
   if (params.first_timer === '1' || params.first_timer === 1) rows = rows.filter((p) => p.status === 'first_timer');
   const sort = params.sort;
@@ -305,6 +309,7 @@ export const domain = {
   }),
   updatePerson: async_((id, body) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before editing.');
     Object.assign(p, validatePerson(body || {}, p), { updated_at: nowSql() }); save();
     return decorate(p);
   }),
@@ -322,20 +327,33 @@ export const domain = {
     }
     return { matches: matches.slice(0, 10) };
   }),
-  archivePerson: async_((id) => { const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.'); if (!p.archived_at) { p.archived_at = nowSql(); p.updated_at = nowSql(); save(); } return decorate(p); }),
+  archivePerson: async_((id) => {
+    const p = findPerson(id);
+    if (!p) throw httpError(404, 'Person not found.');
+    if (!p.archived_at) {
+      const d = load();
+      const leadsNetwork = d.networks.some(n => Number(n.leader_person_id) === p.id && Boolean(n.is_active));
+      const leadsCell = d.lifegroups.some(g => Number(g.leader_person_id) === p.id && Boolean(g.is_active));
+      if (leadsNetwork || leadsCell)
+        throw httpError(409, 'Reassign or deactivate active Network and Cell leadership before archiving this person.');
+      p.archived_at = nowSql();
+      p.updated_at = nowSql();
+      save();
+    }
+    return decorate(p);
+  }),
   restorePerson: async_((id) => { const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.'); if (p.archived_at) { p.archived_at = null; p.updated_at = nowSql(); save(); } return decorate(p); }),
   activity: async_(() => []),
   setPersonStatus: async_((id, status) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
+    if (p.archived_at) throw httpError(409, 'Restore the archived person before changing status.');
     if (!STATUSES.includes(status)) throw httpError(400, 'Invalid status.');
     p.status = status; p.updated_at = nowSql(); save();
     return decorate(p);
   }),
   deletePerson: async_((id) => {
-    const d = load(); const n = Number(id);
-    if (!findPerson(n)) throw httpError(404, 'Person not found.');
-    d.people = d.people.filter((p) => p.id !== n); d.records = d.records.filter((r) => r.person_id !== n); d.audit = d.audit.filter((a) => a.person_id !== n);
-    save(); return {};
+    if (!findPerson(Number(id))) throw httpError(404, 'Person not found.');
+    throw httpError(409, 'Permanent deletion is disabled to protect Lifegroup and attendance history. Archive the person instead.');
   }),
 
   // services / attendance

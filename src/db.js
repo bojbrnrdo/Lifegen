@@ -141,6 +141,9 @@ export async function logAction(client,actor,entity,id,action,details={}) {
  await client.query('INSERT INTO audit_log(actor_id,actor_name,entity,entity_id,action,details) VALUES($1,$2,$3,$4,$5,$6)',[actor?.id||null,actor?.display_name||'Migration / system',entity,id==null?null:String(id),action,JSON.stringify(details)]);
 }
 export async function flushState(client,before,after,actor) {
+ const retainedPeople=new Set(after.people.map(p=>p.id));
+ if(before.people.some(p=>!retainedPeople.has(p.id)))
+  throw httpError(409,'People records cannot be permanently deleted by state synchronization. Archive them instead.');
  for(const t of DELETE_ORDER) {
   const ids=new Set(after[t].map(r=>r.id)); const removed=before[t].filter(r=>!ids.has(r.id));
   if(removed.length) {

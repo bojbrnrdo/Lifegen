@@ -3,7 +3,7 @@
  */
 import { api, startLiveUpdates } from './api.js';
 import { brandMark } from './brand.js';
-import { esc, html, raw, icon, toast, avatar, fullName, statusBadge, debounce, errorState, ROLE_LABELS, closeModal } from './ui.js';
+import { esc, html, icon, toast, errorState, ROLE_LABELS, closeModal } from './ui.js';
 import { renderLogin, renderSetup } from './views/auth.js';
 import { renderPrivacy, renderPublicPrivacy } from './views/privacy.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -16,6 +16,8 @@ import { renderPerson } from './views/person.js';
 import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
+import {renderDeveloper} from './views/developer.js';
+import {renderDevIDE,renderDevGit,renderDevPackaging} from './views/devWorkspace.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
@@ -39,8 +41,8 @@ export const can = (perm) => Boolean(state.user?.permissions?.includes(perm));
 // ---------------------------------------------------------------------------
 const routes = [
   { path: /^\/dashboard$/, view: renderDashboard, nav: 'dashboard', perm: 'dashboard:view' },
-  { path: /^\/people$/, view: renderPeople, nav: 'people', perm: 'people:view' },
-  { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'people', perm: 'people:write' },
+  { path: /^\/people$/, view: () => { location.replace('#/lifegroups?tab=people'); }, nav: 'lifegroups', perm: 'people:view' },
+  { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'lifegroups', perm: 'people:write' },
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
   { path: /^\/attendance$/, view: renderAttendance, nav: 'attendance', perm: 'attendance:view' },
@@ -57,10 +59,15 @@ const routes = [
   { path: /^\/community$/, view: renderCommunity, nav: 'community', perm: 'settings:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
   { path: /^\/deploy$/, view: renderDeployment, nav: 'deploy', perm: 'settings:manage' },
+  { path: /^\/developer$/, view: renderDeveloper, nav: 'developer', perm: 'settings:manage' },
+  { path: /^\/dev\/ide$/, view: renderDevIDE, nav: 'dev-ide', perm: 'settings:manage' },
+  { path: /^\/dev\/git$/, view: renderDevGit, nav: 'dev-git', perm: 'settings:manage' },
+  { path: /^\/dev\/packaging$/, view: renderDevPackaging, nav: 'dev-packaging', perm: 'settings:manage' },
   { path: /^\/privacy$/, view: renderPrivacy, nav: 'settings' },
 ];
 
 let currentCleanup = null;
+let activeRouteHash = '';
 
 async function route(options = {}) {
   const live = options?.live === true; const oldY = window.scrollY;
@@ -75,6 +82,12 @@ async function route(options = {}) {
     return;
   }
 
+  if (!live && activeRouteHash && location.hash !== activeRouteHash &&
+      typeof window.__lifegenCanLeaveEditor === 'function' && !window.__lifegenCanLeaveEditor()) {
+    location.replace(activeRouteHash);
+    return;
+  }
+  activeRouteHash = location.hash;
   if (typeof currentCleanup === 'function') { try { currentCleanup(); } catch {} }
   currentCleanup = null;
   main.__liveReload = null;
@@ -104,6 +117,13 @@ async function route(options = {}) {
 
 function setActiveNav(key) {
   document.querySelectorAll('#nav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === key));
+  const devMenu=document.getElementById('devMenu');
+  if(devMenu && key.startsWith('dev-')){devMenu.hidden=false;document.getElementById('devMenuToggle')?.setAttribute('aria-expanded','true');}
+  const peopleMenu = document.getElementById('peopleMenu');
+  if (peopleMenu && ['lifegroups', 'attendance', 'registrations'].includes(key)) {
+    peopleMenu.hidden = false;
+    document.getElementById('peopleMenuToggle')?.setAttribute('aria-expanded', 'true');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,23 +152,23 @@ function renderShell() {
         <span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span>
       </a>
       <nav class="nav" id="nav">
-        <div style="padding:4px 12px 10px">
-          <div class="gsearch" id="gsearch">
-            ${icon('search', 17).value}
-            <input type="search" id="gsearchInput" placeholder="Find a person…" autocomplete="off" aria-label="Search people" />
-            <div class="gsearch__results" id="gsearchResults" hidden></div>
-          </div>
-        </div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        ${navLink('#/people', 'people', 'People', 'people')}
-        ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check') : ''}
-        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group') : ''}
+        ${(can('lifegroups:view')||can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
+          <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
+            ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="nav__children" id="peopleMenu" hidden>
+             ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
+            ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check', true) : ''}
+            ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
+          </div>
+        </div>`:''}
         ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
-        ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registrations', 'qr') + '' : ''}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
+        ${u.role_id==='admin' ? `<div class="nav__people"><button type="button" class="nav__parent" id="devMenuToggle" aria-expanded="false" aria-controls="devMenu">${icon('code',19).value}<span>Dev</span><span class="nav__chevron" aria-hidden="true">▾</span></button><div class="nav__children" id="devMenu" hidden>${navLink('#/dev/ide','dev-ide','LifeIDE',null,true)}${navLink('#/dev/git','dev-git','Git',null,true)}${navLink('#/dev/packaging','dev-packaging','Packaging',null,true)}</div></div>` : ''}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
         <a class="nav__foot" href="#/privacy">Privacy &amp; Terms</a>
@@ -174,7 +194,15 @@ function renderShell() {
     location.hash = '#/dashboard';
     boot();
   };
-  setupGlobalSearch();
+  const peopleToggle = document.getElementById('peopleMenuToggle');
+  peopleToggle?.addEventListener('click', () => {
+    const menu = document.getElementById('peopleMenu');
+    const expanded = peopleToggle.getAttribute('aria-expanded') === 'true';
+    menu.hidden = expanded;
+    peopleToggle.setAttribute('aria-expanded', String(!expanded));
+  });
+  const devToggle=document.getElementById('devMenuToggle');
+  devToggle?.addEventListener('click',()=>{const m=document.getElementById('devMenu');const open=devToggle.getAttribute('aria-expanded')==='true';m.hidden=open;devToggle.setAttribute('aria-expanded',String(!open));});
   refreshPendingBadge();
   const bar=document.createElement('div');bar.className='connection-bar';bar.id='connectionBar';bar.innerHTML=`<span class="connection-dot"></span><span id="connectionText">Connecting live updates…</span>${state.preview?'<span class="preview-tag">Demo · temporary local PostgreSQL, not Supabase</span>':state.hostedPreview?'<span class="preview-tag">Connected preview · Supabase PostgreSQL</span>':''}<a href="#" id="applyLiveUpdate" hidden>New updates — refresh view</a>`;
   document.getElementById('main').before(bar); startLiveUpdates();
@@ -183,61 +211,6 @@ function renderShell() {
 function closeSidebar() {
   document.getElementById('sidebar')?.classList.remove('open');
   document.getElementById('backdrop')?.classList.remove('show');
-}
-
-// ---------------------------------------------------------------------------
-// Global search (sidebar)
-// ---------------------------------------------------------------------------
-function setupGlobalSearch() {
-  const input = document.getElementById('gsearchInput');
-  const results = document.getElementById('gsearchResults');
-  if (!input || !can('people:view')) return;
-  let focusIdx = -1;
-
-  const hide = () => { results.hidden = true; focusIdx = -1; };
-  const run = debounce(async () => {
-    const q = input.value.trim();
-    if (q.length < 2) return hide();
-    try {
-      const { people } = await api.search(q);
-      results.hidden = false;
-      if (!people.length) {
-        results.innerHTML = `<div class="gsearch__empty">No one found for “${esc(q)}”.${can('people:write') ? ` <a href="#/people/new?name=${encodeURIComponent(q)}">Register new person</a>` : ''}</div>`;
-        return;
-      }
-      results.innerHTML = people.map((p) => html`
-        <a class="gsearch__item" href="#/people/${p.id}">
-          ${raw(avatar(p, 'sm'))}
-          <span style="min-width:0;flex:1"><span class="name truncate" style="display:block">${fullName(p)}</span>
-          <span class="small muted">${p.person_code}${p.contact_number ? ' · ' + p.contact_number : ''}</span></span>
-          ${raw(statusBadge(p.status))}
-        </a>`).join('');
-    } catch { hide(); }
-  }, 220);
-
-  input.addEventListener('input', run);
-  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) run(); });
-  input.addEventListener('keydown', (e) => {
-    const items = [...results.querySelectorAll('.gsearch__item')];
-    if (e.key === 'ArrowDown') { focusIdx = Math.min(items.length - 1, focusIdx + 1); }
-    else if (e.key === 'ArrowUp') { focusIdx = Math.max(0, focusIdx - 1); }
-    else if (e.key === 'Enter') { if (items[focusIdx]) { items[focusIdx].click(); input.value = ''; hide(); } return; }
-    else if (e.key === 'Escape') { hide(); input.blur(); return; }
-    else return;
-    e.preventDefault();
-    items.forEach((el, i) => el.classList.toggle('focus', i === focusIdx));
-  });
-  results.addEventListener('click', () => { input.value = ''; hide(); });
-  document.addEventListener('click', (e) => { if (!e.target.closest('#gsearch')) hide(); });
-  // Keyboard shortcut "/" focuses search
-  document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-      e.preventDefault();
-      document.getElementById('sidebar').classList.add('open');
-      document.getElementById('backdrop').classList.add('show');
-      input.focus();
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------

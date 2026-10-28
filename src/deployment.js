@@ -81,6 +81,14 @@ export function inspectArchive(buffer){
  return {hash:sha(buffer),version:String(pkg.version||''),files,files_count:files.length,size:buffer.length,flattened:Boolean(prefix)};
 }
 
+export const safeKey=(value,label)=>{if(typeof value!=='string'||!idOk(value))throw httpError(400,'Invalid '+label+'.');return value;};
+export const safeArchiveHash=value=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw httpError(400,'Invalid archive checksum.');return value;};
+export const safeScope=value=>{if(value==='')return '';return safeKey(value,'account scope');};
+export const safePublishBody=value=>{
+  if(!value||typeof value!=='object'||Array.isArray(value))throw httpError(400,'Invalid deployment request.');
+  return {project_id:safeKey(value.project_id,'project ID'),archive_hash:safeArchiveHash(value.archive_hash),confirm:value.confirm===true};
+ };
+
 export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipPaths=['/home/user/LIFEGEN-Vercel-Deploy.zip','/home/user/LIFEGEN-One-Site.zip','/home/user/lifegen-neon/private-data/approved-releases/LIFEGEN-Vercel-Deploy-2.1.2.zip'],config=()=>process.env,now=()=>Date.now()}={}){
  const sessions=new Map();
  const scrub=(text,session)=>{
@@ -101,7 +109,7 @@ export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipP
  }
  const scopeFor=(s,scope)=>{const id=String(scope||'');if(!s.scopes.some(v=>v.id===id))throw httpError(400,'Choose an account/team returned by Vercel.');return id;};
  async function projects(s,scope){
-  scope=scopeFor(s,scope);const all=[];let until;
+  scope=scopeFor(s,safeScope(scope));const all=[];let until;
   for(let page=0;page<10;page++){
    const data=await api(s,'/v10/projects',{scope,params:{limit:100,...(until?{until}:{})}}),items=Array.isArray(data)?data:data.projects||[];
    for(const p of items)if(idOk(p.id)&&typeof p.name==='string')all.push({id:p.id,name:p.name,framework:p.framework||null,account_id:idOk(p.accountId)?p.accountId:null});
@@ -131,6 +139,7 @@ export function createDeploymentService({fetchImpl=globalThis.fetch,approvedZipP
   async publish(key,{project_id,archive_hash,confirm}){
    const s=get(key);if(s.busy)throw httpError(409,'Publishing is already in progress.');
    if(s.job&&!['READY','ERROR','CANCELED'].includes(s.job.state))throw httpError(409,'A deployment is still building. Check its status before starting another.');
+   project_id=safeKey(project_id,'project ID');archive_hash=safeArchiveHash(archive_hash);
    const project=s.projects.find(p=>p.id===project_id);
    if(!project||!idOk(project_id))throw httpError(400,'Choose a project from your connected account/team.');
    if(confirm!==true)throw httpError(400,'Confirm that you want to publish to the selected existing project.');
@@ -170,10 +179,10 @@ export function createDeploymentRouter({service=createDeploymentService(),enable
  router.use((req,res,next)=>{if(req.method!=='GET'){checkOrigin(req);checkCsrf(req);}next();});
  const key=req=>req.actor.session_hash;
  router.get('/status',(req,res)=>res.json(service.status(key(req))));
- router.post('/connect',async(req,res)=>res.json(await service.connect(key(req),req.body.token)));
- router.post('/projects',async(req,res)=>res.json(await service.projects(key(req),req.body.scope)));
+ router.post('/connect',async(req,res)=>res.json(await service.connect(key(req),req.body?.token)));
+ router.post('/projects',async(req,res)=>res.json(await service.projects(key(req),safeScope(req.body?.scope))));
  router.post('/archive',raw({type:'application/zip',limit:MAX_ZIP}),async(req,res)=>res.json(await service.upload(key(req),req.body)));
- router.post('/publish',async(req,res)=>res.json(await service.publish(key(req),req.body)));
+ router.post('/publish',async(req,res)=>res.json(await service.publish(key(req),safePublishBody(req.body))));
  router.get('/job',async(req,res)=>res.json(await service.poll(key(req))));
  router.post('/disconnect',(req,res)=>res.json(service.disconnect(key(req))));
  return router;

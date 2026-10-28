@@ -10,6 +10,33 @@
 // fallback for a runtime without full ICU data.
 
 export const TIME_ZONE = 'Asia/Manila';
+
+// Demo-only clock for the local preview database. LOCAL_DEMO_CLOCK holds a
+// Manila-time instant (e.g. 2026-10-18T13:05:00+08:00) and the clock then runs
+// forward in real time from that point, so the Sunday service, the countdown and
+// the VIP board behave as they would on the day. It is honoured only when
+// LOCAL_DEMO=true and the process is not production or Vercel, so a real
+// deployment always reads the true clock.
+let demoClockAnchor = null;
+let demoClockBootReal = 0;
+export function demoClockEnabled() {
+  return process.env.LOCAL_DEMO === 'true'
+    && process.env.NODE_ENV !== 'production'
+    && !process.env.VERCEL
+    && Boolean(process.env.LOCAL_DEMO_CLOCK);
+}
+// The clock every server-side cycle decision reads. Real time unless the
+// demo clock is enabled.
+export function currentInstant() {
+  if (!demoClockEnabled()) return new Date();
+  if (demoClockAnchor === null) {
+    const at = new Date(process.env.LOCAL_DEMO_CLOCK);
+    if (Number.isNaN(at.getTime())) return new Date();
+    demoClockAnchor = at.getTime();
+    demoClockBootReal = Date.now();
+  }
+  return new Date(demoClockAnchor + (Date.now() - demoClockBootReal));
+}
 const OFFSET_MINUTES = 480; // Asia/Manila is permanently UTC+08:00.
 
 export const CYCLE_STATE = Object.freeze({
@@ -31,7 +58,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   start_minute: 0,
   end_hour: 15,
   end_minute: 0,
-  announce_minutes: 30,
+  announce_minutes: 120,
 });
 
 let intlFormatter = null;

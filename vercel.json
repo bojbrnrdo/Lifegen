@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build && npm run db:migrate",
+  "buildCommand": "npm run build",
   "functions": {
     "src/app.js": {
       "maxDuration": 60,

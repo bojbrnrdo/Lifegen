@@ -9,20 +9,23 @@ wiped by sandbox resets). The canonical copies of every script live HERE in
 Git. To rebuild after a reset:
 
 ```bash
-mkdir -p /home/user/pglite-db && cp preview-db/{server.mjs,apply-migrations.mjs,seed-demo.mjs,seed-vip-demo.mjs,package.json} /home/user/pglite-db/
+mkdir -p /home/user/pglite-db && cp preview-db/{server.mjs,apply-migrations.mjs,seed-demo.mjs,seed-vip-demo.mjs,seed-sunday-demo.mjs,package.json} /home/user/pglite-db/
 cd /home/user/pglite-db && npm install
 node apply-migrations.mjs      # gateway MUST be stopped
 node seed-demo.mjs             # gateway MUST be stopped
 node server.mjs &              # start gateway on :5433 (use start_process)
 node seed-vip-demo.mjs         # runs over the wire
+node seed-sunday-demo.mjs      # example VIPs on the coming Sunday's board
 ```
 
-Then start the app (from the repo root):
+Then start the app (from the repo root). To see the Sunday service running on the
+preview, `LOCAL_DEMO_CLOCK` sets the clock to that Manila instant, and the clock then runs
+forward in real time. Leave it out to use the real clock:
 
 ```bash
 TZ=Asia/Manila DATABASE_URL=postgres://postgres@127.0.0.1:5433/lifegen \
 DATABASE_DIRECT_URL=postgres://postgres@127.0.0.1:5433/lifegen \
-LOCAL_DEMO=true PORT=3000 npm start
+LOCAL_DEMO=true LOCAL_DEMO_CLOCK=2026-10-18T13:05:00+08:00 PORT=3000 npm start
 ```
 
 Sign in: `demo@lifegen.local` / `LifegenDemo2026!`

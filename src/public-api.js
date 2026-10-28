@@ -1,11 +1,14 @@
 import { Router } from 'express';
+import { verifyServicePass } from './service-qr.js';
 import expressRateLimit from 'express-rate-limit';
 import { query, transaction, withState, stateId, allocateId, logAction, upsertRows } from './db.js';
 import { domain, today, isSunday, fullNameSafe, httpError } from './domain.js';
 import { checkOrigin, rateLimit, randomToken, hashToken, setVipCookie, safeEqual, cookieOptions } from './auth.js';
 import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, weeklySundayShape } from './calendar.js';
+import { currentInstant } from './service-cycle.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
+import { handleLifegroupMethod, effectiveGroupCapacity } from './lifegroups.js';
 // ---------------------------------------------------------------------------
 // Public registration (VIP first-timer + regular attendee)
 // ---------------------------------------------------------------------------
@@ -16,7 +19,11 @@ const PUBLIC_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
 const GENDER_TO_GROUP = { male: 'boys', female: 'girls' };
 const PUBLIC_MINISTRIES = ['Worship Team','Ushering','Media / Tech','Kids Ministry','Dance / Creative','Prayer','Production','Not yet in a ministry'];
 
-const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00Z'));
+export const isIsoDate = (v) => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const date = new Date(`${v}T12:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === v;
+};
 function ageFromBirthdate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const [ty, tm, td] = today().split('-').map(Number);
@@ -83,9 +90,40 @@ export async function currentPrize(client={query}) {
  const old=(await client.query('SELECT value FROM settings WHERE key=\'monthly_prize\'')).rows[0]?.value;
  return typeof old==='string'?old:'No prize set yet';
 }
+// A printed QR identifies the Sunday service only. The attendee must also hold
+// an existing, server-verified VIP session. No public name/person-ID check-in.
+publicRouter.get('/service-checkin',async(req,res)=>{
+ const pass=verifyServicePass(req.query?.t);
+ if(!pass)return res.status(400).json({error:'Invalid service QR.'});
+ const service=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[pass.service_id])).rows[0];
+ if(!service||service.service_date!==pass.service_date||service.service_type!=='lifegen')return res.status(404).json({error:'Service not found.'});
+ const vip=await readVip(req);
+ res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:pass.service_date===today()&&isSunday(today())});
+});
+publicRouter.post('/service-checkin',async(req,res)=>{
+ checkOrigin(req);await rateLimit(req,'checkin',20);
+ const pass=verifyServicePass(req.body?.t);
+ if(!pass)return res.status(400).json({error:'Invalid service QR.'});
+ if(pass.service_date!==today()||!isSunday(today()))return res.status(403).json({error:'This printed QR is valid only on its Sunday service date.'});
+ const vip=await readVip(req);
+ if(!vip)return res.status(401).json({error:'Please recover or register your VIP portal before checking in.'});
+ if(!safeEqual(req.get('x-csrf-token'),vip.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
+ const result=await transaction(async client=>{
+  const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
+  if(!service)throw httpError(404,'Service unavailable.');
+  const previous=(await client.query('SELECT id,status FROM vip_checkins WHERE registration_id=$1 AND date_key=$2 FOR UPDATE',[vip.id,pass.service_date])).rows[0];
+  if(previous){
+   if(previous.status==='invalid')return (await client.query("UPDATE vip_checkins SET status='pending',validated_by=NULL,validated_at=NULL WHERE id=$1 RETURNING id,status",[previous.id])).rows[0];
+   return previous;
+  }
+  const id=await allocateId(client,'vip_checkins');
+  return (await client.query('INSERT INTO vip_checkins(id,registration_id,date_key) VALUES($1,$2,$3) RETURNING id,status',[id,vip.id,pass.service_date])).rows[0];
+ });
+ res.json({status:result.status,message:result.status==='valid'?'Attendance already confirmed.':'Check-in submitted for admin validation.'});
+});
 publicRouter.get('/config',async(req,res)=>{
  const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[['church_name','service_name','church_address','church_contact','privacy_contact']])).rows.map(r=>[r.key,r.value]));
- res.json({...siteUrls(req),settings,today:today(),server_time:new Date().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});
+ res.json({...siteUrls(req),settings,today:today(),server_time:currentInstant().toISOString(),timezone:'Asia/Manila',preview:process.env.LOCAL_DEMO==='true',hosted_preview:process.env.HOSTED_PREVIEW==='true',legacy_restore_enabled:process.env.LEGACY_VIP_RESTORE==='true',database_kind:process.env.LOCAL_DEMO==='true'?'Local PostgreSQL demonstration':'Supabase PostgreSQL'});
 });
 publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),month:today().slice(0,7)}));
 // ---- Sunday service cycle + fullscreen VIP announcement ----------------------
@@ -93,7 +131,7 @@ publicRouter.get('/prize',async(req,res)=>res.json({value:await currentPrize(),m
 // window in settings, so it is identical for the hero countdown, every projector
 // and any later page refresh.
 publicRouter.get('/service-cycle',async(req,res)=>{
- const cycle=await readCycle(new Date());
+ const cycle=await readCycle(currentInstant());
  await persistCycleWindow(cycle).catch(()=>{});
  res.json(cycle);
 });
@@ -123,7 +161,7 @@ publicRouter.get('/vip-announcement/stream',streamFloodLimiter,async(req,res)=>{
 });
 // Names and count only — the hero countdown uses this to stay on one source.
 publicRouter.get('/vip-count',async(req,res)=>{
- const cycle=await readCycle(new Date());
+ const cycle=await readCycle(currentInstant());
  const {total}=await vipsForService(cycle.announce_service_date);
  res.json({service_date:cycle.announce_service_date,service_date_display:cycle.announce_service_date_display,total,state:cycle.state,timezone:cycle.timezone});
 });
@@ -172,18 +210,22 @@ publicRouter.post('/registrations',async(req,res)=>{
  if(name.length<2||name.length>200||!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Enter a valid name, birthday, school/institution and inviter.');
  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
  const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');const key=hashToken(rawKey);
- const existing=await readVip(req);
- if(existing)return res.json({vip:vipShape(existing),already_registered:true});
+ // Public is unlimited: every submit creates a fresh VIP record even if the
+ // browser already holds a VIP cookie. The cookie-session is simply rotated
+ // to the newest registration; the personal attendance dashboard is admin-only
+ // and is not rendered on the public site.
  const result=await withState(async({data,client})=>{
   const duplicate=(await client.query('SELECT * FROM vip_registrations WHERE idempotency_key=$1',[key])).rows[0];
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}
   const parts=name.split(' ');const p=await domain.createPerson({first_name:parts.shift(),last_name:parts.join(' '),full_name:name,age,...(birthdate?{birthdate}:{}),...(gender?{sex:gender}:{}),school,inviter,contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true});
+  const record=data.people.find(row=>Number(row.id)===Number(p.id));
+  if(record)record.extras={...(record.extras||{}),discipleship_classification:'vip'};
   const id=stateId(data,'vip_registrations');const recovery='LG-'+randomToken();
   // Attribute this registration to the Sunday service the fullscreen
   // announcement is showing. Safe to check-then-insert: every write runs inside
   // the pg_advisory_xact_lock taken by withState, and the two partial unique
   // indexes from database/007 are the backstop.
-  const service_date=attributeServiceDate(new Date());
+  const service_date=attributeServiceDate(currentInstant());
   // A re-submit is only a duplicate when it matches the identity the unique index
   // uses — same normalized name AND same inviter. Two different people who share
   // a name but were invited by different people are two real VIPs, and both are
@@ -192,8 +234,19 @@ publicRouter.post('/registrations',async(req,res)=>{
   await client.query('INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key,service_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id,p.id,name,age,school,inviter,contact,hashToken(recovery),key,announcedForService?service_date:null]);
   const session=await startVipSession(client,id);
   await logAction(client,null,'vip_registrations',id,'public_registration',{person_id:p.id,service_date:announcedForService?service_date:null});
-  return {vip:{id,person_id:p.id,name,created_at:new Date().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
+  return {vip:{id,person_id:p.id,name,created_at:currentInstant().toISOString()},recovery_code:recovery,session,service_date:announcedForService?service_date:null,announced:announcedForService};
  },{write:true});
+ // VIP registration is already committed. Cell assignment is a separate, guarded
+ // transaction; failure never loses the new People/VIP records or the recovery code.
+ if(!result.already_registered){
+   try {
+     const assignment=await handleLifegroupMethod('autoAssignLifegroup',[result.vip.person_id],null);
+     result.cell_assignment=assignment.assigned?'assigned':'needs_manual_assignment';
+   } catch(error) {
+     console.error('Automatic VIP Cell placement deferred:',error.message);
+     result.cell_assignment='needs_manual_assignment';
+   }
+ }
  setVipCookie(req,res,result.session.token);delete result.session;res.status(result.already_registered?200:201).json(result);
 });
 publicRouter.post('/vip/restore',async(req,res)=>{
@@ -324,15 +377,26 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
   // ---- the Open cell: tier 'new' in the leader's own Lifegroup ----
   let membership={created:false,tier:null,lifegroup_id:null,lifegroup_name:null};
   if(leader){
+   // Lock the selected Cell before checking its active membership count. This
+   // keeps public registration consistent with staff/VIP assignment when the
+   // last available slot is being claimed at the same time.
+   const group=(await client.query('SELECT id,name,capacity,is_active FROM lifegroups WHERE id=$1 FOR UPDATE',[leader.lifegroup_id])).rows[0];
+   if(!group||!group.is_active)throw httpError(409,'That Lifegroup is no longer available. Please choose again.');
    const current=(await client.query('SELECT m.id,m.tier,g.id AS group_id,g.name AS group_name FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id WHERE m.person_id=$1 AND m.left_at IS NULL',[person.id])).rows[0];
    if(current){
     membership={created:false,tier:current.tier,lifegroup_id:String(current.group_id),lifegroup_name:current.group_name};
     if(!review)review={needed:true,reason:'already_in_a_lifegroup'};
    } else {
-    const membershipId=await allocateId(client,'lifegroup_memberships');
-    await client.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at) VALUES($1,$2,$3,'member','new',$4)",[membershipId,person.id,leader.lifegroup_id,today()]);
-    membership={created:true,tier:'new',lifegroup_id:leader.lifegroup_id,lifegroup_name:leader.lifegroup_name};
-    await logAction(client,null,'lifegroup_memberships',membershipId,'public_registration',{person_id:person.id,lifegroup_id:leader.lifegroup_id,tier:'new'});
+    const activeMembers=Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL',[group.id])).rows[0].n);
+    const capacity=effectiveGroupCapacity(group);
+    if(activeMembers>=capacity){
+     review={needed:true,reason:'lifegroup_full',lifegroup_id:String(group.id),capacity};
+    } else {
+     const membershipId=await allocateId(client,'lifegroup_memberships');
+     await client.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at) VALUES($1,$2,$3,'member','new',$4)",[membershipId,person.id,group.id,today()]);
+     membership={created:true,tier:'new',lifegroup_id:String(group.id),lifegroup_name:group.name};
+     await logAction(client,null,'lifegroup_memberships',membershipId,'public_registration',{person_id:person.id,lifegroup_id:group.id,tier:'new'});
+    }
    }
   }
 

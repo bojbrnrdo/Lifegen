@@ -1,3 +1,4 @@
+import { recommendEligibleCells,validateVipPriorityOrder,DEFAULT_VIP_PRIORITIES,shouldRetryVipCell } from './lifegroup-match.js';
 import { allocateId, logAction, query, transaction } from './db.js';
 import { httpError, today } from './domain.js';
 
@@ -6,6 +7,12 @@ const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 const SOLID_TARGET = 6; // Attendance target, not a membership capacity.
 export const NETWORK_CELL_LEADER_LIMIT = 12;
 export const CELL_MEMBER_LIMIT = 12;
+// A configured capacity may narrow a Cell, but the tracker still enforces the
+// established twelve-member upper bound used by the hierarchy rules.
+export function effectiveGroupCapacity(group) {
+  const configured = group?.capacity == null ? CELL_MEMBER_LIMIT : Number(group.capacity);
+  return Number.isFinite(configured) ? Math.min(Math.max(Math.trunc(configured), 1), CELL_MEMBER_LIMIT) : CELL_MEMBER_LIMIT;
+}
 const clean = (value) => value == null ? null : String(value).trim() || null;
 const asId = (value, label = 'ID') => {
   const id = Number(value);
@@ -139,7 +146,7 @@ function shapeGroup(row) {
     solid_count: Number(row.solid_count || 0),
     open_count: Number(row.member_count || 0) - Number(row.solid_count || 0),
     solid_target: SOLID_TARGET,
-    slots: Math.max(Math.min(row.capacity == null ? CELL_MEMBER_LIMIT : Number(row.capacity),CELL_MEMBER_LIMIT) - Number(row.member_count || 0), 0),
+    slots: Math.max(effectiveGroupCapacity(row) - Number(row.member_count || 0), 0),
     max_members: Boolean(row.leads_network) ? NETWORK_CELL_LEADER_LIMIT : CELL_MEMBER_LIMIT,
     is_active: Boolean(row.is_active),
     is_demo: Boolean(row.is_demo),
@@ -171,11 +178,11 @@ async function listNetworks(filters = {}) {
       coalesce(nullif(concat_ws(' ',lp.first_name,lp.last_name),''),n.leader_name) AS leader_display,
       lp.photo AS leader_photo, lp.extras->>'facebook_url' AS leader_facebook_url, lp.extras->>'instagram_url' AS leader_instagram_url, lp.extras->>'tiktok_url' AS leader_tiktok_url, lp.extras->>'x_url' AS leader_x_url, lp.extras->>'youtube_url' AS leader_youtube_url,
       (SELECT count(*)::int FROM lifegroups g WHERE g.network_id=n.id AND g.is_active) AS group_count,
-      (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
+      (SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL) AS people_count,
-      (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
+      (SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL AND p.sex='male') AS boys,
-      (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
+      (SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL AND p.sex='female') AS girls,
       (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND m.tier='solid') AS closed_cell,
@@ -335,9 +342,18 @@ async function validateLeader(client, personId, gender, kind) {
 
 async function validateGroupReferences(client, data, groupId = null) {
   const leader = await validateLeader(client, data.leader_person_id, data.gender, 'Lifegroup');
+  if (data.is_active && data.leader_person_id) {
+    const leaderNetworks=(await client.query(
+      'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
+      [data.leader_person_id]
+    )).rows;
+    if (leaderNetworks.length && hasOutOfNetworkCellLeadership(leaderNetworks,[data]))
+      throw httpError(409,'A Network Leader may lead only Cells within their own active Network.');
+  }
   if (data.network_id) {
     const network = (await client.query('SELECT id,name,gender,is_active FROM networks WHERE id=$1', [data.network_id])).rows[0];
     if (!network) throw httpError(400, 'Selected network was not found.');
+    if (data.is_active && !network.is_active) throw httpError(409, 'Activate the selected Network before activating a Cell within it.');
     if (network.gender !== data.gender) throw httpError(400, `${network.name} is a ${network.gender} network; choose a ${data.gender} network.`);
   }
   if (groupId) {
@@ -491,6 +507,10 @@ async function createNetworkStructure(body, actor) {
   });
 }
 
+export function canDeactivateNetwork(activeCellCount) {
+  return Number.isSafeInteger(activeCellCount) && activeCellCount === 0;
+}
+
 async function saveNetwork(body, actor, id = null) {
   return transaction(async (client) => {
     const existing = id ? (await client.query('SELECT * FROM networks WHERE id=$1 FOR UPDATE', [id])).rows[0] : null;
@@ -501,7 +521,30 @@ async function saveNetwork(body, actor, id = null) {
       const duplicate = (await client.query(`SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active AND id<>coalesce($2,0) LIMIT 1`, [data.leader_person_id,id])).rows[0];
       if (duplicate && data.is_active) throw httpError(409, `This person already leads ${duplicate.name}. A network leader can lead only one active network.`);
     }
+    if (data.is_active && data.leader_person_id) {
+      const leaderCells=(await client.query(
+        'SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',
+        [data.leader_person_id]
+      )).rows;
+      if (hasOutOfNetworkCellLeadership([{id:id||-1}],leaderCells))
+        throw httpError(409,'Assign the proposed Network Leader only after transferring their active Cells into this Network.');
+    }
     if (id) {
+      if (existing.is_active && !data.is_active) {
+        const activeCellCount=Number((await client.query(
+          'SELECT count(*)::int AS total FROM lifegroups WHERE network_id=$1 AND is_active',
+          [id]
+        )).rows[0].total);
+        if (!canDeactivateNetwork(activeCellCount))
+          throw httpError(409,'Transfer or deactivate all active Cells before deactivating their Network.');
+      }
+      if (existing.leader_person_id && (!data.is_active || Number(existing.leader_person_id)!==Number(data.leader_person_id))) {
+        const secondary=(await client.query(
+          'SELECT id FROM lifegroups WHERE network_id=$1 AND leader_person_id=$2 AND is_active LIMIT 1',
+          [id,existing.leader_person_id]
+        )).rows[0];
+        if (secondary) throw httpError(409,'Reassign the current Network Leader\'s Cell before changing or deactivating Network leadership.');
+      }
       const mismatch = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups WHERE network_id=$1 AND is_active AND gender<>$2`, [id,data.gender])).rows[0].n);
       if (mismatch) throw httpError(409, `Move the ${mismatch} mismatched Lifegroup(s) before changing this network's gender.`);
       await client.query(`UPDATE networks SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,notes=$5,is_active=$6,updated_at=now() WHERE id=$7`,
@@ -517,13 +560,58 @@ async function saveNetwork(body, actor, id = null) {
   });
 }
 
+export function eligibleVipAssignmentCell(group,network,leader) {
+  return Boolean(group?.is_active && !group.is_demo && group.leader_person_id &&
+    network?.is_active && !network.is_demo && network.gender===group.gender &&
+    leader?.id && !leader.archived_at && leader.status!=='inactive');
+}
+
+// Only cell-specific, retryable placement conflicts may advance the VIP matcher.
+function retryableVipCellConflict(message) {
+  const error = httpError(409, message);
+  error.retryableVipCell = true;
+  return error;
+}
+
 async function assignMember(groupId, personId, extra = {}, actor) {
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
     if (!group) throw httpError(404, 'Lifegroup not found.');
-    if (!group.is_active) throw httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.');
+    if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Lifegroup is inactive. Activate it before assigning members.') : httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.'));
+    // Revalidate auto-placement eligibility under the group's row lock.
+    // The recommendation list is advisory and may become stale before assignment.
+    if (extra.auto_assign) {
+      const parentNetwork=(await client.query(
+        'SELECT id,is_active,gender,is_demo FROM networks WHERE id=$1 FOR SHARE',
+        [group.network_id]
+      )).rows[0];
+      if (!group.leader_person_id)
+        throw retryableVipCellConflict('Cell requires an assigned leader before automatic VIP placement.');
+      const activeLeader=(await client.query(
+        'SELECT id,archived_at,status FROM people WHERE id=$1 FOR SHARE',
+        [group.leader_person_id]
+      )).rows[0];
+      if (!eligibleVipAssignmentCell(group,parentNetwork,activeLeader))
+        throw retryableVipCellConflict('Cell, parent Network and Cell Leader must all be eligible for automatic VIP placement.');
+      const leaderNetworks = (await client.query(
+        'SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',
+        [group.leader_person_id]
+      )).rows;
+      if (hasOutOfNetworkCellLeadership(leaderNetworks,[group]) && leaderNetworks.length)
+        throw retryableVipCellConflict('A Network Leader may receive VIPs only in a Cell belonging to their active Network.');
+    }
     const person = (await client.query('SELECT id,first_name,last_name,person_code,sex,status,archived_at FROM people WHERE id=$1 FOR UPDATE', [personId])).rows[0];
     if (!person || person.archived_at) throw httpError(404, 'Active person not found.');
+    if (person.status === 'inactive')
+      throw httpError(409, 'Reactivate this person before assigning them to a Cell.');
+    if (extra.auto_assign) {
+      const personLeadership = (await client.query(`SELECT id FROM networks
+        WHERE leader_person_id=$1 AND is_active
+        UNION ALL SELECT id FROM lifegroups
+        WHERE leader_person_id=$1 AND is_active LIMIT 1`,[personId])).rows[0];
+      if (personLeadership)
+        throw httpError(409, 'Active leaders require manual review before Cell assignment.');
+    }
     const selectedSex = clean(extra.sex);
     let sex = person.sex;
     if (!sex && selectedSex) {
@@ -548,9 +636,22 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const role = roleInput || current?.role || 'member';
     const tier = tierInput || current?.tier || 'new';
     if (current && Number(current.lifegroup_id) === groupId) {
+      if (tier === 'solid' && current.tier !== 'solid') {
+        const solidCount = Number((await client.query(
+          "SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'",[groupId]
+        )).rows[0].n);
+        if (solidCount >= SOLID_TARGET) throw httpError(409, 'Closed cell is already at its six-member target.');
+      }
+      const changed = current.role !== role || current.tier !== tier;
       if (sex !== person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
-      await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
-      return { unchanged: true };
+      if (changed) {
+        await client.query('UPDATE lifegroup_memberships SET role=$1,tier=$2 WHERE id=$3', [role,tier,current.id]);
+        await logAction(client, actor, 'lifegroup_memberships', current.id, 'role_or_tier_change', {
+          person_id: personId, lifegroup_id: groupId,
+          previous_role: current.role, role, previous_tier: current.tier, tier,
+        });
+      }
+      return { unchanged: !changed && sex === person.sex };
     }
     if (current && !asBool(extra.confirm_move) && !asBool(extra.force_move)) {
       throw httpError(409, `This person is currently in ${current.group_name}. Confirm the move to continue.`, { current_group: current.group_name, current_group_id: Number(current.lifegroup_id) });
@@ -559,11 +660,21 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     const leaderGroup = group.leader_person_id && (await client.query('SELECT id FROM networks WHERE id=$1 AND leader_person_id=$2 AND is_active', [group.network_id,group.leader_person_id])).rows[0];
     if (leaderGroup) {
       const leaders = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (leaders >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409, 'Network has reached its 12 Cell Leader limit.');
+      const capacity = effectiveGroupCapacity(group);
+      if (leaders >= capacity) {
+        if (capacity === NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Network has reached its 12 Cell Leader limit.') : httpError(409, 'Network has reached its 12 Cell Leader limit.'));
+        const message = `Network has reached its ${capacity} Cell Leader limit.`;
+        throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
+      }
     }
     if (!leaderGroup) {
       const members = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
-      if (members >= CELL_MEMBER_LIMIT) throw httpError(409, 'Cell Leader has reached the 12-member limit.');
+      const capacity = effectiveGroupCapacity(group);
+      if (members >= capacity) {
+        if (capacity === CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Cell Leader has reached the 12-member limit.') : httpError(409, 'Cell Leader has reached the 12-member limit.'));
+        const message = `Cell Leader has reached the ${capacity}-member limit.`;
+        throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
+      }
     }
     if (tier === 'solid') {
       const solid = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
@@ -581,6 +692,56 @@ async function assignMember(groupId, personId, extra = {}, actor) {
     return { unchanged: false };
   });
   return { ...await membershipForPerson(personId), unchanged: result.unchanged };
+}
+
+/** Assign an ungrouped person to an eligible Cell; never moves existing memberships.
+ * The existing assignMember transaction handles capacity, membership locks and audit log.
+ * On contention, try the next eligible cell and return a manual-review result if none remains.
+ */
+async function readVipAssignmentPolicy(){
+ const row=(await query("SELECT value FROM settings WHERE key='vip_assignment_priority'")).rows[0];
+ if(!row)return [...DEFAULT_VIP_PRIORITIES];
+ try{return validateVipPriorityOrder(row.value);}catch{return [...DEFAULT_VIP_PRIORITIES];}
+}
+async function saveVipAssignmentPolicy(input,actor){
+ let order;
+ try{order=validateVipPriorityOrder(input);}catch{throw httpError(400,'Choose each VIP assignment priority exactly once.');}
+ await transaction(async client=>{
+   await client.query("INSERT INTO settings(key,value) VALUES('vip_assignment_priority',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[JSON.stringify(order)]);
+   await logAction(client,actor,'settings',null,'vip_assignment_priority_changed',{priority_order:order});
+ });
+ return {priority_order:order};
+}
+
+async function autoAssignMember(personId, prefs = {}, actor = null) {
+  const person = (await query('SELECT id,sex,archived_at,status,preferred_area,preferred_day,preferred_category FROM people WHERE id=$1',[personId])).rows[0];
+  if (!person || person.archived_at || person.status === 'inactive') throw httpError(404, 'Active person not found.');
+  // Automatic placement is only for attendees, never an active Network/Cell Leader.
+  // Leadership relationships must be changed explicitly by a manager first.
+  const leadership=(await query(`SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active
+    UNION ALL SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1`,[personId])).rows[0];
+  if(leadership)return {assigned:false,reason:'active_leadership',needs_manual_assignment:true};
+  const active = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
+  if (active) return { assigned: true, already_assigned: true, lifegroup_id: Number(active.lifegroup_id) };
+  if (!['male','female'].includes(person.sex)) return { assigned:false, reason:'sex_missing', needs_manual_assignment:true };
+  const gender = person.sex === 'male' ? 'boys' : 'girls';
+  const priorities=await readVipAssignmentPolicy();
+  const candidates = recommendEligibleCells(await listGroups({gender,status:'active'}),{
+    day:prefs.day || person.preferred_day, area:prefs.area || person.preferred_area,
+    category:prefs.category || person.preferred_category,priority_order:priorities,
+  });
+  for (const cell of candidates) {
+    try {
+      const membership = await assignMember(cell.id,personId,{role:'member',tier:'new',auto_assign:true},actor);
+      return { assigned:true, lifegroup_id:cell.id, membership, already_assigned:Boolean(membership.unchanged) };
+    } catch (error) {
+      // Never mask authorization or validation faults; only skip a Cell lost to contention.
+      if (!shouldRetryVipCell(error)) throw error;
+      const nowActive = (await query('SELECT lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL ORDER BY id LIMIT 1',[personId])).rows[0];
+      if (nowActive) return {assigned:true,already_assigned:true,lifegroup_id:Number(nowActive.lifegroup_id)};
+    }
+  }
+  return { assigned:false, reason:'no_eligible_cell', needs_manual_assignment:true };
 }
 
 async function leaveMember(groupId, personId, leftAt = today(), actor) {
@@ -890,7 +1051,49 @@ async function networkDetail(id) {
   };
 }
 
+/** Church classification is distinct from attendance status and staff account permissions.
+ * Until a reviewed schema migration is approved, store it in existing People
+ * extras JSON and use audit_log for durable previous/current history.
+ */
+export function hasOutOfNetworkCellLeadership(networks,cells){
+ const ids=new Set(networks.map(n=>String(n.id)));
+ return cells.some(c=>!ids.has(String(c.network_id)));
+}
+
+async function setDiscipleshipClassification(personId, requested, reason, actor) {
+  const target=clean(requested);
+  if(!['network_leader','cell_leader','member','vip'].includes(target))
+    throw httpError(400,'Choose Network Leader, Cell Leader, Member or VIP.');
+  const note=stringField(reason,'Reason',{max:500});
+  return transaction(async client=>{
+    const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
+    const current=clean(p.extras?.discipleship_classification);
+    const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
+    if(target==='network_leader'){
+      if(!networks.length)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+      if(hasOutOfNetworkCellLeadership(networks,cells))
+        throw httpError(409,'Network Leaders may only lead Cells within their own active Networks.');
+    }
+    if(target==='cell_leader'&&(!cells.length||networks.length))
+      throw httpError(409,'Cell Leader classification requires an active Cell and no active Network leadership.');
+    if(['member','vip'].includes(target)&&(networks.length||cells.length))
+      throw httpError(409,'Reassign active leadership relationships before changing this person to Member or VIP.');
+    // Even an unchanged classification must satisfy current leadership relationships.
+    if(current===target)return {person_id:personId,classification:target,unchanged:true};
+    await client.query(`UPDATE people SET extras=jsonb_set(coalesce(extras,'{}'::jsonb),
+      '{discipleship_classification}',to_jsonb($1::text),true),updated_at=now() WHERE id=$2`,[target,personId]);
+    await logAction(client,actor,'people',personId,'discipleship_classification_changed',
+      {from:current,to:target,reason:note});
+    return {person_id:personId,previous_classification:current,classification:target,unchanged:false};
+  });
+}
+
 async function lifegroupMethod(name, args, actor) {
+  if (name === 'setDiscipleshipClassification') return setDiscipleshipClassification(asId(args[0],'person ID'),args[1],args[2]||null,actor);
+  if (name === 'vipAssignmentPolicy') return {priority_order:await readVipAssignmentPolicy()};
+  if (name === 'saveVipAssignmentPolicy') return saveVipAssignmentPolicy(args[0],actor);
   if (name === 'lifegroupOverview') return trackerOverview();
   if (name === 'lifegroups') return listGroups(args[0] || {});
   if (name === 'lifegroupOptions') return options();
@@ -901,7 +1104,7 @@ async function lifegroupMethod(name, args, actor) {
     if (!['male','female'].includes(sex)) return { prefs, groups: [] };
     const gender = sex === 'male' ? 'boys' : 'girls';
     let groups = await listGroups({ gender, status: 'active' });
-    groups = groups.filter((g) => g.slots == null || g.slots > 0).map((g) => ({ ...g, score: Number(g.schedule_day === prefs.day) + Number(g.category && prefs.category && g.category.toLowerCase() === String(prefs.category).toLowerCase()), reasons: [] }));
+    groups = recommendEligibleCells(groups, {...prefs,priority_order:await readVipAssignmentPolicy()});
     return { prefs, groups };
   }
   if (name === 'lifegroup') return getGroup(asId(args[0], 'group ID'));
@@ -946,6 +1149,7 @@ async function lifegroupMethod(name, args, actor) {
   }
   if (name === 'removeCellLeaderFromTree') return removeCellLeaderFromTree(asId(args[0],'group ID'),actor);
   if (name === 'removeMemberFromTree') return removeMemberFromTree(asId(args[0],'group ID'),asId(args[1],'person ID'),actor);
+  if (name === 'autoAssignLifegroup') return autoAssignMember(asId(args[0],'person ID'),args[1] || {},actor);
   if (name === 'assignLifegroup') return assignMember(asId(args[0],'group ID'),asId(args[1],'person ID'),args[2] || {},actor);
   if (name === 'leaveLifegroup') return leaveMember(asId(args[0],'group ID'),asId(args[1],'person ID'),clean(args[2]) || today(),actor);
   if (name === 'setTier') {

@@ -8,7 +8,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
-import { query, transaction, withState, runDomain, logAction, connectionHint } from './db.js';
+import {signServicePass} from './service-qr.js';
+import { query, transaction, withState, runDomain, logAction, stateId, connectionHint } from './db.js';
 import { domain, today, httpError, fullNameSafe, DEFAULT_SETTINGS, isSunday } from './domain.js';
 import { peopleList, peopleSearch, dashboardRead } from './read-model.js';
 import { publicRouter, siteUrls, currentPrize } from './public-api.js';
@@ -20,6 +21,7 @@ import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
 import lifeideRouter from './lifeide.js';
+import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 const app=express();
@@ -29,19 +31,33 @@ const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
 app.disable('x-powered-by');if(process.env.VERCEL||process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||process.env.TRUST_PROXY==='true')app.set('trust proxy',1);
 app.use((req,res,next)=>{res.locals.nonce=crypto.randomBytes(16).toString('base64');next();});
-app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:['https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
+app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:["'self'",'https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
 app.use(cookieParser());
+app.use(express.json({limit:'512kb'}));
+registerDevWorkspace(app);
 // Gzip/deflate responses (HTML, CSS, JS, JSON, ICS) whenever the client accepts it.
 // The SSE live-update stream is excluded so events are never delayed by buffering.
 app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content-Type')||'');if(type.includes('text/event-stream')||type.includes('application/zip'))return false;return compression.filter(req,res);}}));
 // All tracker and public API payloads are small JSON documents (the deployment ZIP
 // upload uses its own raw-body parser with a separate limit).
-app.use(express.json({limit:'512kb'}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
 app.use('/api/lifeide',lifeideRouter);
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
+// Read-only environment metadata. Never expose environment variables or secret values.
+app.get('/api/admin/developer-info', requireStaff, (req,res)=>{
+ try{
+  if(req.actor?.role_id!=='admin')return res.status(403).json({error:'Administrator access required'});
+  const clean=value=>String(value||'').slice(0,120).replace(/[^a-zA-Z0-9._\/-]/g,'');
+  res.set('Cache-Control','no-store').json({
+   environment:clean(process.env.VERCEL_ENV||(process.env.NODE_ENV==='production'?'production':'local')),
+   branch:clean(process.env.VERCEL_GIT_COMMIT_REF),
+   commit:clean(process.env.VERCEL_GIT_COMMIT_SHA).slice(0,12),
+   deployment:clean(process.env.VERCEL_URL)
+  });
+ }catch(nextError){res.status(500).json({error:'Deployment metadata unavailable'});}
+});
 app.get('/api/auth/status',async(req,res)=>{
  const user=await readStaff(req);const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[Object.keys(DEFAULT_SETTINGS)])).rows.map(r=>[r.key,r.value]));
  const count=Number((await query('SELECT count(*) FROM staff_users')).rows[0].count);
@@ -76,12 +92,12 @@ const methods={
  dashboard:['dashboard:view',false],
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
- registrations:['registrations:manage',false],
- lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
- removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
+ registrations:['registrations:manage',false],registerAdminVip:['registrations:manage',true],
+ lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
+ removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],setDiscipleshipClassification:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
- giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
+ giftTracker:['registrations:manage',false],markGiftGiven:['registrations:manage',true],undoGiftGiven:['registrations:manage',true],validateCheckin:['attendance:write',true],getPrize:['registrations:manage',false],setPrize:['settings:manage',true],qrRegistration:['registrations:manage',false],serviceQr:['attendance:view',false],postsAdmin:['settings:manage',false],moderatePost:['settings:manage',true],editPost:['settings:manage',true],deletePost:['settings:manage',true]
 };
 const validId=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw httpError(400,'Invalid record ID.');return n;};
 async function customMethod(req,name,args) {
@@ -93,6 +109,16 @@ async function customMethod(req,name,args) {
  if(name==='service')return serviceDetail(args[0]);
  if(name==='serviceAudit')return serviceAudit(args[0]);
  if(name==='openService')return openService(args[0],actor);
+ if(name==='serviceQr'){
+  const serviceId=validId(args[0]);
+  const record=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[serviceId])).rows[0];
+  if(!record||record.service_type!=='lifegen')throw httpError(404,'Sunday LIFEGEN service not found.');
+  const {public_url}=siteUrls(req);
+  const url=new URL('/checkin/',public_url.startsWith('http')?public_url:`${req.protocol}://${req.get('host')}`);
+  url.searchParams.set('t',signServicePass(record.id,record.service_date));
+  return {service_id:record.id,service_date:record.service_date,url:url.toString(),svg:await QRCode.toString(url.toString(),{type:'svg',width:360,margin:2})};
+ }
+
  if(name==='mark')return markAttendance(args[0],args[1],args[2],args[3],args[4],actor);
  if(name==='undoMark')return undoAttendance(args[0],args[1],args[2],actor);
  if(name==='updateService')return updateService(args[0],args[1]||{},actor);
@@ -187,6 +213,72 @@ async function customMethod(req,name,args) {
  if(name==='giftTracker')return listGiftTracker();
  if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='setPersonStatus'&&args[1]==='inactive'){
+  const personId=validId(args[0]);
+  return transaction(async client=>{
+    const p=(await client.query('SELECT id,first_name,last_name,status,archived_at FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!p||p.archived_at)throw httpError(404,'Active People record not found.');
+    const leaderNetwork=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    const leaderCell=(await client.query('SELECT id FROM lifegroups WHERE leader_person_id=$1 AND is_active LIMIT 1',[personId])).rows[0];
+    if(leaderNetwork||leaderCell)throw httpError(409,'Reassign active Network or Cell leadership before deactivating this person.');
+    const closed=(await client.query(`UPDATE lifegroup_memberships
+      SET left_at=GREATEST(joined_at,$2::date)
+      WHERE person_id=$1 AND left_at IS NULL RETURNING id,lifegroup_id`,[personId,today()])).rows;
+    for(const membership of closed)
+      await logAction(client,actor,'lifegroup_memberships',membership.id,'left_on_deactivation',{person_id:personId,lifegroup_id:membership.lifegroup_id});
+    if(p.status!=='inactive'){
+      await client.query("UPDATE people SET status='inactive',updated_at=now() WHERE id=$1",[personId]);
+      await logAction(client,actor,'people',personId,'deactivate',{previous_status:p.status,closed_memberships:closed.length});
+    }
+    return {id:personId,status:'inactive',closed_memberships:closed.length};
+  });
+ }
+ if(name==='registerAdminVip'){
+  requirePermission(actor,'people:write');
+  const input=args[0]||{};
+  if(input.privacy_consent!==true)throw httpError(400,'Consent is required.');
+  const first=String(input.first_name||'').trim(),last=String(input.last_name||'').trim();
+  const gender=String(input.sex||'').trim(),school=String(input.school||'').trim(),inviter=String(input.inviter||'').trim();
+  const age=Number(input.age),contact=String(input.contact_number||'').trim()||null;
+  const key=String(input.idempotency_key||'').trim();
+  const existingId=input.existing_person_id?validId(input.existing_person_id):null;
+  if((!existingId&&(!first||!last))||first.length>120||last.length>120)throw httpError(400,'Enter first and last names or choose an existing Person ID.');
+  if(!['male','female'].includes(gender))throw httpError(400,'Choose Boy or Girl.');
+  if(!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Provide age, school and inviter.');
+  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(key))throw httpError(400,'Invalid registration request key.');
+  const hashed=hashToken(key);
+  return withState(async({data,client})=>{
+    const prior=(await client.query('SELECT id,person_id FROM vip_registrations WHERE idempotency_key=$1',[hashed])).rows[0];
+    if(prior)return {person_id:Number(prior.person_id),vip_registration_id:Number(prior.id),already_registered:true};
+    let person;
+    if(existingId){
+      person=(await client.query('SELECT id,first_name,last_name,sex,archived_at FROM people WHERE id=$1 FOR UPDATE',[existingId])).rows[0];
+      if(!person||person.archived_at)throw httpError(404,'Active People profile not found.');
+      if(person.sex&&person.sex!==gender)throw httpError(409,'Existing People profile gender differs; update the profile before registering.');
+      const previous=(await client.query('SELECT id,person_id FROM vip_registrations WHERE person_id=$1 ORDER BY id DESC LIMIT 1',[existingId])).rows[0];
+      if(previous)return {person_id:Number(existingId),vip_registration_id:Number(previous.id),already_registered:true};
+    }else{
+      person=await domain.createPerson({
+        first_name:first,last_name:last,full_name:first+' '+last,sex:gender,age,school,inviter,
+        contact_number:contact,status:'first_timer',registration_source:'vip',privacy_consent:true,
+        ...(input.photo?{photo:input.photo}:{})
+      });
+    }
+    if(!existingId){
+      const record=data.people.find(row=>Number(row.id)===Number(person.id));
+      if(record)record.extras={...(record.extras||{}),discipleship_classification:'vip'};
+    }
+    const fullName=[person.first_name,person.last_name].filter(Boolean).join(' ');
+    const id=stateId(data,'vip_registrations'),recovery='LG-'+randomToken();
+    await client.query(`INSERT INTO vip_registrations
+      (id,person_id,full_name,age,school,inviter,contact,recovery_hash,idempotency_key)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id,person.id,fullName,age,school,inviter,contact,hashToken(recovery),hashed]);
+    await logAction(client,actor,'vip_registrations',id,'staff_registration',{person_id:person.id});
+    return {person_id:person.id,vip_registration_id:id,recovery_code:recovery,already_registered:false};
+  },{write:true,actor});
+ }
  if(name==='registration'){
   const r=(await query('SELECT v.id,v.person_id,v.full_name,v.age,v.school,v.inviter,v.contact,v.review_status,v.created_at,v.reviewed_at,p.person_code,p.status AS person_status FROM vip_registrations v JOIN people p ON p.id=v.person_id WHERE v.id=$1',[validId(args[0])])).rows[0];if(!r)throw httpError(404,'Registration not found.');return r;
  }
@@ -304,6 +396,7 @@ app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'life
 app.get(['/vip-announce','/vip-announce/','/vip-announce/index.html'],(req,res)=>page(res,'vip-announce'));
 app.get(['/tracker','/tracker/index.html'],(req,res)=>res.redirect(308,'/admin'));
 app.get(['/lifegen','/lifegen/index.html'],(req,res)=>res.redirect(308,'/'));
+app.get(['/checkin','/checkin/'],(req,res)=>res.sendFile(path.join(root,'public','checkin','index.html')));
 app.get('/privacy',async(req,res)=>{
  let settings={};try{settings=Object.fromEntries((await query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]));}catch{}
  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

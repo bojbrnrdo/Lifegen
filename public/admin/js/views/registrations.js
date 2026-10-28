@@ -1,3 +1,4 @@
+import {createAddNewModal} from './unifiedAddNew.js';
 import { api } from '../api.js';
 import { state, can } from '../app.js';
 import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce, statusBadge, confirmDialog, esc } from '../ui.js';
@@ -33,12 +34,41 @@ export async function refreshPendingBadge(){
 }
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
- main.innerHTML=html`<div class="page-header"><div><h1>VIP registrations</h1><p class="sub">From the LIFEGEN website, directly into the shared database.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
+ main.innerHTML=html`<div class="page-header"><div><h1>Registration</h1><p class="sub">Register People and manage VIP follow-up.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
+ <div class="card mb-2"><div class="card__header"><h2>Register a person</h2></div><div class="card__body"><div class="row" style="gap:8px;flex-wrap:wrap">${can('people:write')?['network','cell','member','vip'].map((mode,i)=>html`<button type="button" class="btn" data-register-mode="${mode}">${['Network Leader','Cell Leader','Member','VIP'][i]}</button>`):html`<p class="small muted">Your role can review VIP registrations, but cannot create People records.</p>`}</div><p class="small muted mt-2">VIPs without an eligible Cell assignment can be managed in Needs Cell.</p></div></div>
+ ${can('lifegroups:manage')?html`<div class="card mb-2"><div class="card__body"><div class="row" style="align-items:end;gap:12px;flex-wrap:wrap">
+  <label class="grow">VIP auto-assignment priority
+    <select id="vipPriorityOrder" aria-label="VIP Cell assignment priority">
+      <option value="day,area,category,capacity">Matching day first</option>
+      <option value="area,day,category,capacity">Matching area first</option>
+      <option value="category,day,area,capacity">Matching category first</option>
+      <option value="capacity,day,area,category">Available capacity first</option>
+    </select>
+  </label><button type="button" class="btn" id="saveVipPriority">Save priority</button></div>
+  <p class="small muted mt-1">Only compatible, active, available Cells are considered; ties are deterministic.</p>
+ </div></div>`:''}
  <div class="sync-note mb-2"><b>VIP follow-up:</b> every signup creates a linked People record and immediately appears in the <a href="#/lifegroups?tab=needs">Lifegroup Tracker follow-up queue</a> until a group is selected. The monthly prize streak remains visible here; it does not export or move VIPs into a group.</div>
  <div class="card mb-2" id="giftCard"><div class="card__header"><h2>${icon('gift')} VIP Gift Tracker</h2><p class="small muted">Track Sunday attendance and gift eligibility.</p></div>
   <div class="card__body"><div class="kpi-row" id="giftKpis"></div><div class="stack mt-2" id="giftList"><div class="loading">Loading…</div></div></div></div>
  <div class="card mb-2"><div class="card__header"><h2>Sunday check-ins awaiting validation</h2></div><div class="card__body" id="pendingChecks">Loading…</div></div>
  <div class="toolbar"><div class="filter-tabs" id="vipFilters"><button data-f="new" class="${filter==='new'?'active':''}">New</button><button data-f="reviewed" class="${filter==='reviewed'?'active':''}">Reviewed</button><button data-f="all" class="${filter==='all'?'active':''}">All</button></div><div class="gsearch grow">${icon('search')}<input id="vipSearch" type="search" value="${search}" placeholder="Search VIP, inviter or contact" aria-label="Search registrations"/></div></div><div class="card" id="vipList"></div>`;
+ main.querySelectorAll('[data-register-mode]').forEach(button=>button.addEventListener('click',()=>createAddNewModal({initialTab:button.dataset.registerMode,onSaved:()=>load()})));
+ const priority=main.querySelector('#vipPriorityOrder');
+ if(priority){
+   api.vipAssignmentPolicy().then(result=>{const order=result.priority_order?.join(',');if([...priority.options].some(o=>o.value===order))priority.value=order;})
+     .catch(e=>toast('Could not load VIP assignment priorities: '+e.message,'error'));
+   main.querySelector('#saveVipPriority').onclick=async event=>{
+     const confirmed=await confirmDialog({title:'Update VIP matching priorities?',
+       message:'New VIPs will be matched using the selected criteria first. Existing Cell assignments will not be changed.',
+       confirmText:'Save priority'});
+     if(!confirmed)return;
+     await withLoading(event.currentTarget,async()=>{
+       try{await api.saveVipAssignmentPolicy(priority.value.split(','));toast('VIP matching priorities saved.');}
+       catch(e){toast(e.message,'error');}
+     });
+   };
+ }
+
  async function load(){
   loadGiftTracker();
   const box=main.querySelector('#pendingChecks'),list=main.querySelector('#vipList');if(!box||!list)return;
@@ -59,13 +89,13 @@ export async function renderRegistrations({main,query}){
   kpis.innerHTML=html`<div class="kpi"><b>${counts.active_vips??0}</b><span>Active VIPs</span></div><div class="kpi ${counts.gift_eligible?'kpi--green':''}"><b>${counts.gift_eligible??0}</b><span>Gift eligible</span></div>`;
   box.innerHTML=data.items.length?html`<div class="stack">${data.items.map(r=>giftRow(r,target))}</div>`:html`<p class="small muted">No VIP registrations yet.</p>`;
   box.querySelectorAll('[data-give]').forEach(b=>b.onclick=async()=>{
-   const r=data.items.find(i=>i.person_id===b.dataset.give);
+   const r=data.items.find(i=>Number(i.person_id)===Number(b.dataset.give));
    const ok=await confirmDialog({title:'Record this gift?',message:`Mark <b>${esc(r?.full_name||'this VIP')}</b> as already given the gift? One gift per VIP.`,confirmText:'Record gift'});
    if(!ok)return;
    await withLoading(b,async()=>{try{await api.markGiftGiven(Number(b.dataset.give));toast('Gift recorded.');await load();}catch(err){toast(err.message,'error');}});
   });
   box.querySelectorAll('[data-undo]').forEach(b=>b.onclick=async()=>{
-   const r=data.items.find(i=>i.person_id===b.dataset.undo);
+   const r=data.items.find(i=>Number(i.person_id)===Number(b.dataset.undo));
    const ok=await confirmDialog({title:'Undo this recording?',message:`Remove the gift record for <b>${esc(r?.full_name||'this VIP')}</b>?`,confirmText:'Undo',danger:true});
    if(!ok)return;
    await withLoading(b,async()=>{try{await api.undoGiftGiven(Number(b.dataset.undo));toast('Recording removed.');await load();}catch(err){toast(err.message,'error');}});

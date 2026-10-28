@@ -15,6 +15,7 @@ import {
   isSundayKey,
   TIME_ZONE,
   CYCLE_STATE,
+  currentInstant,
 } from './service-cycle.js';
 import { revision } from './events.js';
 import { httpError } from './domain.js';
@@ -46,7 +47,7 @@ export function cleanInviter(value) {
   return name || INVITER_FALLBACK;
 }
 
-export async function readCycle(now = new Date(), client = { query }) {
+export async function readCycle(now = currentInstant(), client = { query }) {
   const { rows } = await client.query(
     'SELECT key, value FROM settings WHERE key = ANY($1::text[])',
     [CYCLE_SETTING_KEYS],
@@ -74,17 +75,27 @@ export async function persistCycleWindow(cycle, client = { query }) {
 // sign-up order. The partial unique index from database/007 guarantees one
 // attributed row per person per Sunday; COUNT(DISTINCT person_id) keeps the
 // total honest even if a legacy duplicate is ever attributed by hand.
+// IMPORTANT: Demo-seeded records (people.is_demo = true) are never shown to
+// the congregation — only live registrations from POST /api/public/registrations
+// appear on the fullscreen board. Preview can still load demo data in DB, it
+// just won't be rendered.
 export async function vipsForService(serviceDate, client = { query }) {
   if (!isSundayKey(serviceDate)) throw httpError(400, 'A Sunday service date is required.');
   const { rows } = await client.query(
     `SELECT v.full_name, v.inviter, v.person_id, v.created_at
        FROM vip_registrations v
+       LEFT JOIN people p ON p.id = v.person_id
       WHERE v.service_date = $1
+        AND (p.is_demo IS NULL OR p.is_demo = false)
       ORDER BY v.created_at, v.id`,
     [serviceDate],
   );
   const { rows: totals } = await client.query(
-    'SELECT COUNT(DISTINCT person_id)::int AS total FROM vip_registrations WHERE service_date = $1',
+    `SELECT COUNT(DISTINCT v.person_id)::int AS total
+       FROM vip_registrations v
+       LEFT JOIN people p ON p.id = v.person_id
+      WHERE v.service_date = $1
+        AND (p.is_demo IS NULL OR p.is_demo = false)`,
     [serviceDate],
   );
   return {
@@ -99,7 +110,7 @@ export async function vipsForService(serviceDate, client = { query }) {
 
 // Full announcement payload: cycle + names + count + the database revision the
 // client can use to detect change.
-export async function vipAnnouncement({ date, now = new Date(), persist = true } = {}) {
+export async function vipAnnouncement({ date, now = currentInstant(), persist = true } = {}) {
   const cycle = await readCycle(now);
   const requested = date && isSundayKey(date) ? date : null;
   const serviceDate = requested || cycle.announce_service_date;
@@ -110,7 +121,7 @@ export async function vipAnnouncement({ date, now = new Date(), persist = true }
   if (persist) await persistCycleWindow(cycle).catch(() => {});
   return {
     timezone: TIME_ZONE,
-    generated_at: new Date().toISOString(),
+    generated_at: currentInstant().toISOString(),
     server_time: now.toISOString(),
     state: cycle.state,
     phase: cycle.phase,
