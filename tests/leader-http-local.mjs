@@ -22,6 +22,28 @@ try {
  async function login(username){const response=await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({username,password:'PR134-local-test-pass-2026'})});assert.equal(response.status,200);return response.json();}
  async function call(a,method,args=[]){const response=await fetch(base+'/api/tracker/'+method,{method:'POST',headers:{'content-type':'application/json',origin:base,'x-lifegen-preview-session':a.preview_session_token,'x-csrf-token':a.csrf_token},body:JSON.stringify({args})});return {status:response.status,data:await response.json()};}
  const n=await login('network-pr134@local.test'),c=await login('cell-pr134@local.test');
+ if(process.env.LIFEGEN_BROWSER_TEST==='1'){
+ const {chromium}=await import('playwright-core');
+ const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+ try{
+  for(const size of [{width:1440,height:900},{width:390,height:844}]){
+   const page=await browser.newPage({viewport:size});
+   await page.goto(base+'/admin/');
+   await page.locator('#u').fill('cell-pr134@local.test');
+   await page.locator('#p').fill('PR134-local-test-pass-2026');
+   await page.locator('#loginForm button[type=submit]').click();
+   await page.waitForTimeout(700);
+   await page.waitForURL(/#\/lifegroups/,{timeout:5000});
+   await page.getByRole('heading',{name:'My Lifegroups'}).waitFor();
+   assert.ok(await page.getByText('Member A').count()>0,'assigned Person appears in scoped directory');
+   assert.equal(await page.getByText('Member B').count(),0,'other Network Person is hidden');
+   const widths=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,inner:window.innerWidth}));
+   assert.ok(widths.scroll<=widths.inner+1,'no page-level horizontal overflow at '+size.width);
+   console.log('PASS: Chrome linked leader directory at '+size.width+'px');
+   await page.close();
+  }
+ }finally{await browser.close();}
+ }
  assert.equal((await call(n,'leaderScope')).data.kind,'network_leader');
  assert.equal((await call(c,'leaderScope')).data.kind,'cell_leader');
  const scoped=await call(n,'people',[{status:'all',paged:1,limit:100,offset:0}]);
