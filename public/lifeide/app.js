@@ -39,7 +39,7 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy){$('status').textContent='Wait for the current save to finish before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
@@ -71,7 +71,7 @@ async function treeFolder(){
  await appendFolder('',0);
 }
 async function createRepoEntry(type,name){
- if(saveBusy)throw Error('Wait for the current save to finish before creating files.');
+ if(saveBusy||commitBusy)throw Error('Finish the pending save or commit before creating files.');
  if(repoDirty)throw Error('Save or discard your current repository edits before creating another entry.');
  if(!name||name.startsWith('.')||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
  const rel=repoParent?repoParent+'/'+name:name;
@@ -82,7 +82,7 @@ async function createRepoEntry(type,name){
  $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
- if(saveBusy){$('status').textContent='Wait for the current save to finish before changing files.';return;}
+ if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before changing files.';return;}
  if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
  selectedGit.clear();$('commit').disabled=true;
@@ -93,7 +93,7 @@ async function openRepoFile(rel){
  $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
 }
 async function repositoryConnect(){
- if(saveBusy){$('status').textContent='Wait for the current save to finish before switching workspaces.';return;}
+ if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
  if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;repoFiles.clear();repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();

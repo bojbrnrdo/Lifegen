@@ -52,13 +52,13 @@ test('repository save captures path and content before awaiting and preserves ne
 });
 
 test('repository navigation blocks file and workspace switches while a save is in flight',()=>{
- assert.match(client,/async function openRepoFile\(rel\)\{\s*if\(saveBusy\)/);
- assert.match(client,/async function repositoryConnect\(\)\{\s*if\(saveBusy\)/);
+ assert.match(client,/async function openRepoFile\(rel\)\{\s*if\(saveBusy\|\|commitBusy\)/);
+ assert.match(client,/async function repositoryConnect\(\)\{\s*if\(saveBusy\|\|commitBusy\)/);
 });
 
 test('repository refresh and entry creation refuse pending saves',()=>{
- assert.match(client,/if\(repoMode\)\{if\(saveBusy\)/);
- assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\)/);
+ assert.match(client,/if\(repoMode\)\{if\(saveBusy\|\|commitBusy\)/);
+ assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\|\|commitBusy\)/);
 });
 
 test('Git commit waits for an active repository save',()=>{
