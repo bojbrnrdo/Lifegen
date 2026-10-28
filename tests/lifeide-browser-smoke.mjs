@@ -74,6 +74,32 @@ try {
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1);
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
+ await evaluate("document.getElementById('newFile').click()");
+ await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='second-smoke.js'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'second-smoke.js');
+ await evaluate("document.getElementById('editor').value='const second = 2;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ await evaluate("[...document.querySelectorAll('.tab-open')].find(b=>b.textContent==='browser-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const smoke = true;');
+ await evaluate("[...document.querySelectorAll('.tab-open')].find(b=>b.textContent==='second-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+ await evaluate("[...document.querySelectorAll('#tabs .close')].find(b=>b.getAttribute('aria-label')==='Close second-smoke.js').click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const smoke = true;');
+ console.log('PASS LifeIDE browser: tab switching and closing preserve saved files');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','Closing a tab must not delete the file');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('second-smoke.js')).click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'second-smoke.js');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+ await evaluate("location.reload()");
+ for(let i=0;i<50;i++){if(await evaluate("Boolean(document.getElementById('newFile'))"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','File content must survive page reload');
+ console.log('PASS LifeIDE browser: closed files reopen and persist after reload');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('second-smoke.js')).click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;');
+
+
+
  if(realAuth){
   const credentials=JSON.stringify({username:process.env.LIFEIDE_TEST_USERNAME,password:process.env.LIFEIDE_TEST_PASSWORD});
   const loginStatus=await evaluate("(async()=>{const r=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:location.origin},body:JSON.stringify("+credentials+")});return r.status})()");
@@ -82,6 +108,8 @@ try {
  await evaluate("document.getElementById('repositoryMode').click()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('modeLabel').textContent==='REPOSITORY'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='second-smoke.js')?.content"),'const second = 2;','Switching to repository must preserve browser-local files');
+
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='browser-repository.js';document.getElementById('dialogForm').requestSubmit()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
@@ -98,12 +126,21 @@ try {
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-repository.js')).click()");
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js');
  await (await import('node:fs/promises')).writeFile(path.join(workspace,'browser-repository.js'),'const externalChange = true;');
  await evaluate("document.getElementById('editor').value='const staleBrowserEdit = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
  await new Promise(r=>setTimeout(r,450));
  assert.equal(await readFile(path.join(workspace,'browser-repository.js'),'utf8'),'const externalChange = true;','Stale editor must not overwrite external changes');
  console.log('PASS LifeIDE repository browser: stale-version save blocked');
+ await evaluate("window.confirm=()=>false;[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('README.md')).click()");
+ await new Promise(r=>setTimeout(r,150));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js','Cancel file-switch must retain the current file');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;','Cancel file-switch must retain the unsaved edit');
+ console.log('PASS LifeIDE repository browser: cancelled file switch preserves unsaved text');
+
  await evaluate("window.confirm=()=>false;document.getElementById('refresh').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;','Cancel refresh must preserve unsaved text');
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
