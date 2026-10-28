@@ -74,6 +74,14 @@ try {
  await new Promise(r=>setTimeout(r,450));
  assert.equal(await readFile(path.join(workspace,'browser-repository.js'),'utf8'),'const externalChange = true;','Stale editor must not overwrite external changes');
  console.log('PASS LifeIDE repository browser: stale-version save blocked');
+ await evaluate("window.confirm=()=>false;document.getElementById('refresh').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;','Cancel refresh must preserve unsaved text');
+ assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
+ await evaluate("document.getElementById('repositoryMode').click()");
+ assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY','Cancel workspace switch must preserve repository mode');
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const staleBrowserEdit = true;');
+ console.log('PASS LifeIDE repository browser: unsaved refresh and mode-switch cancellation');
+
 
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:390,height:844,deviceScaleFactor:3,mobile:true}}));});
  const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:document.getElementById('editor').getBoundingClientRect().width})");
