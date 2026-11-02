@@ -6,11 +6,27 @@ const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
- admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','attendance:correct','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage','users:manage','settings:manage'],
+ admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','attendance:correct','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage','users:manage','settings:manage','youth_welfare:view','youth_welfare:classify','youth_welfare:manage','youth_welfare:access:manage','youth_welfare:profile:private','youth_welfare:tracker:view'],
  staff:['dashboard:view','people:view','people:view_private','people:write','attendance:view','attendance:write','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage'],
- viewer:['dashboard:view','people:view','attendance:view','reports:view','lifegroups:view']
+ viewer:['dashboard:view','people:view','attendance:view','reports:view','lifegroups:view'],
+ youth_welfare_admin:['youth_welfare:view','youth_welfare:classify','youth_welfare:manage','youth_welfare:records:manage','youth_welfare:access:manage','youth_welfare:profile:private','youth_welfare:people:add','youth_welfare:tracker:view'],
+ youth_welfare_staff:['youth_welfare:view','youth_welfare:records:manage','youth_welfare:tracker:view'],
+ youth_welfare_viewer:['youth_welfare:view','youth_welfare:tracker:view']
 };
-export const publicUser=u=>({id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:PERMISSIONS[u.role_id]||[],is_active:u.is_active});
+const YOUTH_WELFARE_PERMISSION_PREFIX='youth_welfare:';
+export const publicUser=u=>{
+ const base=PERMISSIONS[u.role_id]||[];
+ const accessRole=u.youth_welfare_access_role_id;
+ const accessStatus=u.youth_welfare_access_status;
+ let permissions=[...base];
+ if(accessStatus){
+  permissions=permissions.filter(permission=>!permission.startsWith(YOUTH_WELFARE_PERMISSION_PREFIX));
+  if(accessStatus==='active'&&PERMISSIONS[accessRole])permissions.push(...PERMISSIONS[accessRole]);
+ }
+ const roleFromPrimary=['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(u.role_id)?u.role_id:null;
+ const youthWelfareRole=accessStatus==='active'?accessRole:accessStatus==='revoked'?null:roleFromPrimary||(u.role_id==='admin'?'youth_welfare_admin':null);
+ return {id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:[...new Set(permissions)],is_active:u.is_active,youth_welfare_role:youthWelfareRole};
+};
 export function safeEqual(a,b) {const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}
 export async function passwordHash(password) {
  if(typeof password!=='string'||password.length<12||password.length>256) throw httpError(400,'Use a password of 12–256 characters.');
@@ -52,7 +68,20 @@ export async function readStaff(req) {
  // In the sandboxed preview, prefer the freshly issued in-memory bearer over any old
  // partitioned cookie the browser may still send. Production never accepts this bearer.
  const token=previewToken||cookieToken;if(!token)return null;
- const {rows}=await query('SELECT u.*,s.csrf_token,s.token_hash,s.expires_at FROM staff_sessions s JOIN staff_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_active=true',[hashToken(token)]);
+ let rows;
+ try{
+  ({rows}=await query(`SELECT u.*,s.csrf_token,s.token_hash,s.expires_at,
+    access.role_id AS youth_welfare_access_role_id,access.status AS youth_welfare_access_status
+    FROM staff_sessions s JOIN staff_users u ON u.id=s.user_id
+    LEFT JOIN public.youth_welfare_access access ON access.user_id=u.id
+    WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_active=true`,[hashToken(token)]));
+ }catch(error){
+  // Keep existing LIFEGEN sessions usable until the additive access migration is applied.
+  if(error?.code!=='42P01')throw error;
+  ({rows}=await query(`SELECT u.*,s.csrf_token,s.token_hash,s.expires_at
+    FROM staff_sessions s JOIN staff_users u ON u.id=s.user_id
+    WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_active=true`,[hashToken(token)]));
+ }
  if(!rows[0])return null;
  return {...publicUser(rows[0]),csrf_token:rows[0].csrf_token,session_hash:rows[0].token_hash};
 }
@@ -64,7 +93,10 @@ export function checkCsrf(req) {if(!safeEqual(req.get('x-csrf-token'),req.actor?
 async function newSession(client,user) {
  const token=randomToken(),csrf=randomToken();
  await client.query('INSERT INTO staff_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval \'12 hours\')',[hashToken(token),user.id,csrf]);
- return {token,user:publicUser(user),csrf_token:csrf};
+ let access={};
+ const accessTable=(await client.query("SELECT to_regclass('public.youth_welfare_access') IS NOT NULL AS available")).rows[0]?.available;
+ if(accessTable)access=(await client.query('SELECT role_id AS youth_welfare_access_role_id,status AS youth_welfare_access_status FROM public.youth_welfare_access WHERE user_id=$1',[user.id])).rows[0]||{};
+ return {token,user:publicUser({...user,...access}),csrf_token:csrf};
 }
 export async function setupAdmin(body) {
  if(!process.env.SETUP_KEY||process.env.SETUP_KEY.length<32||!safeEqual(body.setup_key,process.env.SETUP_KEY)) throw httpError(403,'The private setup code is incorrect or is not configured on the server.');
@@ -106,7 +138,7 @@ export async function changePassword(actor,current,next) {
 }
 export async function userAccounts(actor,method,args) {
  requirePermission(actor,'users:manage');
- if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:id==='admin'?'Admin':id==='staff'?'Attendance Staff':'Viewer / Leader',permissions}));
+ if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:({admin:'Admin',staff:'Attendance Staff',viewer:'Viewer / Leader',youth_welfare_admin:'Youth Welfare Admin (portal-only)',youth_welfare_staff:'Youth Welfare Staff (portal-only)',youth_welfare_viewer:'Youth Welfare Viewer (portal-only)'})[id],permissions}));
  if(method==='users')return (await query('SELECT id,username,display_name,role_id,is_active,created_at,last_login_at FROM staff_users ORDER BY id')).rows.map(u=>({...u,role_name:u.role_id}));
  const [idOrBody,bodyMaybe]=args;const editing=method==='updateUser';const body=editing?bodyMaybe:idOrBody;
  if(!body||!PERMISSIONS[body.role_id])throw httpError(400,'Choose a valid staff role.');

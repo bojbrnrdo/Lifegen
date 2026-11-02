@@ -33,8 +33,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // every script and stylesheet of the site itself is still fetched and executed.
 const html = (await (await fetch(BASE + '/')).text()).replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/g, '');
 const styles = await (await fetch(BASE + '/lifegen/styles.css')).text();
+const registrationStyles = await (await fetch(BASE + '/lifegen/youth-welfare-registration.css')).text();
 check('the served page contains the selection screen', html.includes('id="reg-choice"'));
-check('the served page contains the 3-step regular wizard', html.includes('id="regular-registration"') && html.includes('data-step="3"'));
+check('the served page contains the three-section regular wizard with integrated Youth Welfare questions', html.includes('id="regular-registration"') && html.includes('id="rg-education-status"') && html.includes('data-step="3"') && html.includes('Additional Information'));
 check('the served page contains the success panel', html.includes('id="reg-success"'));
 check('the page nowhere offers "Go to dashboard"', !/go to dashboard/i.test(html));
 
@@ -52,6 +53,7 @@ const LEADERS = {
 const calls = [];
 const jsonResponse = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 let regularError = null;
+let regularDelay = 0;
 let leadersEmpty = false;
 let regularResponse = { ok: true, person_created: true, person: { id: '900', name: 'Reg Check Person', person_code: 'LG-2026-0900' }, membership: { created: true, tier: 'new', lifegroup_id: '21', lifegroup_name: 'Open Cell A' }, review: null, leader: { leader_person_id: '11', leader_name: 'Kuya Mark' } };
 
@@ -59,11 +61,13 @@ const apiFetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url, BASE);
   const path = url.pathname + url.search;
   calls.push({ path, method: (init.method || 'GET').toUpperCase(), body: init.body ? JSON.parse(init.body) : null });
+  if (path === '/api/public/registration-count') return jsonResponse({ total: 12345 });
   if (path.startsWith('/api/public/leaders')) {
     const gender = url.searchParams.get('gender');
     return jsonResponse({ gender, group_gender: gender === 'male' ? 'boys' : gender === 'female' ? 'girls' : null, leaders: leadersEmpty ? [] : LEADERS[gender] || [] });
   }
   if (path === '/api/public/registrations/regular') {
+    if (regularDelay) await sleep(regularDelay);
     if (regularError) return jsonResponse(regularError.body, regularError.status);
     return jsonResponse(regularResponse, regularResponse.person_created ? 201 : 200);
   }
@@ -152,20 +156,23 @@ section('VIP FORM (gender + birthday)');
   check('the back button returns to the selection screen', visible($('reg-choice')) && !visible($('vip-signup-form-container')));
 }
 
-section('REGULAR WIZARD — step 1');
+section('REGULAR WIZARD — Basic Information');
 {
   click($('chooseRegular'));
-  check('step 1 opens', visible($('regular-registration')));
+  await sleep(170);
+  check('the regular form opens inside the existing card', visible($('regular-registration')));
   check('it is titled LIFEGEN Registration', (doc.querySelector('#regular-registration')?.textContent || '').includes('LIFEGEN Registration'));
-  check('the three steps are listed', doc.querySelectorAll('#regSteps li').length === 3, String(doc.querySelectorAll('#regSteps li').length));
-  check('step 1 is the active step', doc.querySelector('#regSteps li[data-step="1"]')?.className.includes('is-active'));
-  check('step 2 is not visible', !visible(doc.querySelector('.reg-step[data-step="2"]')));
-  check('step 3 is not visible', !visible(doc.querySelector('.reg-step[data-step="3"]')));
-  check('Basic Info fields exist', ['rg-name', 'rg-email', 'rg-birthdate', 'rg-gender', 'rg-school'].every((id) => Boolean($(id))));
-  check('gender here is also Male / Female only', [...$('rg-gender').options].map((o) => o.value).join(',') === ',male,female', [...$('rg-gender').options].map((o) => o.value).join(','));
+  check('the wizard has exactly three sections: Basic, Additional, Review & Submit', doc.querySelectorAll('#regSteps li').length === 3 && doc.querySelector('#regSteps li[data-step="1"]')?.textContent.includes('Basic Information') && doc.querySelector('#regSteps li[data-step="2"]')?.textContent.includes('Additional Information') && doc.querySelector('#regSteps li[data-step="3"]')?.textContent.includes('Review & Submit'));
+  check('the current step is announced accessibly', doc.querySelector('#regSteps')?.getAttribute('aria-label') === 'Registration progress' && doc.querySelector('#regSteps li[data-step="1"]')?.getAttribute('aria-current') === 'step');
+  check('the live total comes from the public database-count endpoint', $('regRegistrationCount').textContent.includes('12,345') && $('regRegistrationCount').textContent.includes('Registration remains open'), $('regRegistrationCount').textContent);
+  check('Basic Information is the only visible step initially', visible(doc.querySelector('.reg-step[data-step="1"]')) && !visible(doc.querySelector('.reg-step[data-step="2"]')) && !visible(doc.querySelector('.reg-step[data-step="3"]')));
+  check('all existing basic required fields are still present', ['rg-name', 'rg-email', 'rg-birthdate', 'rg-gender', 'rg-school'].every((id) => Boolean($(id)) && $(id).required));
+  check('email and birthday use suitable input types', $('rg-email').type === 'email' && $('rg-birthdate').type === 'date');
+  check('gender here is Male / Female only', [...$('rg-gender').options].map((o) => o.value).join(',') === ',male,female', [...$('rg-gender').options].map((o) => o.value).join(','));
   submit(doc.querySelector('#regular-form'));
   await sleep(60);
-  check('an empty step 1 is blocked', !visible(doc.querySelector('.reg-step[data-step="2"]')) && doc.querySelectorAll('.reg-step[data-step="1"] .field.invalid').length >= 1);
+  check('an empty Basic Information section is blocked', visible(doc.querySelector('.reg-step[data-step="1"]')) && doc.querySelectorAll('.reg-step[data-step="1"] .field.invalid').length >= 1);
+  check('validation errors are linked to their fields for assistive technology', $('rg-name').getAttribute('aria-invalid') === 'true' && $('rg-name').getAttribute('aria-describedby')?.includes('rg-name-error') && $('rg-name-error')?.textContent.includes('full name'));
   type($('rg-name'), 'Reg Check Person');
   type($('rg-email'), 'regcheck@example.com');
   type($('rg-birthdate'), '2003-06-15');
@@ -173,90 +180,110 @@ section('REGULAR WIZARD — step 1');
   type($('rg-school'), 'Reg Check School');
   submit(doc.querySelector('#regular-form'));
   await sleep(120);
-  check('a filled step 1 advances to step 2', visible(doc.querySelector('.reg-step[data-step="2"]')));
-  check('the stepper marks step 1 done', doc.querySelector('#regSteps li[data-step="1"]')?.className.includes('is-done'));
+  check('a valid basic section advances to Additional Information', visible(doc.querySelector('.reg-step[data-step="2"]')));
+  check('the progress indicator marks Basic Information complete and Additional Information current', doc.querySelector('#regSteps li[data-step="1"]')?.className.includes('is-done') && doc.querySelector('#regSteps li[data-step="2"]')?.getAttribute('aria-current') === 'step');
+  check('the next heading receives focus for keyboard navigation', doc.activeElement === $('rgAdditionalHeading'));
 }
 
-section('REGULAR WIZARD — step 2 (ministry, leaders)');
+section('ADDITIONAL INFORMATION — ministry, leaders, and Youth Welfare');
 {
-  check('step 2 asks for the ministry', Boolean($('rg-ministry')));
+  check('Ministry and Youth Welfare stay in the same integrated Additional Information section', visible(doc.querySelector('.reg-step[data-step="2"]')) && Boolean($('rg-ministry')) && Boolean($('rg-education-status')) && Boolean($('rg-youth-consent')));
   const options = [...$('rg-ministry').options].map((o) => o.value).filter(Boolean);
   check('the ministry list is exactly the eight approved options', JSON.stringify(options) === JSON.stringify(['Worship Team', 'Ushering', 'Media / Tech', 'Kids Ministry', 'Dance / Creative', 'Prayer', 'Production', 'Not yet in a ministry']), options.join(' | '));
-  check('the placeholder is Choose a ministry...', $('rg-ministry').options[0].textContent.includes('Choose a ministry'));
+  check('the ministry placeholder is preserved', $('rg-ministry').options[0].textContent.includes('Choose a ministry'));
   const leaderCalls = calls.filter((c) => c.path.startsWith('/api/public/leaders'));
-  check('the leader list was requested for the chosen gender', leaderCalls.length >= 1 && leaderCalls.at(-1).path.includes('gender=male'), JSON.stringify(leaderCalls.at(-1) || {}));
+  check('the live leader list is requested for the chosen gender', leaderCalls.length >= 1 && leaderCalls.at(-1).path.includes('gender=male'), JSON.stringify(leaderCalls.at(-1) || {}));
   const leaderOptions = [...$('rg-leader').options].map((o) => o.textContent);
-  check('the dropdown shows the real leaders with their lifegroup', leaderOptions.some((t) => t.includes('Kuya Mark') && t.includes('Open Cell A')), leaderOptions.join(' | '));
-  check('it does not show a fictional leader', !leaderOptions.some((t) => /fake|sample|test leader/i.test(t)));
-  check('the invited-by field is optional (no asterisk requirement)', Boolean($('rg-inviter')));
-  // gender change refreshes the list
+  check('the dropdown shows current leaders and their Lifegroup', leaderOptions.some((t) => t.includes('Kuya Mark') && t.includes('Open Cell A')), leaderOptions.join(' | '));
+  check('the dropdown does not show a fictional leader', !leaderOptions.some((t) => /fake|sample|test leader/i.test(t)));
+  check('the invited-by field remains optional', Boolean($('rg-inviter')) && !$('rg-inviter').required);
+  check('leader help text is associated with its select', $('rg-leader').getAttribute('aria-describedby') === 'rgLeaderHelp');
+  // Gender changes refresh live leaders; this also confirms answers survive the section boundary.
   $('rg-gender').value = 'female'; change($('rg-gender'));
   await sleep(120);
   const femaleOptions = [...$('rg-leader').options].map((o) => o.textContent);
-  check('changing gender fetches the list again', calls.filter((c) => c.path.includes('gender=female')).length >= 1);
-  check('the female leaders replace the male ones', femaleOptions.some((t) => t.includes('Ate Grace')) && !femaleOptions.some((t) => t.includes('Kuya Mark')), femaleOptions.join(' | '));
-  // select a verified leader → assignment rows fill from the API data
+  check('changing gender refreshes the leader list', calls.filter((c) => c.path.includes('gender=female')).length >= 1);
+  check('female leaders replace male leaders', femaleOptions.some((t) => t.includes('Ate Grace')) && !femaleOptions.some((t) => t.includes('Kuya Mark')), femaleOptions.join(' | '));
   $('rg-leader').value = '31'; change($('rg-leader'));
   await sleep(60);
-  check('the assignment block appears for a chosen leader', visible($('rgAssign')));
-  check('the lifegroup leader is the real name', $('rgAssignLeader').textContent === 'Ate Grace', $('rgAssignLeader').textContent);
-  check('the network leader comes from the data', $('rgAssignNetwork').textContent === 'Ate Yhail', $('rgAssignNetwork').textContent);
-  check('the Open Cell is shown', $('rgAssignCell').textContent.includes('Open Cell C'), $('rgAssignCell').textContent);
-  // nobody available for that gender → no leader list, manual entry instead
+  check('a selected leader shows verified Lifegroup assignment', visible($('rgAssign')) && $('rgAssignLeader').textContent === 'Ate Grace' && $('rgAssignNetwork').textContent === 'Ate Yhail' && $('rgAssignCell').textContent.includes('Open Cell C'));
+  // Empty live lists still permit the existing manual-name path.
   leadersEmpty = true;
   $('rg-gender').value = 'female'; change($('rg-gender'));
   await sleep(150);
-  check('an empty leader list shows No leader available yet.', $('rg-leader').options[0].textContent.includes('No leader available yet'), $('rg-leader').options[0].textContent);
-  check('the leader select is disabled when nobody is available', $('rg-leader').disabled === true);
+  check('an empty leader list explains that no leader is available yet', $('rg-leader').options[0].textContent.includes('No leader available yet'));
+  check('the empty leader selector is disabled and manual entry remains available', $('rg-leader').disabled === true && Boolean($('rgManualToggle')));
   leadersEmpty = false;
-  check('the manual entry option is offered', Boolean($('rgManualToggle')) && (doc.querySelector('#rgManualToggle').textContent || '').toLowerCase().includes('not on the list'));
-  // manual path
   click($('rgManualToggle'));
   await sleep(40);
-  check('the manual name field opens', visible($('rgManualWrap')));
-  check('hiding the list clears any previous leader', $('rg-leader').value === '');
+  check('manual leader entry opens and clears any previous selected leader', visible($('rgManualWrap')) && $('rg-leader').value === '');
   type($('rg-manual'), 'Kuya Not In Records');
-  // missing ministry is blocked
-  click($('rgNext2'));
+  click($('rgNextWelfare'));
   await sleep(60);
-  check('step 2 is blocked without a ministry', !visible(doc.querySelector('.reg-step[data-step="3"]')) && Boolean($('rg-ministry').closest('.field')?.classList.contains('invalid')));
+  check('the Additional Information section is blocked when ministry is missing', visible(doc.querySelector('.reg-step[data-step="2"]')) && $('rg-ministry').closest('.field')?.classList.contains('invalid'));
   $('rg-ministry').value = 'Prayer'; change($('rg-ministry'));
-  click($('rgNext2'));
+  click($('rgNextWelfare'));
+  await sleep(80);
+  check('required Youth Welfare answers and the separate consent block an empty section', visible(doc.querySelector('.reg-step[data-step="2"]')) && !visible(doc.querySelector('.reg-step[data-step="3"]')) && $('rg-address').closest('.field')?.classList.contains('invalid'));
+  check('school interruption questions are hidden by default', $('rg-school-stop-wrap').hidden);
+  check('grade/year stays hidden until an applicable status is chosen', $('rg-grade-wrap').hidden);
+  type($('rg-address'), '21 Maharlika Street, Bulacan');
+  type($('rg-contact'), '+639171234567');
+  type($('rg-guardian-name'), 'Maria Cruz');
+  type($('rg-guardian-contact'), '+639181234567');
+  $('rg-education-status').value = 'currently_studying'; change($('rg-education-status'));
+  check('grade/year appears for a currently studying attendee', !$('rg-grade-wrap').hidden);
+  $('rg-grade-year').value = 'senior_high_grade_12'; change($('rg-grade-year'));
+  $('rg-education-status').value = 'out_of_school'; change($('rg-education-status'));
+  check('school interruption questions appear only for Out-of-School Youth', !$('rg-school-stop-wrap').hidden && $('rg-grade-wrap').hidden);
+  $('rg-school-stop-period').value = 'last_school_year';
+  const reasons = [...doc.querySelectorAll('input[name="rg-school-stop-reason"]')];
+  reasons[0].checked = true; reasons[1].checked = true;
+  $('rg-continue-studies').value = 'yes_need_help';
+  $('rg-church-invited-date').value = '2024-04-01';
+  $('rg-lcsol-enrolled').value = 'no';
+  $('rg-lcsol-status').value = 'not_yet_started';
+  $('rg-youth-consent').checked = true;
+  $('rg-lcsol-status').value = 'sol_1';
+  click($('rgNextWelfare'));
+  await sleep(70);
+  check('inconsistent LCSOL enrollment/status is blocked server-side by the UI validation', visible(doc.querySelector('.reg-step[data-step="2"]')) && $('rg-lcsol-status').closest('.field')?.classList.contains('invalid'));
+  $('rg-lcsol-status').value = 'not_yet_started';
+  click($('rgNextWelfare'));
   await sleep(100);
-  check('a completed step 2 advances to review', visible(doc.querySelector('.reg-step[data-step="3"]')));
+  check('valid answers advance to the Review & Submit section', visible(doc.querySelector('.reg-step[data-step="3"]')) && !visible(doc.querySelector('.reg-step[data-step="2"]')));
 }
 
-section('REGULAR WIZARD — step 3 review + submit');
+section('REVIEW & SUBMIT — editable answers + database save');
 {
   const review = $('rgReview').textContent;
-  check('review lists the basic information', review.includes('Reg Check Person') && review.includes('regcheck@example.com') && review.includes('2003-06-15') && review.includes('Female') && review.includes('Reg Check School'), review.slice(0, 200));
-  check('review lists the ministry', review.includes('Prayer'));
-  check('review shows the manually typed leader for admin checking', review.includes('Kuya Not In Records') && /reviewed by our team/i.test(review), review.slice(0, 400));
-  // back keeps every answer
-  click($('rgBack3'));
+  check('review lists basic identity/contact answers', review.includes('Reg Check Person') && review.includes('regcheck@example.com') && review.includes('2003-06-15') && review.includes('Female') && review.includes('Reg Check School'), review.slice(0, 220));
+  check('review lists ministry and leader details', review.includes('Prayer') && review.includes('Kuya Not In Records'));
+  check('review includes Youth Welfare answers and conditional reasons', review.includes('21 Maharlika Street') && review.includes('Maria Cruz') && review.includes('Out-of-school youth/stopped schooling') && review.includes('Financial problem') && review.includes('Needed to work') && review.includes('Yes, but I need help'));
+  check('the review step is announced as current', $('regSteps').querySelector('li[aria-current="step"]')?.dataset.step === '3');
+  click($('rgBackReview'));
+  await sleep(80);
+  check('going back to Additional Information preserves Youth Welfare answers', $('rg-address').value === '21 Maharlika Street, Bulacan' && $('rg-guardian-name').value === 'Maria Cruz' && $('rg-youth-consent').checked);
+  click($('rgBackWelfare'));
   await sleep(60);
-  check('going back to step 2 keeps the manual name', $('rg-manual').value === 'Kuya Not In Records');
-  click($('rgBack2'));
-  await sleep(60);
-  check('going back to step 1 keeps the typed values', $('rg-name').value === 'Reg Check Person' && $('rg-email').value === 'regcheck@example.com' && $('rg-school').value === 'Reg Check School' && $('rg-birthdate').value === '2003-06-15');
-  check('the stepper went back to step 1', doc.querySelector('#regSteps li[data-step="1"]')?.className.includes('is-active'));
-  // forward again, then submit without consent
+  check('going back to Basic Information preserves entered identity and leader answers', $('rg-name').value === 'Reg Check Person' && $('rg-email').value === 'regcheck@example.com' && $('rg-school').value === 'Reg Check School' && $('rg-birthdate').value === '2003-06-15' && $('rg-manual').value === 'Kuya Not In Records');
+  check('the progress indicator returns to Basic Information', doc.querySelector('#regSteps li[data-step="1"]')?.className.includes('is-active') && doc.querySelector('#regSteps li[data-step="1"]')?.getAttribute('aria-current') === 'step');
   submit(doc.querySelector('#regular-form'));
+  await sleep(120);
+  click($('rgNextWelfare'));
   await sleep(150);
-  click($('rgNext2'));
-  await sleep(150);
-  check('review renders again with the same data', $('rgReview').textContent.includes('Reg Check Person'));
+  check('answers still render in Review & Submit after navigating forward again', visible(doc.querySelector('.reg-step[data-step="3"]')) && $('rgReview').textContent.includes('Maria Cruz'));
   click($('rgSubmit'));
   await sleep(80);
-  check('submit is blocked without the consent box', !visible($('reg-success')));
+  check('submit is blocked until the separate regular-registration consent is checked', !visible($('reg-success')) && !$('rg-consent').checked);
   $('rg-consent').checked = true;
   const before = calls.length;
   click($('rgSubmit'));
-  await sleep(200);
+  await sleep(220);
   const posted = calls.slice(before).find((c) => c.path === '/api/public/registrations/regular');
-  check('the wizard posts to the regular registration endpoint', Boolean(posted));
-  check('the posted body carries every answer', posted && posted.body.full_name === 'Reg Check Person' && posted.body.email === 'regcheck@example.com' && posted.body.birthdate === '2003-06-15' && posted.body.gender === 'female' && posted.body.ministry === 'Prayer' && posted.body.leader_name_manual === 'Kuya Not In Records' && posted.body.privacy_consent === true, JSON.stringify(posted?.body));
-  check('a request key is sent so a double tap cannot register twice', typeof posted?.body.idempotency_key === 'string' && posted.body.idempotency_key.length >= 16);
+  check('the wizard posts to the existing regular-registration endpoint', Boolean(posted));
+  check('the request carries both consents and all answers', posted && posted.body.full_name === 'Reg Check Person' && posted.body.email === 'regcheck@example.com' && posted.body.birthdate === '2003-06-15' && posted.body.gender === 'female' && posted.body.ministry === 'Prayer' && posted.body.leader_name_manual === 'Kuya Not In Records' && posted.body.privacy_consent === true && posted.body.youth_welfare.consent === true && posted.body.youth_welfare.parent_guardian_name === 'Maria Cruz' && posted.body.youth_welfare.school_stop_reasons.length === 2 && posted.body.youth_welfare.lcsol_enrolled === false && posted.body.youth_welfare.lcsol_status === 'not_yet_started', JSON.stringify(posted?.body));
+  check('a random request key is sent for server-side idempotency', typeof posted?.body.idempotency_key === 'string' && posted.body.idempotency_key.length >= 16);
 }
 
 section('SUCCESS CONFIRMATION');
@@ -276,9 +303,8 @@ section('SUCCESS CONFIRMATION');
   click($('reg-success').querySelector('button, a') || $('reg-success'));
 }
 
-section('REGULAR WIZARD — verified leader + review note');
+section('REGULAR WIZARD — verified leader + retry/idempotency');
 {
-  // second pass with a verified leader to see the exact assignment note
   const dom2 = new JSDOM(html, {
     url: BASE + '/', runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole,
     beforeParse(w) { prepare(w); },
@@ -286,7 +312,7 @@ section('REGULAR WIZARD — verified leader + review note');
   const d2 = dom2.window.document;
   const $2 = (id) => d2.getElementById(id);
   for (let i = 0; i < 100 && !dom2.window.Lifegen?.DB; i++) await sleep(50);
-  await sleep(120);
+  await sleep(130);
   $2('chooseRegular').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
   const t2 = (el, v) => { el.value = v; el.dispatchEvent(new dom2.window.Event('input', { bubbles: true })); };
   t2($2('rg-name'), 'Reg Check Verified'); t2($2('rg-email'), 'regverified@example.com'); t2($2('rg-birthdate'), '2002-01-05');
@@ -296,26 +322,43 @@ section('REGULAR WIZARD — verified leader + review note');
   await sleep(150);
   $2('rg-ministry').value = 'Worship Team';
   $2('rg-leader').value = '31'; $2('rg-leader').dispatchEvent(new dom2.window.Event('change', { bubbles: true }));
-  await sleep(60);
-  $2('rgNext2').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
+  t2($2('rg-address'), '10 Central Avenue, Bulacan'); t2($2('rg-contact'), '+639171112222');
+  t2($2('rg-guardian-name'), 'Juan Cruz'); t2($2('rg-guardian-contact'), '+639181112222');
+  $2('rg-education-status').value = 'currently_studying'; $2('rg-education-status').dispatchEvent(new dom2.window.Event('change', { bubbles: true }));
+  $2('rg-grade-year').value = 'college_first_year';
+  $2('rg-lcsol-enrolled').value = 'yes'; $2('rg-lcsol-status').value = 'sol_1'; $2('rg-youth-consent').checked = true;
+  $2('rgNextWelfare').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
   await sleep(120);
-  check('review shows the verified leader + network from the data', $2('rgReview').textContent.includes('Ate Grace') && $2('rgReview').textContent.includes('Ate Yhail') && $2('rgReview').textContent.includes('Open Cell C'));
+  check('review shows the verified leader and network from live data', $2('rgReview').textContent.includes('Ate Grace') && $2('rgReview').textContent.includes('Ate Yhail') && $2('rgReview').textContent.includes('Open Cell C'));
+  check('review includes Youth Welfare answers in readable labels', $2('rgReview').textContent.includes('Juan Cruz') && !$2('rgReview').textContent.includes('college_first_year') && $2('rgReview').textContent.includes('First Year College'));
   $2('rg-consent').checked = true;
-  // A server/database failure must not wipe the answers or claim success.
   regularError = { status: 500, body: { message: 'The database request could not be completed. Please try again or contact an administrator.' } };
+  regularDelay = 80;
+  const beforeFailure = calls.length;
   $2('rgSubmit').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
-  await sleep(250);
-  check('a database error does not show the success panel', !visible($2('reg-success')));
-  check('a database error keeps every answer in the form', $2('rg-name').value === 'Reg Check Verified' && $2('rg-ministry').value === 'Worship Team' && $2('rg-leader').value === '31' && $2('rg-consent').checked === true);
-  check('a database error is reported to the visitor', [...d2.querySelectorAll('.toast')].some((t) => /Registration failed/i.test(t.textContent)), [...d2.querySelectorAll('.toast')].map((t) => t.textContent).join(' / '));
-  // Now let the server say a review is needed, and confirm the note.
+  $2('rgSubmit').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
+  check('submit disables itself while the request is in flight', $2('rgSubmit').disabled === true && $2('rgSubmit').getAttribute('aria-busy') === 'true');
+  await sleep(260);
+  regularDelay = 0;
+  const failedCalls = calls.slice(beforeFailure).filter((c) => c.path === '/api/public/registrations/regular');
+  check('a repeated tap does not send a second in-flight request', failedCalls.length === 1, `requests=${failedCalls.length}`);
+  const failedKey = failedCalls[0]?.body?.idempotency_key;
+  check('a service error does not show success and retains all answers', !($2('reg-success').hidden === false) && $2('rg-name').value === 'Reg Check Verified' && $2('rg-ministry').value === 'Worship Team' && $2('rg-leader').value === '31' && $2('rg-consent').checked && $2('rg-address').value === '10 Central Avenue, Bulacan' && $2('rg-guardian-name').value === 'Juan Cruz' && $2('rg-youth-consent').checked);
+  check('the visitor gets a persistent, retryable error with the service reason', !$2('rgSubmitError').hidden && /database request could not be completed/i.test($2('rgSubmitError').textContent) && /answers are still here/i.test($2('rgSubmitError').textContent));
+  check('the failed request key stays in session for a safe retry', Boolean(failedKey) && d2.defaultView.sessionStorage.getItem('lifegen_regular_request') === failedKey);
+  check('the submit button is re-enabled after the failed request', $2('rgSubmit').disabled === false && !$2('rgSubmit').hasAttribute('aria-busy'));
+  check('the error is also announced as a visible toast', [...d2.querySelectorAll('.toast')].some((t) => /Registration failed/i.test(t.textContent)));
   regularError = null;
   regularResponse = { ok: true, person_created: true, person: { id: '901', name: 'Reg Check Verified', person_code: 'LG-2026-0901' }, membership: { created: false, tier: null, lifegroup_id: null, lifegroup_name: null }, review: { needed: true, reason: 'manual_leader_unmatched' }, leader: null };
+  const beforeRetry = calls.length;
   $2('rgSubmit').dispatchEvent(new dom2.window.MouseEvent('click', { bubbles: true }));
   await sleep(250);
+  const retry = calls.slice(beforeRetry).find((c) => c.path === '/api/public/registrations/regular');
+  check('the retry reuses the same server idempotency key', retry?.body?.idempotency_key === failedKey);
+  check('a confirmed successful response clears the retry key', d2.defaultView.sessionStorage.getItem('lifegen_regular_request') === null);
   const note = $2('regSuccessNote');
-  check('the confirmation states that admin review is coming', visible($2('reg-success')) && !note.hidden && /review your Lifegroup assignment/i.test(note.textContent), note.textContent);
-  check('no "Go to dashboard" anywhere after success', !/go to dashboard/i.test($2('reg-success').textContent));
+  check('the confirmation appears only after a saved response and states admin review is coming', !$2('reg-success').hidden && !note.hidden && /review your Lifegroup assignment/i.test(note.textContent), note.textContent);
+  check('no "Go to dashboard" appears after success', !/go to dashboard/i.test($2('reg-success').textContent));
   dom2.window.close();
 }
 
@@ -328,7 +371,10 @@ section('LAYOUT (fits the original card)');
   const block = styles.match(/\.reg-[a-z-]+[^}]*\}/g) || [];
   const wide = block.filter((r) => /(?:^|[^-])width:\s*(\d{3,})px/.test(r) && Number(RegExp.$1) >= 600);
   check('no new rule forces a width wider than the card', wide.length === 0, wide.join(' '));
-  check('the stepper wraps instead of overflowing', /\.reg-steps\{[^}]*flex-wrap:wrap/.test(styles.replace(/\s+/g, '')));
+  check('the original stepper still wraps instead of overflowing', /\.reg-steps\{[^}]*flex-wrap:wrap/.test(styles.replace(/\s+/g, '')));
+  check('the three-section progress is a mobile grid with no fixed width', /#regSteps\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/.test(registrationStyles.replace(/\s+/g, '')));
+  check('registration controls and action buttons have phone-sized tap targets', /min-height:48px/.test(registrationStyles) && /min-height:44px/.test(registrationStyles) && /width:20px;height:20px/.test(registrationStyles));
+  check('the registration total is presented as text rather than a cap or progress bar', $('regRegistrationCount').textContent.includes('Registration remains open') && !/max|limit|capacity/i.test($('regRegistrationCount').textContent));
   check('the choice boxes are slim (no stretched gap between text and button)', !/\.reg-choice__card p\{[^}]*flex:1/.test(styles) && /\.reg-choice__card\{[^}]*padding:12px 14px/.test(styles));
   check('copy and card stay side by side on a narrow laptop/preview width', /@media\s*\(min-width:761px\)\s*and\s*\(max-width:1024px\)\s*\{\s*\.vip-grid\s*\{\s*grid-template-columns:\s*\.92fr 1\.08fr/.test(styles));
   check('the stepper is an ordered list in the page', doc.querySelector('#regSteps')?.tagName === 'OL');

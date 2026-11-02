@@ -1,11 +1,11 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.4",
-    "sha256": "6061f3c2315ccd61708a81ee993a83471ffd7eb752b8c322808d7e4f0605d808"
+    "version": "2.4.6",
+    "sha256": "84fd48a0056e3ad45e583fe6659984f4e60ba717a7195a659c1d1c9f7f4b66b1"
   },
   "/lifegen/backend.js": {
-    "version": "2.4.9",
-    "sha256": "b227d0ee522a5cc69a3167fa370111b860fc42621fa27735d68e785b4db7e88d"
+    "version": "2.4.10",
+    "sha256": "a2e821e1ed13cef08f863c6a377629bd46ddff60d03c1ee3ab90713cc104bd03"
   },
   "/lifegen/calendar.js": {
     "version": "2.3.11",
@@ -18,6 +18,10 @@
   "/lifegen/videos.js": {
     "version": "2.4.10",
     "sha256": "a57c8cbf231d92c850c9680fc5978ec555278bf13ce258ea215e229eea0c153b"
+  },
+  "/lifegen/youth-welfare-registration.css": {
+    "version": "2.4.25",
+    "sha256": "0999d4d8433164ecd9c8133ed578bcb096f7105e27a0ac8b152b40dc684304c9"
   },
   "/vendor/lucide-subset.min.js": {
     "version": "2.3.1",

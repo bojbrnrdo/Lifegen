@@ -35,6 +35,11 @@ export const state = {
   serverToday: null,
 };
 export const can = (perm) => Boolean(state.user?.permissions?.includes(perm));
+const isYouthWelfareRole = role => ['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(role);
+const youthWelfareUrl = preview => {
+  const token = preview ? api.getPreviewSessionToken() : null;
+  return '/youth-welfare' + (token ? `#preview-session=${encodeURIComponent(token)}` : '');
+};
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -244,13 +249,23 @@ export async function boot() {
   if (!status.user) {
     app.className = '';
     if ((location.hash.replace(/^#/, '') || '').split('?')[0] === '/privacy') { renderPublicPrivacy(app); return; }
-    renderLogin(app, async () => {
+    renderLogin(app, async (loginUser) => {
       try {
         const verified=await api.status(); if(!verified.user) return false;
+        const signedInUser=verified.user||loginUser;
+        if(isYouthWelfareRole(signedInUser.role_id)){
+          // In production the HttpOnly cookie carries the session across this redirect.
+          // Hosted previews hand off their in-memory bearer in a fragment, consumed immediately.
+          location.replace(youthWelfareUrl(verified.preview)); return true;
+        }
         if(!location.hash) history.replaceState(null, '', `${location.pathname}${location.search}#/dashboard`);
         await boot(); return true;
       } catch { return false; }
     });
+    return;
+  }
+  if(isYouthWelfareRole(status.user.role_id)){
+    location.replace(youthWelfareUrl(status.preview));
     return;
   }
   state.user = status.user;

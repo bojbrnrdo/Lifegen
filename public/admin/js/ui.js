@@ -112,7 +112,7 @@ export function fmtClock(hhmm) {
 }
 /** "Saturday 5:00 PM" or "Schedule not set". */
 export const fmtSchedule = (g) => (g.schedule_day || g.schedule_time ? `${DAY_LABELS[g.schedule_day] || ''} ${fmtClock(g.schedule_time)}`.trim() : '');
-export const ROLE_LABELS = { admin: 'Admin', staff: 'Attendance Staff', viewer: 'Viewer' };
+export const ROLE_LABELS = { admin: 'Admin', staff: 'Attendance Staff', viewer: 'Viewer', youth_welfare_admin: 'Youth Welfare Admin (portal-only)', youth_welfare_staff: 'Youth Welfare Staff (portal-only)', youth_welfare_viewer: 'Youth Welfare Viewer (portal-only)' };
 
 export const fullName = (p) => p.full_name || `${p.first_name} ${p.last_name}`;
 export const initials = (p) => `${(p.first_name || '?')[0]}${(p.last_name || '')[0] || ''}`.toUpperCase();

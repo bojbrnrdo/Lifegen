@@ -20,7 +20,7 @@ export function renderLogin(root, onSuccess) {
   const recoveryAvailable=root.dataset.recovery==='true';
   root.innerHTML = shell('LIFEGEN Admin', 'People, VIP registrations, calendar and attendance', `
     <form id="loginForm" class="stack" novalidate>
-      ${root.dataset.demo === "true" ? '<div class="alert alert--info small">Local demo only: <b>demo@lifegen.local</b> / <b>LifegenDemo2026!</b></div>' : ""}
+      ${root.dataset.demo === "true" ? '<div class="alert alert--info small"><span style="flex:1;min-width:0"><b>Local demo only</b><br>Main Admin: <b>demo@lifegen.local</b> / <b>LifegenDemo2026!</b><br>Youth Welfare: <b>demo-youth@lifegen.local</b> / <b>DemoYouthWelfare2026!</b> (opens the Youth Welfare dashboard)</span></div>' : ""}
       <div id="loginError" class="alert alert--error" hidden></div>
       <div id="recoveryNotice" class="alert alert--success" hidden></div>
       <div class="field"><label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus /></div>

@@ -1,8 +1,10 @@
 # Preview database (PGlite wire gateway)
 
-The live preview runs the app against an embedded PostgreSQL (PGlite) exposed
-over the PostgreSQL wire protocol on port **5433**, so the normal
-`postgres://` driver stack works unchanged.
+The live preview runs the app against an embedded PostgreSQL (PGlite) over the
+PostgreSQL wire protocol on port **5433**, so the normal `postgres://` driver
+stack works unchanged. The gateway binds only to **127.0.0.1**: LIFEGEN connects
+from the same sandbox, and the unauthenticated database port is never exposed
+through a public preview hostname.
 
 The runtime directory is `/home/user/pglite-db` (outside the repo, may be
 wiped by sandbox resets). The canonical copies of every script live HERE in
@@ -13,7 +15,7 @@ mkdir -p /home/user/pglite-db && cp preview-db/{server.mjs,apply-migrations.mjs,
 cd /home/user/pglite-db && npm install
 node apply-migrations.mjs      # gateway MUST be stopped
 node seed-demo.mjs             # gateway MUST be stopped
-node server.mjs &              # start gateway on :5433 (use start_process)
+node server.mjs &              # start local-only gateway on 127.0.0.1:5433 (use start_process)
 node seed-vip-demo.mjs         # runs over the wire
 node seed-sunday-demo.mjs      # example VIPs on the coming Sunday's board
 ```
@@ -28,7 +30,9 @@ DATABASE_DIRECT_URL=postgres://postgres@127.0.0.1:5433/lifegen \
 LOCAL_DEMO=true LOCAL_DEMO_CLOCK=2026-10-18T13:05:00+08:00 PORT=3000 npm start
 ```
 
-Sign in: `demo@lifegen.local` / `LifegenDemo2026!`
+Sign in to the main Admin preview: `demo@lifegen.local` / `LifegenDemo2026!`.
+
+Youth Welfare preview: open `/youth-welfare` and use `demo-youth@lifegen.local` / `DemoYouthWelfare2026!`. The seed creates fictional ministry categories, a few administrative review tasks, a personal saved view, and a report template. This account and its fictional member records exist only in the disposable local demo database; they are not production credentials. Apply the numbered migrations through `015_youth_welfare_records.sql` before seeding; this includes the protected answer/review schema required by the portal. The access table and portal-only roles never replace primary LIFEGEN roles. Never apply these preview instructions to production.
 
 ## Gateway invariants (do not regress)
 

@@ -25,13 +25,26 @@ The scripts are additive and do not drop business tables. Migrations `003`, `004
    7. `database/006_lifegroup_tracker.sql`
    8. `database/007_vip_service_date.sql`
    9. `database/008_vip_design_library.sql`
+   10. `database/009_vip_gift_tracker.sql`
+   11. `database/010_public_registration.sql`
+   12. `database/011_youth_welfare.sql`
+   13. `database/012_youth_welfare_workspace.sql`
+   14. `database/013_youth_welfare_viewer.sql`
+   15. `database/014_youth_welfare_access.sql`
+   16. `database/015_youth_welfare_records.sql`
 
-   Run the files one at a time, in that order, and wait for a successful completion before moving to the next. Keep the SQL text unchanged. `001`, `006`, `007` and `008` also create private migration/version records; all files are transaction-wrapped.
+   Run the files one at a time, in that order, and wait for a successful completion before moving to the next. Keep the SQL text unchanged. `001`, `006`, `007`, `008`, and `010`–`015` also create private migration/version records; all files are transaction-wrapped. For an existing project, run only pending migrations in order after a verified backup and successful staging test. Migrations `011`–`015` are additive: `011` adds the separate category table and registration-event index; `012` adds portal tasks, private views/templates, and reminder tables; `013` permits the Viewer role; `014` adds the server-only access-assignment table and backfills existing Youth Welfare roles without changing primary LIFEGEN roles; `015` adds protected questionnaire answers/consent, Admin-reviewed corrections, Admin-only history, hashed request idempotency, and the limited Staff role. Migration 015 does not backfill or overwrite People answers. Browser roles receive no direct privileges; these migrations do not delete People, registration, attendance, or VIP records.
 
 3. If LIFEGEN migrations `001`–`005` were already applied to this project, **do not recreate or reset the database**. Back it up and run `database/006_lifegroup_tracker.sql` to restore the tracker tables. The retired `003` file in this branch is a no-op, so it will not drop existing tracker data.
 4. If LIFEGEN migrations `001`–`006` are already applied, run `database/007_vip_service_date.sql` on its own. It is additive and non-destructive: it adds `vip_registrations.service_date`, backfills it from `created_at` in `Asia/Manila`, adds two partial unique indexes that stop duplicate registrations inflating the announced VIP count, and creates the announcement-window settings rows. No registration row is deleted.
 5. If LIFEGEN migrations `001`–`007` are already applied, run `database/008_vip_design_library.sql` on its own. It is additive and non-destructive: it creates the `vip_designs` artwork library and the `vip_service_designs` per-Sunday selection table, and touches no existing table. No VIP registration, person or lifegroup record is read, changed or deleted.
-6. Verify the migration versions and tracker tables in SQL Editor:
+6. If migration `008` is already applied, apply pending `009_vip_gift_tracker.sql` and `010_public_registration.sql` in order before Youth Welfare. Migration `010` widens the public registration gender constraint and adds an email lookup index; it does not rewrite registration rows.
+7. If migrations `001`–`010` are already applied, run `database/011_youth_welfare.sql` on its own. It permits one new restricted role, creates a separate ministry-category table with no backfill, and adds a partial index to locate main-website registration events. It neither copies nor edits registration data.
+8. After `011` succeeds, run `database/012_youth_welfare_workspace.sql`. It adds follow-up tasks, per-user saved views/report templates, and reminder dismissals with RLS enabled and no browser-role table grants.
+9. After `012` succeeds, run `database/013_youth_welfare_viewer.sql` to permit the read-only portal role in `staff_users.role_id`. It does not create another user store or change existing accounts.
+10. After `013` succeeds, run `database/014_youth_welfare_access.sql`. It creates an additive Youth Welfare access-assignment table, backfills current Youth Welfare Admin/Viewer assignments, and leaves primary LIFEGEN roles and People records unchanged. It enables RLS and grants no direct access to browser roles. Do not run it in production before a verified backup and staging test.
+11. After `014` succeeds, review and then run `database/015_youth_welfare_records.sql` only with explicit production approval. This migration adds the separate Youth Welfare questionnaire-answer table, correction proposals, Admin-only history, public registration request idempotency, and the portal-only Staff role. It preserves existing People values, provides no browser grants, and does not import historical Google Form responses. Confirm the organization’s minors policy and required guardian-data handling before enabling collection; the UI does not add separate guardian-consent wording or a checkbox.
+12. Verify the migration versions and tracker/welfare tables in SQL Editor:
 
    ```sql
    SELECT version FROM public.schema_migrations ORDER BY version;
@@ -39,7 +52,10 @@ The scripts are additive and do not drop business tables. Migrations `003`, `004
    SELECT to_regclass('public.' || table_name) AS table_name
    FROM unnest(ARRAY[
      'networks', 'lifegroups', 'lifegroup_memberships',
-     'lifegroup_meetings', 'lifegroup_meeting_attendance'
+     'lifegroup_meetings', 'lifegroup_meeting_attendance',
+     'youth_welfare_access', 'youth_welfare_records',
+     'youth_welfare_record_updates', 'youth_welfare_record_history',
+     'public_registration_requests'
    ]) AS t(table_name);
    ```
 
