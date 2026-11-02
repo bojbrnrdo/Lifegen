@@ -73,7 +73,8 @@ const apiFetch = async (input, init = {}) => {
   }
   if (path === '/api/public/registrations') return jsonResponse({ vip: { id: '1', person_id: '2', name: 'Vip Person', created_at: new Date().toISOString() }, recovery_code: 'LG-testrecoverycode123' });
   if (path === '/api/public/vip/restore') return jsonResponse({ vip: { id: '1', person_id: '2', name: 'Vip Person' } });
-  if (path.startsWith('/api/public/vip')) return jsonResponse({ vip: null, checkins: [], attendance: [], state: null });
+  if (path === '/api/public/vip') return jsonResponse({ registered: true, vip: { id: '1', person_id: '2', name: 'Returning VIP' }, checkins: [], attendance: [], state: null });
+  if (path.startsWith('/api/public/vip')) return jsonResponse({ registered: false, vip: null, checkins: [], attendance: [], state: null });
   if (path === '/api/public/config') return jsonResponse({ server_time: new Date().toISOString(), legacy_restore_enabled: false, hosted_preview: false, preview: false, church_name: 'Lifegiver Church of Faith' });
   if (path === '/api/public/posts') return jsonResponse([]);
   if (path === '/api/public/verse') return jsonResponse({ text: 'The Lord is my shepherd.', reference: 'Psalm 23:1' });
@@ -86,6 +87,15 @@ const apiFetch = async (input, init = {}) => {
 // would look like an app error when it is only a missing browser API.
 function prepare(window) {
   window.fetch = (input, init) => apiFetch(input, init);
+  window.__registrationSyncCallbacks = [];
+  const nativeSetInterval = window.setInterval.bind(window);
+  window.setInterval = (callback, delay, ...args) => {
+    if (delay === 15000) {
+      window.__registrationSyncCallbacks.push(() => callback(...args));
+      return 0;
+    }
+    return nativeSetInterval(callback, delay, ...args);
+  };
   window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   window.IntersectionObserver = class { constructor(cb) { this.cb = cb; } observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
   window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -108,6 +118,7 @@ const dom = new JSDOM(html, {
   beforeParse(window) { prepare(window); },
 });
 const { window } = dom;
+const registrationSyncCallbacks = window.__registrationSyncCallbacks;
 const doc = window.document;
 const $ = (id) => doc.getElementById(id);
 const visible = (el) => Boolean(el) && !el.hidden;
@@ -140,6 +151,9 @@ section('VIP FORM (gender + birthday)');
   click($('chooseVip'));
   check('VIP form opens', visible($('vip-signup-form-container')));
   check('the selection screen closes', !visible($('reg-choice')));
+  check('a returning VIP has a background-session refresh to exercise', registrationSyncCallbacks.length > 0);
+  registrationSyncCallbacks[0]?.();
+  check('background VIP refresh keeps the active VIP form open', visible($('vip-signup-form-container')) && !visible($('reg-choice')));
   check('the title is VIP First-Timer Registration', (doc.querySelector('#vipCard')?.textContent || '').includes('VIP First-Timer Registration'));
   check('there is a Gender field with Male / Female only', $('vip-gender') && [...$('vip-gender').options].map((o) => o.value).join(',') === ',male,female', [...$('vip-gender').options].map((o) => o.value).join(','));
   check('there is a Birthday date field', $('vip-birthdate')?.type === 'date');
@@ -160,7 +174,9 @@ section('REGULAR WIZARD — Basic Information');
 {
   click($('chooseRegular'));
   await sleep(170);
+  registrationSyncCallbacks[0]?.();
   check('the regular form opens inside the existing card', visible($('regular-registration')));
+  check('background VIP refresh keeps the active regular registration open', visible($('regular-registration')) && !visible($('reg-choice')));
   check('it is titled LIFEGEN Registration', (doc.querySelector('#regular-registration')?.textContent || '').includes('LIFEGEN Registration'));
   check('the wizard has exactly three sections: Basic, Additional, Review & Submit', doc.querySelectorAll('#regSteps li').length === 3 && doc.querySelector('#regSteps li[data-step="1"]')?.textContent.includes('Basic Information') && doc.querySelector('#regSteps li[data-step="2"]')?.textContent.includes('Additional Information') && doc.querySelector('#regSteps li[data-step="3"]')?.textContent.includes('Review & Submit'));
   check('the current step is announced accessibly', doc.querySelector('#regSteps')?.getAttribute('aria-label') === 'Registration progress' && doc.querySelector('#regSteps li[data-step="1"]')?.getAttribute('aria-current') === 'step');
