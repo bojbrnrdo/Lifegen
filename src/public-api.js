@@ -8,7 +8,7 @@ import { publicCalendar, upcomingEvents, eventToIcs, getEvent, publicShape, week
 import { currentInstant } from './service-cycle.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
-import { handleLifegroupMethod } from './lifegroups.js';
+import { handleLifegroupMethod, effectiveGroupCapacity } from './lifegroups.js';
 import { normalizeYouthWelfareAnswers, YOUTH_WELFARE_CONSENT_VERSION } from './youth-welfare-form.js';
 // ---------------------------------------------------------------------------
 // Public registration (VIP first-timer + regular attendee)
@@ -24,7 +24,11 @@ const PUBLIC_MINISTRIES = ['Worship Team','Ushering','Media / Tech','Kids Minist
 const PUBLIC_REGISTRATION_BURST_LIMIT = 1200;
 const PUBLIC_LEADER_LOOKUP_BURST_LIMIT = 1200;
 
-const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T12:00:00Z'));
+export const isIsoDate = (v) => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const date = new Date(`${v}T12:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === v;
+};
 function ageFromBirthdate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const [ty, tm, td] = today().split('-').map(Number);
@@ -222,8 +226,10 @@ publicRouter.post('/registrations',async(req,res)=>{
  if(name.length<2||name.length>200||!Number.isInteger(age)||age<1||age>120||!school||school.length>300||!inviter||inviter.length>200)throw httpError(400,'Enter a valid name, birthday, school/institution and inviter.');
  if(contact&&contact.replace(/\D/g,'').length<7)throw httpError(400,'Contact number looks too short.');
  const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');const key=hashToken(rawKey);
- const existing=await readVip(req);
- if(existing)return res.json({vip:vipShape(existing),already_registered:true});
+ // Public is unlimited: every submit creates a fresh VIP record even if the
+ // browser already holds a VIP cookie. The cookie-session is simply rotated
+ // to the newest registration; the personal attendance dashboard is admin-only
+ // and is not rendered on the public site.
  const result=await withState(async({data,client})=>{
   const duplicate=(await client.query('SELECT * FROM vip_registrations WHERE idempotency_key=$1',[key])).rows[0];
   if(duplicate){const session=await startVipSession(client,duplicate.id);return {vip:vipShape(duplicate),session,already_registered:true};}
@@ -433,15 +439,26 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
   // ---- the Open cell: tier 'new' in the leader's own Lifegroup ----
   let membership={created:false,tier:null,lifegroup_id:null,lifegroup_name:null};
   if(leader){
+   // Lock the selected Cell before checking its active membership count. This
+   // keeps public registration consistent with staff/VIP assignment when the
+   // last available slot is being claimed at the same time.
+   const group=(await client.query('SELECT id,name,capacity,is_active FROM lifegroups WHERE id=$1 FOR UPDATE',[leader.lifegroup_id])).rows[0];
+   if(!group||!group.is_active)throw httpError(409,'That Lifegroup is no longer available. Please choose again.');
    const current=(await client.query('SELECT m.id,m.tier,g.id AS group_id,g.name AS group_name FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id WHERE m.person_id=$1 AND m.left_at IS NULL',[person.id])).rows[0];
    if(current){
     membership={created:false,tier:current.tier,lifegroup_id:String(current.group_id),lifegroup_name:current.group_name};
     if(!review)review={needed:true,reason:'already_in_a_lifegroup'};
    } else {
-    const membershipId=await allocateId(client,'lifegroup_memberships');
-    await client.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at) VALUES($1,$2,$3,'member','new',$4)",[membershipId,person.id,leader.lifegroup_id,today()]);
-    membership={created:true,tier:'new',lifegroup_id:leader.lifegroup_id,lifegroup_name:leader.lifegroup_name};
-    await logAction(client,null,'lifegroup_memberships',membershipId,'public_registration',{person_id:person.id,lifegroup_id:leader.lifegroup_id,tier:'new'});
+    const activeMembers=Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL',[group.id])).rows[0].n);
+    const capacity=effectiveGroupCapacity(group);
+    if(activeMembers>=capacity){
+     review={needed:true,reason:'lifegroup_full',lifegroup_id:String(group.id),capacity};
+    } else {
+     const membershipId=await allocateId(client,'lifegroup_memberships');
+     await client.query("INSERT INTO lifegroup_memberships(id,person_id,lifegroup_id,role,tier,joined_at) VALUES($1,$2,$3,'member','new',$4)",[membershipId,person.id,group.id,today()]);
+     membership={created:true,tier:'new',lifegroup_id:String(group.id),lifegroup_name:group.name};
+     await logAction(client,null,'lifegroup_memberships',membershipId,'public_registration',{person_id:person.id,lifegroup_id:group.id,tier:'new'});
+    }
    }
   }
 

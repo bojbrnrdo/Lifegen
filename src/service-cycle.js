@@ -58,7 +58,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   start_minute: 0,
   end_hour: 15,
   end_minute: 0,
-  announce_minutes: 30,
+  announce_minutes: 120,
 });
 
 let intlFormatter = null;

@@ -98,7 +98,7 @@ CREATE INDEX IF NOT EXISTS vip_registrations_service_date_idx
 -- cycle and a page refresh never restarts the wrong one.
 INSERT INTO settings(key, value) VALUES
   ('vip_announce_start', 'null'),
-  ('vip_announce_minutes', '30'),
+  ('vip_announce_minutes', '120'),
   ('vip_announce_service_date', 'null')
 ON CONFLICT DO NOTHING;
 

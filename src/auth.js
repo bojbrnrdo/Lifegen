@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { query, transaction, logAction } from './db.js';
 import { httpError } from './domain.js';
+import {normalizeLinkedPersonId,assertLinkablePerson} from './leader-account-link.js';
 const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
@@ -25,7 +26,7 @@ export const publicUser=u=>{
  }
  const roleFromPrimary=['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(u.role_id)?u.role_id:null;
  const youthWelfareRole=accessStatus==='active'?accessRole:accessStatus==='revoked'?null:roleFromPrimary||(u.role_id==='admin'?'youth_welfare_admin':null);
- return {id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,permissions:[...new Set(permissions)],is_active:u.is_active,youth_welfare_role:youthWelfareRole};
+ return {id:u.id,username:u.username,display_name:u.display_name,role_id:u.role_id,person_id:u.person_id??null,permissions:[...new Set(permissions)],is_active:u.is_active,youth_welfare_role:youthWelfareRole};
 };
 export function safeEqual(a,b) {const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}
 export async function passwordHash(password) {
@@ -138,8 +139,8 @@ export async function changePassword(actor,current,next) {
 }
 export async function userAccounts(actor,method,args) {
  requirePermission(actor,'users:manage');
- if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:({admin:'Admin',staff:'Attendance Staff',viewer:'Viewer / Leader',youth_welfare_admin:'Youth Welfare Admin (portal-only)',youth_welfare_staff:'Youth Welfare Staff (portal-only)',youth_welfare_viewer:'Youth Welfare Viewer (portal-only)'})[id],permissions}));
- if(method==='users')return (await query('SELECT id,username,display_name,role_id,is_active,created_at,last_login_at FROM staff_users ORDER BY id')).rows.map(u=>({...u,role_name:u.role_id}));
+ if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:({admin:'Admin',staff:'Attendance Staff',viewer:'Viewer / Leader',youth_welfare_admin:'Youth Welfare Admin (portal-only)',youth_welfare_staff:'Youth Welfare Staff (portal-only)',youth_welfare_viewer:'Youth Welfare Viewer (portal-only)'})[id]||id,permissions}));
+ if(method==='users')return (await query('SELECT id,username,display_name,role_id,person_id,is_active,created_at,last_login_at FROM staff_users ORDER BY id')).rows.map(u=>({...u,role_name:u.role_id}));
  const [idOrBody,bodyMaybe]=args;const editing=method==='updateUser';const body=editing?bodyMaybe:idOrBody;
  if(!body||!PERMISSIONS[body.role_id])throw httpError(400,'Choose a valid staff role.');
  const username=String(body.username||'').trim().toLowerCase();const display=String(body.display_name||'').trim();
@@ -147,13 +148,19 @@ export async function userAccounts(actor,method,args) {
  const hash=body.password?await passwordHash(body.password):null;if(!editing&&!hash)throw httpError(400,'A password is required.');
  return transaction(async client=>{
   let u;
+  const requestedPersonId=normalizeLinkedPersonId(body.person_id);
   if(editing) {
    const current=(await client.query('SELECT * FROM staff_users WHERE id=$1 FOR UPDATE',[Number(idOrBody)])).rows[0];if(!current)throw httpError(404,'User not found.');
    const active=body.is_active===undefined?current.is_active:Boolean(body.is_active);
+   const linkedPersonId=requestedPersonId===undefined?current.person_id:requestedPersonId;
+   await assertLinkablePerson(client,linkedPersonId,current.id);
    if(current.role_id==='admin'&&current.is_active&&(!active||body.role_id!=='admin')&&(await client.query('SELECT id FROM staff_users WHERE role_id=\'admin\' AND is_active=true')).rows.length===1)throw httpError(409,'The last active administrator cannot be disabled or demoted.');
-   u=(await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash) WHERE id=$6 RETURNING *',[username,display,body.role_id,active,hash,current.id])).rows[0];
+   u=(await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash),person_id=$7 WHERE id=$6 RETURNING *',[username,display,body.role_id,active,hash,current.id,linkedPersonId])).rows[0];
    await client.query('DELETE FROM staff_sessions WHERE user_id=$1 AND token_hash<>$2',[u.id,actor.session_hash]);
-  }else u=(await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash) VALUES($1,$2,$3,$4) RETURNING *',[username,display,body.role_id,hash])).rows[0];
+  }else {
+   await assertLinkablePerson(client,requestedPersonId);
+   u=(await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash,person_id) VALUES($1,$2,$3,$4,$5) RETURNING *',[username,display,body.role_id,hash,requestedPersonId??null])).rows[0];
+  }
   await logAction(client,actor,'staff_users',u.id,editing?'update':'create',{role:u.role_id});return publicUser(u);
  });
 }

@@ -34,7 +34,7 @@ export const state = {
   deployHelper: false,
   serverToday: null,
 };
-export const can = (perm) => Boolean(state.user?.permissions?.includes(perm));
+export const can = (perm) => Boolean(state.user?.permissions?.includes(perm)) && !(state.user?.person_id && state.user.role_id!=='admin' && ['people:write','people:delete','lifegroups:manage'].includes(perm));
 const isYouthWelfareRole = role => ['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(role);
 const youthWelfareUrl = preview => {
   const token = preview ? api.getPreviewSessionToken() : null;
@@ -163,7 +163,7 @@ function renderShell() {
             ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
           </button>
           <div class="nav__children" id="peopleMenu" hidden>
-            ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
+             ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
             ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check', true) : ''}
             ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
           </div>

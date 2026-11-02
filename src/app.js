@@ -20,8 +20,12 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
+import lifeideRouter from './lifeide.js';
 import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
+import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
+import {resolveLeaderScope} from './leader-scope.js';
+import {assertGlobalExportAccess} from './leader-export-policy.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
 import {
   youthWelfareSummary, youthWelfarePeople, youthWelfarePerson, youthWelfareCellLeaderOptions, youthWelfareCheckPersonDuplicates, youthWelfareAddMember, setYouthWelfareCategory,
@@ -55,6 +59,7 @@ app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
+app.use('/api/lifeide',lifeideRouter);
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 // Read-only environment metadata. Never expose environment variables or secret values.
 app.get('/api/admin/developer-info', requireStaff, (req,res)=>{
@@ -159,7 +164,7 @@ const methods={
  saveSettings:['settings:manage',true],demoStatus:['settings:manage',false],demoLoad:['settings:manage',true],demoRemove:['settings:manage',true],
  users:['users:manage',false],roles:['users:manage',false],createUser:['users:manage',true],updateUser:['users:manage',true],system:['settings:manage',false],activity:['people:view',false],
  registrations:['registrations:manage',false],registerAdminVip:['registrations:manage',true],
- lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
+ leaderScope:['lifegroups:view',false],lifegroupOverview:['lifegroups:view',false],lifegroups:['lifegroups:view',false],lifegroupOptions:['lifegroups:view',false],lifegroupNeeds:['lifegroups:view',false],lifegroupRecommend:['lifegroups:view',false],vipAssignmentPolicy:['lifegroups:view',false],saveVipAssignmentPolicy:['lifegroups:manage',true],lifegroup:['lifegroups:view',false],lifegroupProgress:['lifegroups:view',false],progressOverview:['lifegroups:view',false],networkCalendar:['lifegroups:view',false],networks:['lifegroups:view',false],network:['lifegroups:view',false],
  removeNetworkFromTree:['lifegroups:manage',true],removeCellLeaderFromTree:['lifegroups:manage',true],removeMemberFromTree:['lifegroups:manage',true],createLifegroup:['lifegroups:manage',true],updateLifegroup:['lifegroups:manage',true],deleteLifegroup:['lifegroups:manage',true],assignLifegroup:['lifegroups:manage',true],autoAssignLifegroup:['lifegroups:manage',true],leaveLifegroup:['lifegroups:manage',true],setTier:['lifegroups:manage',true],setDiscipleshipClassification:['lifegroups:manage',true],createNetworkStructure:['lifegroups:manage',true],createNetwork:['lifegroups:manage',true],updateNetwork:['lifegroups:manage',true],deleteNetwork:['lifegroups:manage',true],ensureNetworkLeaderGroup:['lifegroups:manage',true],saveMeeting:['lifegroups:manage',true],deleteMeeting:['lifegroups:manage',true],
  registration:['registrations:manage',false],registrationCounts:['registrations:manage',false],reviewRegistration:['registrations:manage',true],recoverRegistration:['registrations:manage',true],pendingCheckins:['registrations:manage',false],
  // VIP Gift Tracker — reads for admin and staff (registrations:manage); the viewer role has neither.
@@ -190,7 +195,7 @@ async function customMethod(req,name,args) {
  if(name==='updateService')return updateService(args[0],args[1]||{},actor);
  if(name==='reportYears')return reportYears();
  if(name==='reportSummary')return reportSummary(args[0]||{});
- if(name==='people')return peopleList(args[0]||{});
+ if(name==='people')return peopleList(args[0]||{},req.leaderCellIds??null);
  if(name==='search')return peopleSearch(args[0],args[1]||{});
  if(name==='calendarEvents'){
   const months=Math.min(Math.max(Number(args[0]?.months)||13,1),25);
@@ -391,6 +396,9 @@ app.post('/api/tracker/:method',async(req,res)=>{
  const name=req.params.method;if(!Object.hasOwn(methods,name))throw httpError(404,'Unknown tracker operation.');
  const args=req.body?.args||[];if(!Array.isArray(args)||args.length>6)throw httpError(400,'Invalid operation arguments.');
  const [permission,write]=methods[name];requirePermission(req.actor,permission);
+ if(name==='leaderScope')return res.json(await resolveLeaderScope({query},req.actor));
+ const leaderPolicy=await authorizeLinkedLeaderTrackerMethod({query},req.actor,name,args);
+ if(name==='people' && leaderPolicy?.allowedCellIds)req.leaderCellIds=leaderPolicy.allowedCellIds;
  if(['demoLoad','demoRemove'].includes(name)&&production)throw httpError(403,'Demo-data tools are disabled in production.');
  if(name==='demoLoad'&&(await query('SELECT id FROM people WHERE NOT is_demo LIMIT 1')).rows.length)throw httpError(409,'Do not mix demo data with real records.');
  const groupResult=await handleLifegroupMethod(name,args,req.actor);
@@ -399,8 +407,8 @@ app.post('/api/tracker/:method',async(req,res)=>{
  if(!req.actor.permissions.includes('people:view_private'))result=redactForViewer(result);
  res.json(result??{});
 });
-app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
-app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
+app.get('/api/reports/export/:type.csv',requireStaff,async(req,res)=>{requirePermission(req.actor,'reports:view');await assertGlobalExportAccess({query},req.actor);const type=String(req.params.type||'');const body=await exportAttendanceCsv(type,req.query);res.set('Content-Type','text/csv; charset=utf-8').set('Content-Disposition',`attachment; filename="lifegen-${type}-${today()}.csv"`).send(body);});
+app.get('/api/backup',requireStaff,async(req,res)=>{requirePermission(req.actor,'settings:manage');await assertGlobalExportAccess({query},req.actor);res.attachment(`lifegen-admin-${today()}.json`).json(await exportBackup());});
 // ---- VIP Design Library (administrator only) --------------------------------
 // Uploads are raw image bodies, matching how /api/deploy/archive already accepts
 // a ZIP: no multipart parser, and express.json() is bypassed for this path.
@@ -455,6 +463,7 @@ app.get('/',(req,res)=>{
 });
 app.get(['/admin','/admin/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(actor?.role_id))return res.redirect(303,'/youth-welfare');return page(res,'admin');});
 app.get(['/youth-welfare','/youth-welfare/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(actor&&!actor.permissions.includes('youth_welfare:view'))return res.redirect(303,'/admin');return page(res,'youth-welfare');});
+app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'lifeide'));
 // Fullscreen VIP announcement projector. Deliberately public and read-only: it
 // exposes only the VIP full name and inviter that are already projected in the
 // room, and pulls them live from /api/public/vip-announcement. No contact

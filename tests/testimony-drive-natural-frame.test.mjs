@@ -22,7 +22,7 @@ test('Janime uses a first-party MP4, with no Google iframe or crop',()=>{
  assert.match(card,/data-poster="\/brand\/gallery\/drive\/janime-rivera-testimony-cover\.webp"/);
  assert.doesNotMatch(card,/data-drive-fit|data-trim-bottom/);
  assert.match(page,/data-label="Grand Campus Hangout"/);
- assert.match(page,/data-label="Testimony coming soon"/);
+ assert.match(page,/data-label="Carlo Yarte"/);
 });
 
 test('optimized MP4 is present, deployable, and has the correct file signature',()=>{

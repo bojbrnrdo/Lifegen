@@ -145,7 +145,8 @@ export function buildLifegroupTree(networks,groups,filters,expanded,members,load
   if((gender&&network.gender!==gender)||!allowed(network))continue;
   const all=groups.filter(g=>String(g.network_id)===String(network.id)&&!g.is_leader_group);
   all.forEach(g=>linked.add(String(g.id)));
-  const selected=all.filter(g=>allowed(g)&&!(network.leader_person_id&&g.leader_person_id&&String(g.leader_person_id)===String(network.leader_person_id)));
+  // A Network Leader may also lead a Cell in their Network; do not hide that Cell or its People.
+  const selected=all.filter(allowed);
   const visible=!query||match(network)?selected:selected.filter(match);
   if(query&&!match(network)&&!visible.length)continue;
   const key='network:'+network.id;

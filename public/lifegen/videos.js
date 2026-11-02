@@ -207,6 +207,19 @@
             '<span class="deck-cap">' + escText(label) + "</span>";
     }
 
+    const deckObserver = window.IntersectionObserver ? new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target.querySelector('img.deck-photo');
+                if (img && img.dataset.src) {
+                    img.src = img.dataset.src;
+                    img.removeAttribute('data-src');
+                }
+                obs.unobserve(entry.target);
+            }
+        });
+    }, { root: document.querySelector('.deck'), rootMargin: '0px 400px 0px 400px' }) : null;
+
     document.querySelectorAll("#stories .deck-card").forEach((card) => {
         const src = (card.dataset.img || "").trim();
         const caption = card.dataset.caption || "";
@@ -216,11 +229,12 @@
         const full = (card.dataset.full || src).trim();
         const index = shots.push({ src: full, caption, card }) - 1;
         card.innerHTML =
-            '<img class="deck-photo" loading="lazy" decoding="async" src="' + escText(src) +
+            '<img class="deck-photo" loading="lazy" decoding="async" ' + (deckObserver ? 'data-src="' : 'src="') + escText(src) +
             '" alt="' + escText(caption || "LIFEGEN photo") + '"/>' +
             '<span class="deck-cap">' + escText(caption || "LIFEGEN photo") + "</span>";
         card.setAttribute("aria-label", "View full size: " + (caption || "LIFEGEN photo"));
         card.addEventListener("click", () => openLightbox(index));
+        if (deckObserver) deckObserver.observe(card);
     });
 
     // ---- Lightbox (full-size photo view) ------------------------------

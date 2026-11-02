@@ -49,7 +49,7 @@ const TreeNode=memo(({data})=>{
    </div>
    <div className="lg-r-identity"><strong title={title}>{title}</strong><span>{label}</span></div>
    <div className="lg-r-badges">
-    {entry.role!=='member'&&<span><Users size={12}/>{entry.count} {entry.role==='network'?'people':'members'}</span>}
+    {entry.role!=='member'&&<span><Users size={12}/>{entry.count} {entry.role==='network'?'direct members':'members'}</span>}
     {alert===true&&<span className="lg-r-warning" title="No submitted attendance report for this week"><AlertTriangle size={12}/> Report due</span>}
    </div>
    <Handle type="source" position={Position.Bottom} isConnectable={false} className="lg-r-handle"/>
@@ -81,7 +81,8 @@ function buildRows(networks,groups,members,expanded,filters){
   const nc='n'+n.id;
   const own=groupSet.filter(g=>Number(g.network_id)===Number(n.id)&&Number(g.leader_person_id)!==Number(n.leader_person_id));
   if(q&&!matching.has(nc))continue;
-  add(nc,null,'network',n,n.is_active,n.people_count||own.reduce((a,g)=>a+Number(g.member_count||0),0));
+  const direct=groupSet.filter(g=>Number(g.network_id)===Number(n.id)&&n.leader_person_id!=null&&Number(g.leader_person_id)===Number(n.leader_person_id));
+   add(nc,null,'network',n,n.is_active,direct.reduce((total,g)=>total+Number(g.member_count||0),0));
   if(!expanded.has(nc)&&!q)continue;
   for(const g of own){
    const cid='c'+g.id;
@@ -104,6 +105,20 @@ function getLayout(rows,edges){
  dagre.layout(graph);
  return rows.map(r=>{const p=graph.node(r.id);return{id:r.id,type:'person',position:{x:p.x-W/2,y:p.y-H/2},data:{entry:r}};});
 }
+function RelationshipGallery({relations,relationTitle,onChoose}){
+ return <div className="lg-r-relations">
+  <div className="lg-r-relations-head"><h3 title={relationTitle}>{relationTitle}</h3><span>{relations.length}</span></div>
+  {relations.length===0?<p className="lg-r-empty">No related people yet.</p>:
+   <div className="lg-r-relation-grid">{relations.map(item=>(
+    <button key={item.id} className="lg-r-relation-avatar" title={name(item.person)} aria-label={'View '+name(item.person)} onClick={()=>onChoose(item)}>
+     <Avatar person={item.person}/>
+     <span className="lg-r-relation-status is-active" aria-hidden="true"/>
+     <span className="lg-r-relation-tooltip">{name(item.person)}</span>
+    </button>
+   ))}</div>}
+ </div>;
+}
+
 /** Compact relationship-focused details drawer for the selected tree node.
  * Only show information that helps administrators navigate the hierarchy;
  * personal contact fields remain in the dedicated People profile.
@@ -119,9 +134,13 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,m
   <div className="lg-r-panel-person"><Avatar person={person}/><div><strong>{name(person)}</strong><small>{label}</small></div></div>
   <div className="lg-r-panel-summary">
    <span className={'lg-r-panel-status '+(active?'is-active':'is-inactive')}><i/>{active?'Active':'Inactive'}</span>
-   {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'people':'members'}</span>}
+   {role!=='member'&&<span className="lg-r-panel-count"><Users size={14}/>{count} {role==='network'?'direct members':'members'}</span>}
   </div>
   {role==='cell'&&progress&&<p className="lg-r-panel-attendance"><CalendarClock size={15}/>{progress.met_this_week?'Attendance submitted this week':'Weekly attendance not submitted'}</p>}
+  <div className="lg-r-relations-wrap">
+   {relationsLoading?<p className="lg-r-loading">Loading relationships…</p>:
+    <RelationshipGallery relations={relations} relationTitle={relationTitle} onChoose={onChoose}/>}
+  </div>
   <div className="lg-r-panel-actions">
    {manage&&role==='cell'&&<button type="button" onClick={()=>onAdd(selection)}><Plus size={15}/> Add Member</button>}
    {manage&&role!=='member'&&<button type="button" onClick={()=>onReassign(selection)}><ArrowRightLeft size={15}/> Edit / Reassign</button>}
@@ -133,11 +152,19 @@ function Panel({selection,progress,onClose,onAdd,onReassign,onRemove,onProfile,m
 }
 function Dashboard({data,callbacks}){
  const rf=useReactFlow();
+ const [mobile,setMobile]=useState(()=>window.matchMedia('(max-width: 780px)').matches);
+ useEffect(()=>{
+  const media=window.matchMedia('(max-width: 780px)');
+  const update=()=>setMobile(media.matches);
+  media.addEventListener('change',update);
+  return ()=>media.removeEventListener('change',update);
+ },[]);
  const [expanded,setExpanded]=useState(()=>new Set());
  const [members,setMembers]=useState(()=>new Map());
  const [reports,setReports]=useState(()=>new Map());
  const [selected,setSelected]=useState(null);
  const [loading,setLoading]=useState(new Set());
+ const [search,setSearch]=useState('');
  const allFilters={...data.filters};
  const toggle=useCallback(id=>setExpanded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next}),[]);
  const addMembers=useCallback(async g=>{
@@ -197,6 +224,7 @@ function Dashboard({data,callbacks}){
    if(item.role==='member'||item.role==='cell')next.add('c'+item.groupId);
    return next;
   });
+  setSearch('');
   // A detail photo click should navigate even if the current search
   // is hiding the destination node.
   callbacks.onClearSearch?.();
@@ -207,8 +235,15 @@ function Dashboard({data,callbacks}){
     selected:selected?.id===n.id,activate,alert:n.data.entry.role==='cell'&&reports.has(n.data.entry.groupId)?!reports.get(n.data.entry.groupId)?.met_this_week:null}
  })),[rows,edges,expanded,selected,activate,reports]);
  const fit=useCallback(()=>requestAnimationFrame(()=>rf.fitView({padding:.18,duration:320,maxZoom:1.1})),[rf]);
- useEffect(()=>{fit()},[nodes.length,fit,data.filters.gender,data.filters.status]);
- useEffect(()=>{const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf]);
+ useEffect(()=>{fit()},[nodes.length,expanded.size,fit,data.filters.gender,data.filters.status,mobile]);
+ useEffect(()=>{
+  const canvas=document.querySelector('.lg-r-canvas');
+  if(!canvas || !window.ResizeObserver)return;
+  const observer=new ResizeObserver(()=>fit());
+  observer.observe(canvas);
+  return ()=>observer.disconnect();
+ },[fit]);
+ useEffect(()=>{if(mobile)return;const q=data.filters.q?.toLowerCase();if(!q)return;const found=rows.find(r=>name(r.person).toLowerCase().includes(q));if(!found)return;const n=nodes.find(n=>n.id===found.id);if(n)rf.setCenter(n.position.x+W/2,n.position.y+H/2,{zoom:.95,duration:350});},[data.filters.q,rows,nodes,rf,mobile]);
 
  return <div className="lg-r-shell">
   <div className="lg-r-tools">
@@ -218,9 +253,11 @@ function Dashboard({data,callbacks}){
    <div className="lg-r-canvas">
     <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} proOptions={{hideAttribution:true}}
      fitView minZoom={.03} maxZoom={2.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable
+     panOnDrag={!mobile} panOnScroll={false} zoomOnScroll={!mobile} zoomOnPinch={!mobile}
+     zoomOnDoubleClick={!mobile} preventScrolling={!mobile}
      onPaneClick={()=>setSelected(null)} >
      <Background color="#c9e4d2" gap={22} size={1}/>
-     <Controls showInteractive={false} fitViewOptions={{padding:.18,maxZoom:1.1}}/>
+     {!mobile&&<Controls showInteractive={false} fitViewOptions={{padding:.18,maxZoom:1.1}}/>}
     </ReactFlow>
     {rows.length===0&&<div className="lg-r-empty">No Networks match these filters.</div>}
    </div>
@@ -229,7 +266,7 @@ function Dashboard({data,callbacks}){
     relationsLoading={selected?.role==='cell'&&loading.has(selected.groupId)}
     onClose={()=>setSelected(null)} onAdd={callbacks.onAdd} onReassign={callbacks.onReassign} onRemove={callbacks.onRemove}/>
   </div>
-  <p className="lg-r-caption">Click a profile circle to expand or collapse · Drag to pan · Scroll to zoom</p>
+  <p className="lg-r-caption">Click a profile circle to expand or collapse{mobile?' · Map auto-fits your screen':' · Drag to pan · Scroll to zoom'}</p>
  </div>;
 }
 export function mount(el,data,callbacks){

@@ -35,7 +35,7 @@ export async function refreshPendingBadge(){
 export async function renderRegistrations({main,query}){
  let filter=query.status||'new',search=query.q||'';
  main.innerHTML=html`<div class="page-header"><div><h1>Registration</h1><p class="sub">Register People and manage VIP follow-up.</p></div><div class="page-actions"><a class="btn" href="#/qr-poster">${icon('qr')} Registration QR</a><button class="btn" id="refreshVips">${icon('refresh')} Refresh</button></div></div>
- <div class="card mb-2"><div class="card__header"><h2>Register a person</h2></div><div class="card__body"><div class="row" style="gap:8px;flex-wrap:wrap">${can('people:write')?['network','cell','member','vip'].map((mode,i)=>html`<button type="button" class="btn" data-register-mode="${mode}">${['Network Leader','Cell Leader','Member','VIP'][i]}</button>`).join(''):html`<p class="small muted">Your role can review VIP registrations, but cannot create People records.</p>`}</div><p class="small muted mt-2">VIPs without an eligible Cell assignment can be managed in Needs Cell.</p></div></div>
+ <div class="card mb-2"><div class="card__header"><h2>Register a person</h2></div><div class="card__body"><div class="row" style="gap:8px;flex-wrap:wrap">${can('people:write')?['network','cell','member','vip'].map((mode,i)=>html`<button type="button" class="btn" data-register-mode="${mode}">${['Network Leader','Cell Leader','Member','VIP'][i]}</button>`):html`<p class="small muted">Your role can review VIP registrations, but cannot create People records.</p>`}</div><p class="small muted mt-2">VIPs without an eligible Cell assignment can be managed in Needs Cell.</p></div></div>
  ${can('lifegroups:manage')?html`<div class="card mb-2"><div class="card__body"><div class="row" style="align-items:end;gap:12px;flex-wrap:wrap">
   <label class="grow">VIP auto-assignment priority
     <select id="vipPriorityOrder" aria-label="VIP Cell assignment priority">
@@ -89,13 +89,13 @@ export async function renderRegistrations({main,query}){
   kpis.innerHTML=html`<div class="kpi"><b>${counts.active_vips??0}</b><span>Active VIPs</span></div><div class="kpi ${counts.gift_eligible?'kpi--green':''}"><b>${counts.gift_eligible??0}</b><span>Gift eligible</span></div>`;
   box.innerHTML=data.items.length?html`<div class="stack">${data.items.map(r=>giftRow(r,target))}</div>`:html`<p class="small muted">No VIP registrations yet.</p>`;
   box.querySelectorAll('[data-give]').forEach(b=>b.onclick=async()=>{
-   const r=data.items.find(i=>i.person_id===b.dataset.give);
+   const r=data.items.find(i=>Number(i.person_id)===Number(b.dataset.give));
    const ok=await confirmDialog({title:'Record this gift?',message:`Mark <b>${esc(r?.full_name||'this VIP')}</b> as already given the gift? One gift per VIP.`,confirmText:'Record gift'});
    if(!ok)return;
    await withLoading(b,async()=>{try{await api.markGiftGiven(Number(b.dataset.give));toast('Gift recorded.');await load();}catch(err){toast(err.message,'error');}});
   });
   box.querySelectorAll('[data-undo]').forEach(b=>b.onclick=async()=>{
-   const r=data.items.find(i=>i.person_id===b.dataset.undo);
+   const r=data.items.find(i=>Number(i.person_id)===Number(b.dataset.undo));
    const ok=await confirmDialog({title:'Undo this recording?',message:`Remove the gift record for <b>${esc(r?.full_name||'this VIP')}</b>?`,confirmText:'Undo',danger:true});
    if(!ok)return;
    await withLoading(b,async()=>{try{await api.undoGiftGiven(Number(b.dataset.undo));toast('Recording removed.');await load();}catch(err){toast(err.message,'error');}});

@@ -17,7 +17,7 @@ test('cell eligibility failures and full capacity are tagged for alternate Cell 
  assert.match(assign,/extra\.auto_assign \? retryableVipCellConflict\('Cell Leader has reached/);
 });
 test('person-specific validation is not marked as retryable',()=>{
- assert.match(assign,/throw httpError\(409, 'Inactive People records cannot be automatically assigned\.'/);
+ assert.match(assign,/throw httpError\(409, 'Reactivate this person before assigning them to a Cell\.'/);
  assert.match(assign,/throw httpError\(409, 'Active leaders require manual review before Cell assignment\.'/);
  assert.ok(assign.includes('does not match this ${group.gender} Lifegroup.'), 'Gender mismatch remains an untagged person validation error');
 });

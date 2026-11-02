@@ -158,7 +158,13 @@ export function collectPerson(form) {
 export async function renderPersonForm({ main, query }, id) {
   const editing = Boolean(id);
   let person = null;
-  if (editing) person = await api.person(id);
+  if (editing) {
+    person = await api.person(id);
+    if (person.archived_at) {
+      main.innerHTML = html`<div class="alert alert--info">This person is archived. Restore the record before editing. <a href="#/people/${person.id}">Return to profile</a></div>`;
+      return;
+    }
+  }
 
   const defaults = { date_registered: toISODate(new Date()) };
   if (!editing && query.name) {

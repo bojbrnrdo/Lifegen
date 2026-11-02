@@ -298,11 +298,23 @@ function bindMemberActions(root, groupsById, refresh) {
 }
 
 export async function renderLifegroups({main, query}) {
+ // Linked leaders have scoped detail and People endpoints, not the global
+ // hierarchy/overview endpoints used by the administrator map.
+ const leader=await api.leaderScope();
+ if(leader.kind==='network_leader'||leader.kind==='cell_leader'||(leader.kind==='unassigned'&&leader.linked)){
+  const people=leader.kind==='unassigned'?[]:await api.people({status:'all',limit:2000});
+  main.innerHTML=html`<section class="lifegroups-page"><div class="page-header"><div><h1>My Lifegroups</h1><p class="sub">Only members in your assigned active Cells are displayed.</p></div></div>
+   <div class="card"><div class="card__body"><div class="row row--between" style="gap:12px;flex-wrap:wrap"><h2>My People (${people.length})</h2><button class="btn btn--sm" type="button" id="leaderPeopleRefresh">${icon('undo',15)} Refresh people</button></div>
+    ${people.length?html`<div class="people-directory"><table class="table"><thead><tr><th>Person</th><th>Profile</th></tr></thead><tbody>${people.map(p=>html`<tr><td data-label="Person">${esc(fullName(p))}</td><td data-label="Profile"><a class="btn btn--sm" href="#/people/${p.id}">View profile</a></td></tr>`)}</tbody></table></div>`:html`<p class="muted">No active Cell members are assigned to you.</p>`}</div></div></section>`;
+  main.querySelector('#leaderPeopleRefresh')?.addEventListener('click',()=>renderLifegroups({main,query}).catch(e=>toast(e.message,'error')));
+  return;
+ }
+
  const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
  main.innerHTML=html`
  <section class="lifegroups-page">
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button>`:''}</div></div>
+ <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button class="btn" id="removeFromLifegroups">${icon('trash',16)} Remove</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
@@ -317,6 +329,7 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load(true)}));
+ main.querySelector('#removeFromLifegroups')?.addEventListener('click',()=>openRemoveFromLifegroups({onRemoved:afterRemove}));
 
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
@@ -492,7 +505,7 @@ export async function renderLifegroups({main, query}) {
      if(seq!==peopleSearchSeq||!main.contains(box))return;
      box.innerHTML=rows.length?html`<section class="card mb-2"><div class="card__body" style="padding:12px 16px">
        <b>Matching People</b><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">
-       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`).join('')}
+       ${rows.map(p=>html`<a class="btn btn--sm" href="#/people/${p.id}">${fullName(p)} · ${p.person_code}</a>`)}
        </div></div></section>`:html`<p class="small muted mb-2">No matching People records. Try a different name or Person ID.</p>`;
    }catch(e){if(seq===peopleSearchSeq)box.innerHTML=html`<p class="small muted">${e.message||'Search unavailable.'}</p>`;}
  }
@@ -529,13 +542,21 @@ async function drawAllPeople(body) {
    const total=Array.isArray(page)?rows.length:Number(page?.total??rows.length);
    if(!Number.isFinite(total)||total<0)throw new Error('Invalid directory result. Please retry.');
    if(offset>0&&rows.length===0){offset=total>0?Math.floor((total-1)/PAGE)*PAGE:0;return load();}
-   result.innerHTML=rows.length?html`<div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${esc(p.person_code||'')}</div></div></div></td><td>${raw(statusBadge(p.status))}</td><td><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`).join('')}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
+   result.innerHTML=rows.length?html`<div class="table-wrap people-directory"><table class="table"><thead><tr><th>Person</th><th>Status</th><th>Profile</th></tr></thead><tbody>${rows.map(p=>html`<tr><td data-label="Person"><div class="person-cell">${raw(avatar(p,'sm'))}<div><strong>${fullName(p)}</strong><div class="small muted">${p.person_code||''}</div></div></div></td><td data-label="Status">${raw(statusBadge(p.status))}</td><td data-label="Profile"><a class="btn btn--sm" href="#/people/${Number(p.id)}">View profile</a></td></tr>`)}</tbody></table></div>`:emptyState({icon:'people',title:'No people found',text:'Try another name or Person ID.'});
    pager.innerHTML=html`<span class="small muted">Showing ${rows.length?offset+1:0}–${offset+rows.length} of ${total}</span><div class="row"><button class="btn btn--sm" type="button" data-prev ${offset===0?'disabled':''}>Previous</button><button class="btn btn--sm" type="button" data-next ${offset+rows.length>=total?'disabled':''}>Next</button></div>`;
    pager.querySelector('[data-prev]').onclick=()=>{offset=Math.max(0,offset-PAGE);load();};
    pager.querySelector('[data-next]').onclick=()=>{offset+=PAGE;load();};
-  }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${esc(e.message||'Unable to load People.')}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
+  }catch(e){if(version===requestId&&body.isConnected){result.innerHTML=html`<div class="alert alert--error">${e.message||'Unable to load People.'}</div>`;pager.innerHTML='<button type="button" class="btn btn--sm" data-retry>Retry</button>';pager.querySelector('[data-retry]').onclick=load;}}
  }
- input.addEventListener('input',debounce(()=>{offset=0;load();},250));
+ const debouncedSearch=debounce(()=>{offset=0;load();},250);
+ input.addEventListener('input',()=>{
+  // Invalidate the in-flight request immediately, not after the debounce.
+  // Otherwise an old search can repaint stale People while the user is typing.
+  requestId++;
+  result.innerHTML='<div class="loading">Searching People…</div>';
+  pager.innerHTML='';
+  debouncedSearch();
+ });
  status.addEventListener('change',()=>{offset=0;load();});
  await load();
 }

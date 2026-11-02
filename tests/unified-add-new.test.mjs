@@ -16,8 +16,8 @@ test('one Add New action replaces New Network and Add Cell Leader',()=>{
 
 test('one tabbed modal exposes Network Leader, Cell Leader and Members',()=>{
  assert.match(modal,/role="tablist"/);
- for(const mode of ['network','cell','member']) {
-   assert.ok(modal.includes("const modes=['network','cell','member']"));
+ for(const mode of ['network','cell','member','vip']) {
+   assert.ok(modal.includes("const modes=['network','cell','member','vip']"));
    assert.ok(modal.includes("data-form="));
  }
  assert.match(modal,/ArrowRight/);

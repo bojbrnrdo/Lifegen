@@ -1,7 +1,7 @@
 {
   "/lifegen/app.js": {
-    "version": "2.4.6",
-    "sha256": "84fd48a0056e3ad45e583fe6659984f4e60ba717a7195a659c1d1c9f7f4b66b1"
+    "version": "2.4.7",
+    "sha256": "f1ab45d206089164ee0af8a815d434d57e257af2aae19ba097d01eed3f64a79f"
   },
   "/lifegen/backend.js": {
     "version": "2.4.10",
@@ -12,12 +12,12 @@
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.23",
-    "sha256": "2bac5d62d1d18d44cf03e936818eeccbb39a946ef9e8901500975c1751deeea0"
+    "version": "2.4.24",
+    "sha256": "1a4f021ea6d17df137a96d078421054ee15ebeca2200a2522e92dd85364970ea"
   },
   "/lifegen/videos.js": {
-    "version": "2.4.10",
-    "sha256": "a57c8cbf231d92c850c9680fc5978ec555278bf13ce258ea215e229eea0c153b"
+    "version": "2.4.11",
+    "sha256": "d3b37066fbedaf93ff8dca88f1a37c46ea79d8f8984205e36c5576e8101298bb"
   },
   "/lifegen/youth-welfare-registration.css": {
     "version": "2.4.25",

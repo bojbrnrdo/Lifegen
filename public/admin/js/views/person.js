@@ -10,8 +10,8 @@ export async function renderPerson({ main }, id) {
   const archived = Boolean(p.archived_at);
   const present = p.history.filter((h) => h.status === 'present');
 
-  const row = (label, value, fmt = (x) => x) => {
-    if (locked && value === undefined) return html`<div><dt>${label}</dt><dd class="locked">${icon('lock', 13)} Restricted</dd></div>`;
+  const row = (label, value, fmt = (x) => x, sensitive = false) => {
+    if (locked && (sensitive || value === undefined)) return html`<div><dt>${label}</dt><dd class="locked">${icon('lock', 13)} Restricted</dd></div>`;
     return html`<div><dt>${label}</dt>${value ? html`<dd>${fmt(value)}</dd>` : raw('<dd class="none">—</dd>')}</div>`;
   };
 
@@ -25,7 +25,7 @@ export async function renderPerson({ main }, id) {
           <div class="row mt-1"><span class="code mono">${p.person_code}</span>${archived ? raw('<span class="badge badge--nodot">Archived</span>') : ''}${raw(statusBadge(p.status))}${p.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
         </div>
       </div>
-      ${can('people:write') ? html`<div class="page-actions">
+      ${can('people:write') && !archived ? html`<div class="page-actions">
         <button class="btn" id="statusBtn">Change status</button>
         <a class="btn btn--primary" href="#/people/${p.id}/edit">${icon('edit')} Edit</a>
       </div>` : ''}
@@ -43,18 +43,18 @@ export async function renderPerson({ main }, id) {
       <div class="card">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
-          ${row('Contact number', p.contact_number, (v) => raw(`<a href="tel:${v.replace(/\s/g, '')}">${v}</a>`))}
-          ${row('Email', p.email, (v) => raw(`<a href="mailto:${v}">${v}</a>`))}
-          ${row('Birthday', p.birthdate, (v) => `${fmtDate(v)} · ${age(v)} yrs`)}
+          ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`, true)}
+          ${row('Email', p.email, (v) => html`<a href="mailto:${v}">${v}</a>`, true)}
+          ${row('Birthday', p.birthdate, (v) => `${fmtDate(v)} · ${age(v)} yrs`, true)}
           ${row('Sex', p.sex, (v) => v[0].toUpperCase() + v.slice(1))}
           ${row('School', p.school)}
           ${row('Course / Year', p.course_year)}
           ${row('Occupation', p.occupation)}
-          ${!p.birthdate ? row('Age', p.age, (v) => `${v} yrs (self-reported)`) : ''}
+          ${!p.birthdate ? row('Age', p.age, (v) => `${v} yrs (self-reported)`, true) : ''}
           ${row('Ministry', p.ministry)}
           ${row('Registered', p.date_registered, (v) => fmtDate(v) + (p.registration_source === 'qr' ? ' · via QR registration' : ''))}
-          <div><dt>Privacy consent</dt><dd>${p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
-          <div style="grid-column:1/-1">${row('Address', p.address)}</div>
+          <div><dt>Privacy consent</dt><dd>${locked ? html`<span class="locked">${icon('lock', 13)} Restricted</span>` : p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
+          <div style="grid-column:1/-1">${row('Address', p.address, (v) => v, true)}</div>
           ${!locked && p.notes ? html`<div style="grid-column:1/-1"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
         </dl></div>
       </div>
@@ -79,7 +79,6 @@ export async function renderPerson({ main }, id) {
       <span class="row">
         <button class="btn ${inactive ? '' : 'btn--danger-ghost'}" id="toggleActive">${inactive ? 'Reactivate' : 'Deactivate'}</button>
         <button class="btn btn--ghost small" id="archiveBtn" style="color:var(--muted)" title="Hide from lists; keep history">Archive</button>
-        ${can('people:delete') ? html`<button class="btn btn--ghost small" id="deleteBtn" style="color:var(--muted)">Delete permanently</button>` : ''}
       </span>
     </div>` : ''}`;
 
@@ -128,14 +127,5 @@ export async function renderPerson({ main }, id) {
     });
   }
 
-  main.querySelector('#deleteBtn')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({
-      title: 'Delete this person permanently?',
-      message: `This removes <b>${p.first_name} ${p.last_name}</b> (${p.person_code}) and <b>${p.history.length}</b> attendance record(s). Past Sunday totals will change and this <b>cannot be undone</b>. Prefer <b>Archive</b> unless this record was created by mistake.`,
-      confirmText: 'Delete permanently', danger: true, confirmWord: 'DELETE',
-    });
-    if (!ok) return;
-    try { await api.deletePerson(p.id); toast('Person deleted.', 'info'); location.hash = '#/people'; }
-    catch (err) { toast(err.message, 'error'); }
-  });
+
 }
