@@ -41,7 +41,7 @@ import {
   revokeYouthWelfareAccess, youthWelfareAccessActivity, youthWelfareDataStatus,
 } from './youth-welfare.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.8';
+const ADMIN_ASSET_VERSION='2.4.9';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);

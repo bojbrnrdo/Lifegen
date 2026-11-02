@@ -87,6 +87,15 @@ async function route(options = {}) {
     return;
   }
 
+  // A live data update must never tear down an in-progress registration modal.
+  // The page-level listener normally defers these already; keep the guard here too
+  // so any future background route refresh preserves the form and its entered data.
+  if (live && document.querySelector('#modalRoot .modal')) {
+    const updateNotice=document.getElementById('applyLiveUpdate');
+    if(updateNotice)updateNotice.hidden=false;
+    return;
+  }
+
   if (!live && activeRouteHash && location.hash !== activeRouteHash &&
       typeof window.__lifegenCanLeaveEditor === 'function' && !window.__lifegenCanLeaveEditor()) {
     location.replace(activeRouteHash);

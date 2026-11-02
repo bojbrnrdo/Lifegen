@@ -4,6 +4,13 @@ import { query, transaction, logAction } from './db.js';
 import { httpError } from './domain.js';
 import {normalizeLinkedPersonId,assertLinkablePerson} from './leader-account-link.js';
 const scrypt=promisify(crypto.scrypt);
+const STAFF_SESSION_TTL_MINUTES=12*60;
+const STAFF_SESSION_TTL_MS=STAFF_SESSION_TTL_MINUTES*60*1000;
+const STAFF_SESSION_RENEWAL_WINDOW_MS=60*60*1000;
+export function shouldRenewStaffSession(expiresAt,now=Date.now()) {
+ const timestamp=expiresAt instanceof Date?expiresAt.getTime():typeof expiresAt==='number'?expiresAt:Date.parse(expiresAt);
+ return Number.isFinite(timestamp)&&timestamp-now<=STAFF_SESSION_RENEWAL_WINDOW_MS;
+}
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
@@ -42,7 +49,7 @@ export async function passwordMatches(password,encoded) {
 }
 export const previewSessionTokensEnabled=()=>(process.env.HOSTED_PREVIEW==='true'||process.env.LOCAL_DEMO==='true')&&process.env.NODE_ENV!=='production'&&!process.env.VERCEL;
 export const cookieOptions=req=>{const host=String(req.get('x-forwarded-host')||req.get('host')||'');const preview=process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||host.endsWith('.e2b.app');return {httpOnly:true,secure:preview||process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL)||req.secure,path:'/',sameSite:preview?'none':'lax',...(preview?{partitioned:true}:{})};};
-export const setStaffCookie=(req,res,token)=>{if(!previewSessionTokensEnabled())res.cookie('lg_staff',token,{...cookieOptions(req),maxAge:12*60*60*1000});};
+export const setStaffCookie=(req,res,token)=>{if(!previewSessionTokensEnabled())res.cookie('lg_staff',token,{...cookieOptions(req),maxAge:STAFF_SESSION_TTL_MS});};
 export const setVipCookie=(req,res,token)=>res.cookie('lg_vip',token,{...cookieOptions(req),maxAge:90*24*60*60*1000});
 export const clearStaffCookie=(req,res)=>res.clearCookie('lg_staff',cookieOptions(req));
 export function checkOrigin(req) {
@@ -84,16 +91,29 @@ export async function readStaff(req) {
     WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_active=true`,[hashToken(token)]));
  }
  if(!rows[0])return null;
- return {...publicUser(rows[0]),csrf_token:rows[0].csrf_token,session_hash:rows[0].token_hash};
+ return {...publicUser(rows[0]),csrf_token:rows[0].csrf_token,session_hash:rows[0].token_hash,expires_at:rows[0].expires_at};
+}
+async function renewStaffSession(req,res,actor) {
+ if(!shouldRenewStaffSession(actor.expires_at))return;
+ const {rows}=await query("UPDATE staff_sessions SET expires_at=now()+($2::int*interval '1 minute') WHERE token_hash=$1 AND expires_at>now() RETURNING expires_at",[actor.session_hash,STAFF_SESSION_TTL_MINUTES]);
+ if(!rows[0])throw httpError(401,'Your session has expired. Please sign in again.');
+ actor.expires_at=rows[0].expires_at;
+ const cookieToken=req.cookies?.lg_staff;
+ if(cookieToken)setStaffCookie(req,res,cookieToken);
 }
 export async function requireStaff(req,res,next) {
- try {req.actor=await readStaff(req);if(!req.actor)throw httpError(401,'Please sign in to the tracker.');next();}catch(e){next(e);}
+ try {
+  req.actor=await readStaff(req);
+  if(!req.actor)throw httpError(401,'Please sign in to the tracker.');
+  await renewStaffSession(req,res,req.actor);
+  next();
+ }catch(e){next(e);}
 }
 export function requirePermission(actor,permission) {if(!actor?.permissions?.includes(permission))throw httpError(actor?403:401,'Your account is not allowed to do that.');}
 export function checkCsrf(req) {if(!safeEqual(req.get('x-csrf-token'),req.actor?.csrf_token))throw httpError(403,'Session verification failed. Reload the page and try again.');}
 async function newSession(client,user) {
  const token=randomToken(),csrf=randomToken();
- await client.query('INSERT INTO staff_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval \'12 hours\')',[hashToken(token),user.id,csrf]);
+ await client.query("INSERT INTO staff_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+($4::int*interval '1 minute'))",[hashToken(token),user.id,csrf,STAFF_SESSION_TTL_MINUTES]);
  let access={};
  const accessTable=(await client.query("SELECT to_regclass('public.youth_welfare_access') IS NOT NULL AS available")).rows[0]?.available;
  if(accessTable)access=(await client.query('SELECT role_id AS youth_welfare_access_role_id,status AS youth_welfare_access_status FROM public.youth_welfare_access WHERE user_id=$1',[user.id])).rows[0]||{};
