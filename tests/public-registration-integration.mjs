@@ -46,6 +46,22 @@ async function api(path, { method = 'GET', body, headers = {}, visitor = null } 
 }
 
 const key = () => crypto.randomUUID();
+const welfareAnswers = () => ({
+  consent: true,
+  messenger_facebook_name: null,
+  complete_address: `${MARK} Test Address, Bulacan`,
+  contact_number: '+639171234567',
+  parent_guardian_name: `${MARK} Test Guardian`,
+  parent_guardian_contact_number: '+639181234567',
+  education_status: 'currently_studying',
+  grade_year_level: 'college_first_year',
+  school_stop_period: null,
+  school_stop_reasons: [],
+  continue_studies: null,
+  church_invited_at: '2026-10-01',
+  lcsol_enrolled: false,
+  lcsol_status: 'not_yet_started',
+});
 // pg hands date columns back as JS Dates; compare calendar days, not time.
 const day = (v) => (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10);
 const ids = { people: [], networks: [], lifegroups: [], memberships: [], vip: [] };
@@ -107,6 +123,17 @@ try {
   const email1 = `test-reg-${Date.now()}@example.com`;
   const email2 = `test-reg-${Date.now()}-b@example.com`;
   const email3 = `test-reg-${Date.now()}-c@example.com`;
+  // A demo-marked Person with a registration audit event must never inflate the
+  // public total; cleanup removes this local-only fixture at the end.
+  const demoCountBefore = await api('/api/public/registration-count');
+  const demoCounterId = await allocate('people');
+  const demoCounterName = `${MARK}Registration Counter Demo`;
+  await client.query(`INSERT INTO people(id,person_code,first_name,last_name,full_name,sex,status,date_registered,registration_source,is_demo)
+    VALUES($1,$2,$3,'',$3,'male','first_timer',CURRENT_DATE,'public',true)`, [demoCounterId, `${MARK}${demoCounterId}`, demoCounterName]);
+  await client.query("INSERT INTO audit_log(entity,entity_id,action) VALUES('people',$1,'public_registration')", [String(demoCounterId)]);
+  ids.people.push(demoCounterId);
+  const demoCountAfter = await api('/api/public/registration-count');
+  check('demo People records do not inflate the public registration total', demoCountBefore.status === 200 && demoCountAfter.status === 200 && Number(demoCountAfter.json?.total) === Number(demoCountBefore.json?.total));
   const emailCapacity = `test-reg-${Date.now()}-capacity@example.com`;
 
   // ------------------------------------------------------------------ leaders
@@ -140,14 +167,16 @@ try {
   section('REGULAR REGISTRATION — verified leader');
   let person1 = null;
   {
+    const countBefore = await api('/api/public/registration-count');
+    const totalBefore = Number(countBefore.json?.total);
+    check('the public total is available from the real People/audit records', countBefore.status === 200 && Number.isSafeInteger(totalBefore) && totalBefore >= 0, JSON.stringify(countBefore.json));
+    const registrationPayload = {
+      full_name: 'Reg Test Attendee One', email: email1, birthdate: '2004-05-12', gender: 'male',
+      school: 'Reg Test School', ministry: 'Worship Team', invited_by: 'A friend',
+      leader_person_id: String(leaderMale), privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
+    };
     const r = await api('/api/public/registrations/regular', {
-      method: 'POST',
-      body: {
-        full_name: 'Reg Test Attendee One', email: email1, birthdate: '2004-05-12', gender: 'male',
-        school: 'Reg Test School', ministry: 'Worship Team', invited_by: 'A friend',
-        leader_person_id: String(leaderMale), privacy_consent: true, idempotency_key: key(),
-      },
-      visitor: V(11),
+      method: 'POST', body: registrationPayload, visitor: V(11),
     });
     check('registration succeeds', r.status === 201, `status=${r.status} ${JSON.stringify(r.json)?.slice(0, 160)}`);
     check('the person was created', r.json?.person_created === true);
@@ -169,6 +198,16 @@ try {
 
     const audit = (await client.query("SELECT action FROM audit_log WHERE entity='people' AND entity_id=$1", [String(person1)])).rows.map((x) => x.action);
     check('the registration is in the audit log', audit.includes('public_registration'), audit.join(','));
+    const countAfter = await api('/api/public/registration-count');
+    check('the accurate total increases after the saved registration', countAfter.status === 200 && Number(countAfter.json?.total) === totalBefore + 1, JSON.stringify(countAfter.json));
+    const retry = await api('/api/public/registrations/regular', { method: 'POST', body: registrationPayload, visitor: V(11) });
+    check('retrying the same key returns the saved response and Person ID', retry.status === 201 && String(retry.json?.person?.id) === String(person1), `status=${retry.status} person=${retry.json?.person?.id}`);
+    const requestRows = Number((await client.query('SELECT count(*)::int AS n FROM public_registration_requests WHERE person_id=$1', [person1])).rows[0].n);
+    check('the same request key is stored once', requestRows === 1, `rows=${requestRows}`);
+    const countAfterRetry = await api('/api/public/registration-count');
+    check('an idempotent retry does not increase the unique-person total', Number(countAfterRetry.json?.total) === totalBefore + 1);
+    const welfareRows = Number((await client.query('SELECT count(*)::int AS n FROM youth_welfare_records WHERE person_id=$1', [person1])).rows[0].n);
+    check('the retry does not create a second Youth Welfare record', welfareRows === 1, `rows=${welfareRows}`);
   }
 
   section('DUPLICATE PROTECTION');
@@ -178,13 +217,16 @@ try {
       body: {
         full_name: 'Reg Test Attendee One', email: email1, birthdate: '2004-05-12', gender: 'male',
         school: 'Reg Test School', ministry: 'Worship Team',
-        leader_person_id: String(leaderMale), privacy_consent: true, idempotency_key: key(),
+        leader_person_id: String(leaderMale), privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
       },
       visitor: V(11),
     });
     check('second submission still succeeds (idempotent, not an error)', r.status === 200, `status=${r.status}`);
     check('no second person is created', r.json?.person_created === false);
     check('no second membership is created', r.json?.membership?.created === false);
+    check('changed Welfare answers are queued for authorized review, not overwritten', r.json?.welfare_submission === 'pending_review');
+    const welfareUpdates = Number((await client.query('SELECT count(*)::int AS n FROM youth_welfare_record_updates WHERE person_id=$1', [person1])).rows[0].n);
+    check('the original Youth Welfare record remains unique', welfareUpdates === 1 && Number((await client.query('SELECT count(*)::int AS n FROM youth_welfare_records WHERE person_id=$1', [person1])).rows[0].n) === 1);
     const people = Number((await client.query('SELECT count(*)::int AS n FROM people WHERE lower(email)=$1', [email1])).rows[0].n);
     const memberships = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE person_id=$1', [person1])).rows[0].n);
     check('one person row for that email', people === 1, `people=${people}`);
@@ -202,7 +244,7 @@ try {
       body: {
         full_name: 'Reg Test Capacity Review', email: emailCapacity, birthdate: '2002-06-06', gender: 'male',
         school: 'Reg Test School', ministry: 'Prayer', leader_person_id: String(leaderMale),
-        privacy_consent: true, idempotency_key: key(),
+        privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
       },
       visitor: V(11),
     });
@@ -222,7 +264,7 @@ try {
       body: {
         full_name: 'Reg Test Attendee Two', email: email2, birthdate: '2001-02-02', gender: 'female',
         school: 'Reg Test School', ministry: 'Prayer', leader_name_manual: 'Reg Test Leaderfemale',
-        privacy_consent: true, idempotency_key: key(),
+        privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
       },
       visitor: V(12),
     });
@@ -239,7 +281,7 @@ try {
       body: {
         full_name: 'Reg Test Attendee Three', email: email3, birthdate: '2003-08-08', gender: 'female',
         school: 'Reg Test School', ministry: 'Ushering', leader_name_manual: 'Nonexistent Leader Person',
-        privacy_consent: true, idempotency_key: key(),
+        privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
       },
       visitor: V(13),
     });
@@ -262,14 +304,14 @@ try {
       body: {
         full_name: 'Reg Test Tamper', email: `test-reg-${Date.now()}-d@example.com`, birthdate: '2000-01-01', gender: 'female',
         school: 'X', ministry: 'Prayer', leader_person_id: String(leaderMale),
-        privacy_consent: true, idempotency_key: key(),
+        privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers(),
       },
       visitor: V(14),
     });
     check('a leader of the wrong gender is rejected', bad.status === 400, `status=${bad.status} ${bad.json?.message || ''}`);
   }
   {
-    const base = { full_name: 'Reg Test Invalid', email: `test-reg-${Date.now()}-e@example.com`, birthdate: '2000-01-01', gender: 'male', school: 'X', ministry: 'Prayer', privacy_consent: true, idempotency_key: key() };
+    const base = { full_name: 'Reg Test Invalid', email: `test-reg-${Date.now()}-e@example.com`, birthdate: '2000-01-01', gender: 'male', school: 'X', ministry: 'Prayer', privacy_consent: true, idempotency_key: key(), youth_welfare: welfareAnswers() };
     const cases = [
       ['missing ministry', { ...base, ministry: '' }],
       ['ministry outside the approved list', { ...base, ministry: 'Freestyle Ministry' }],
@@ -287,6 +329,24 @@ try {
       check(`invalid form rejected — ${label}`, r.status === 400, `status=${r.status}`);
     }
     check('no rows were written by the invalid attempts', Number((await client.query("SELECT count(*)::int AS n FROM people WHERE email LIKE 'test-reg-%-e@example.com'")).rows[0].n) === 0, results.join(' '));
+  }
+
+  section('SHARED-IP REGISTRATION BURSTS (large groups on church/school Wi-Fi)');
+  {
+    const attempts = [];
+    for (let i = 0; i < 20; i++) {
+      attempts.push(await api('/api/public/registrations/regular', {
+        method: 'POST', body: { website: 'automated-test' }, visitor: V(218),
+      }));
+    }
+    check('more than the former 15 shared-IP attempts reach validation instead of an artificial cap', attempts.every(r => r.status === 400), attempts.map(r => r.status).join(','));
+    let lookupStatus = 200;
+    for (let i = 0; i < 61; i++) {
+      const lookup = await api('/api/public/leaders?gender=male', { visitor: V(219) });
+      lookupStatus = lookup.status;
+      if (lookupStatus !== 200) break;
+    }
+    check('large groups can load the same public leader list without the old 60-request bottleneck', lookupStatus === 200, `status=${lookupStatus}`);
   }
 
   section('VIP REGISTRATION (birthday + gender, recovery still works)');

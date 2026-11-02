@@ -452,22 +452,35 @@ const modals = [$("storyModal"), $("prayerModal")];
 
 function setFieldError(input, message) {
     if (!input) return;
-    const f = input.closest(".field");
+    const f = input.closest(".field"), errorId = input.id ? input.id + "-error" : null;
     if (f) {
         f.classList.add("invalid");
         const err = f.querySelector(".err");
-        err && (err.textContent = message)
+        if (err) {
+            if (errorId) err.id = errorId;
+            err.textContent = message;
+            if (errorId) {
+                const descriptions = new Set((input.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
+                descriptions.add(errorId);
+                input.setAttribute("aria-describedby", [...descriptions].join(" "));
+            }
+        }
     }
     input.setAttribute("aria-invalid", "true")
 }
 
 function clearFieldError(input) {
     if (!input) return;
-    const f = input.closest(".field");
+    const f = input.closest(".field"), errorId = input.id ? input.id + "-error" : null;
     if (f) {
         f.classList.remove("invalid");
         const err = f.querySelector(".err");
         err && (err.textContent = "")
+    }
+    if (errorId) {
+        const descriptions = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter(id => id && id !== errorId);
+        if (descriptions.length) input.setAttribute("aria-describedby", descriptions.join(" "));
+        else input.removeAttribute("aria-describedby");
     }
     input.removeAttribute("aria-invalid")
 }
@@ -903,7 +916,8 @@ function ageFromIso(iso) {
 
 const GENDER_LABELS = { male: "Male", female: "Female", other: "Other", prefer_not_to_say: "Prefer not to say" };
 let regStepNow = 1,
-    regLeaders = [];
+    regLeaders = [],
+    regSubmitting = false;
 
 function showRegPanels(which) {
     $("reg-choice").hidden = which !== "choice";
@@ -952,10 +966,18 @@ function showVipRegistrationSuccess() {
 function goRegStep(step) {
     regStepNow = step;
     qsa("#regular-registration .reg-step").forEach((s) => { s.hidden = Number(s.dataset.step) !== step; });
-    qsa("#regSteps li").forEach((li) => { const k = Number(li.dataset.step); li.classList.toggle("is-active", k === step); li.classList.toggle("is-done", k < step); });
-    if (step === 2) loadRegLeaders();
+    qsa("#regSteps li").forEach((li) => {
+        const k = Number(li.dataset.step), current = k === step;
+        li.classList.toggle("is-active", current);
+        li.classList.toggle("is-done", k < step);
+        if (current) li.setAttribute("aria-current", "step");
+        else li.removeAttribute("aria-current");
+    });
+    if (step === 2) { loadRegLeaders(); updateYouthWelfareConditions(); updateYouthWelfareAge(); }
     if (step === 3) renderRegReview();
     $("regular-registration").scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "start" });
+    const activePanel = qsa("#regular-registration .reg-step").find((panel) => Number(panel.dataset.step) === step);
+    activePanel?.querySelector(".reg-step-title")?.focus({ preventScroll: true });
 }
 
 function validateRegStep1() {
@@ -977,8 +999,45 @@ function validateRegStep2() {
     let first = null;
     const fail = (el, msg) => { setFieldError(el, msg); first || (first = el); };
     !ministry.value && fail(ministry, "Please choose a ministry.");
-    if (!wrap.hidden) manual.value.trim().length < 2 && fail(manual, "Please type your leader's name.");
-    else if (!leader.value && leader.dataset.empty !== "1") fail(leader, "Please choose a leader.");
+    if (!wrap.hidden) manual.value.trim().length < 2 && fail(manual, "Please type your Cell Leader's name.");
+    else if (!leader.value) fail(leader, "Please choose a Cell Leader or type their name.");
+    if (first) { first.focus(); toast("Please check the highlighted fields.", "alert-triangle"); return false; }
+    return true;
+}
+
+const YW_GRADE_STATUSES = new Set(["currently_studying", "currently_als", "working_student"]);
+function updateYouthWelfareConditions() {
+    const status = $("rg-education-status").value;
+    $("rg-grade-wrap").hidden = !YW_GRADE_STATUSES.has(status);
+    $("rg-school-stop-wrap").hidden = status !== "out_of_school";
+}
+function updateYouthWelfareAge() {
+    const birthday = $("rg-birthdate").value, age = birthday ? ageFromIso(birthday) : NaN;
+    $("rg-age-note").textContent = Number.isInteger(age) && age > 0 && age <= 120 ? "Age: " + age + " years (calculated from your birthday)." : "Age will be calculated from your birthday above.";
+}
+function validateRegStep3() {
+    const address = $("rg-address"), contact = $("rg-contact"), guardian = $("rg-guardian-name"), guardianContact = $("rg-guardian-contact"),
+        education = $("rg-education-status"), grade = $("rg-grade-year"), lcsolEnrolled = $("rg-lcsol-enrolled"), lcsolStatus = $("rg-lcsol-status");
+    [address, contact, guardian, guardianContact, education, grade, lcsolEnrolled, lcsolStatus].forEach(clearFieldError);
+    let first = null;
+    const fail = (el, msg) => { setFieldError(el, msg); first || (first = el); };
+    address.value.trim().length < 2 && fail(address, "Please enter your complete address.");
+    const phoneDigits = contact.value.replace(/\D/g, "");
+    (contact.value.trim().length < 7 || phoneDigits.length < 7) && fail(contact, "Please enter a valid contact number.");
+    guardian.value.trim().length < 2 && fail(guardian, "Please enter your parent/guardian name.");
+    const guardianDigits = guardianContact.value.replace(/\D/g, "");
+    (guardianContact.value.trim().length < 7 || guardianDigits.length < 7) && fail(guardianContact, "Please enter a valid parent/guardian contact number.");
+    !education.value && fail(education, "Please choose your educational status.");
+    if (YW_GRADE_STATUSES.has(education.value) && !grade.value) fail(grade, "Please choose your grade/year level.");
+    !lcsolEnrolled.value && fail(lcsolEnrolled, "Please choose Yes or No for LCSOL enrollment.");
+    !lcsolStatus.value && fail(lcsolStatus, "Please choose your current LCSOL status.");
+    if (lcsolEnrolled.value === "no" && lcsolStatus.value && lcsolStatus.value !== "not_yet_started") fail(lcsolStatus, "LCSOL enrollment is No. Choose Not yet started or correct the enrollment answer.");
+    if (lcsolEnrolled.value === "yes" && lcsolStatus.value === "not_yet_started") fail(lcsolStatus, "LCSOL enrollment is Yes. Choose another status or correct the enrollment answer.");
+    if (!$("rg-youth-consent").checked) {
+        toast("Please agree to the separate Youth Welfare consent statement.", "alert-triangle");
+        $("rg-youth-consent").focus();
+        return false;
+    }
     if (first) { first.focus(); toast("Please check the highlighted fields.", "alert-triangle"); return false; }
     return true;
 }
@@ -1035,18 +1094,31 @@ function renderRegReview() {
     const manualOpen = !$("rgManualWrap").hidden,
         manualName = $("rg-manual").value.trim(),
         leader = currentRegLeader(),
-        noneYet = $("rg-leader").dataset.empty === "1",
-        row = (label, value) => '<div class="reg-review__row"><span>' + esc(label) + "</span><b>" + esc(value || "—") + "</b></div>";
-    const leaderText = manualOpen ? (manualName || "—") : leader ? leader.leader_name : noneYet ? "No leader available yet" : "—";
-    const groupText = manualOpen ? (manualName ? "To be checked and reviewed by our team" : "—") : leader ? leader.lifegroup_name || "—" : "—";
-    const netText = manualOpen ? "—" : leader ? leader.network_leader_name || "No network leader yet — N/A" : "—";
-    const cellText = manualOpen ? "—" : leader ? leader.lifegroup_name || "No open cell configured yet" : "—";
-    $("rgReview").innerHTML = "<h4>Basic Information</h4>" +
+        row = (label, value) => '<div class="reg-review__row"><span>' + esc(label) + "</span><b>" + esc(value || "—") + "</b></div>",
+        selectText = element => element.selectedOptions[0]?.textContent || "—",
+        age = ageFromIso($("rg-birthdate").value),
+        education = $("rg-education-status").value,
+        reasons = qsa('#regular-registration input[name="rg-school-stop-reason"]:checked').map(input => input.parentElement.textContent.trim()).join(", ");
+    const leaderText = manualOpen ? (manualName || "—") : leader ? leader.leader_name : "—";
+    const groupText = manualOpen ? "To be checked and reviewed by our team" : leader?.lifegroup_name || "—";
+    const netText = manualOpen ? "—" : leader?.network_leader_name || "No network leader yet — N/A";
+    const cellText = manualOpen ? "—" : leader?.lifegroup_name || "No open cell configured yet";
+    let html = "<h4>Basic Information</h4>" +
         row("Full name", $("rg-name").value) + row("Email", $("rg-email").value) + row("Birthday", $("rg-birthdate").value) +
-        row("Gender", GENDER_LABELS[$("rg-gender").value] || "") + row("School", $("rg-school").value) +
-        "<h4>Ministry &amp; Leaders</h4>" +
-        row("Ministry", $("rg-ministry").value) + row("Invited by", $("rg-inviter").value) +
-        row("Selected leader", leaderText) + row("Lifegroup", groupText) + row("Network leader", netText) + row("Open Cell", cellText);
+        row("Age", Number.isInteger(age) ? String(age) : "") + row("Sex", GENDER_LABELS[$("rg-gender").value] || "") + row("School", $("rg-school").value) +
+        "<h4>Ministry &amp; Leaders</h4>" + row("Ministry", $("rg-ministry").value) + row("Invited by", $("rg-inviter").value) +
+        row("Cell Leader’s Name", leaderText) + row("Lifegroup", groupText) + row("Network leader", netText) + row("Open Cell", cellText) +
+        "<h4>Youth Welfare · Personal Information</h4>" + row("Messenger/Facebook Name", $("rg-messenger").value) +
+        row("Complete Address", $("rg-address").value) + row("Contact Number", $("rg-contact").value) +
+        row("Parent/Guardian Name", $("rg-guardian-name").value) + row("Parent/Guardian Contact Number", $("rg-guardian-contact").value) +
+        "<h4>Youth Welfare · Educational Status</h4>" + row("Educational status", selectText($("rg-education-status")));
+    if (YW_GRADE_STATUSES.has(education)) html += row("Grade/year · A.Y. 2026–2027", selectText($("rg-grade-year")));
+    if (education === "out_of_school") html += row("When did you stop attending school?", selectText($("rg-school-stop-period"))) +
+        row("Reasons why you stopped attending school", reasons) + row("Willing to continue studies?", selectText($("rg-continue-studies")));
+    html += "<h4>Youth Welfare · LCSOL Progress</h4>" + row("Date invited to church", $("rg-church-invited-date").value) +
+        row("Enrolled in LCSOL?", selectText($("rg-lcsol-enrolled"))) + row("Current LCSOL status", selectText($("rg-lcsol-status"))) +
+        row("Youth Welfare consent", $("rg-youth-consent").checked ? "Agreed" : "Not agreed");
+    $("rgReview").innerHTML = html;
 }
 
 const REG_REVIEW_NOTES = {
@@ -1065,10 +1137,15 @@ $("regular-form").addEventListener("submit", (e) => {
     e.preventDefault();
     if (regStepNow === 1 && validateRegStep1()) goRegStep(2);
 });
-$("rgBack2").addEventListener("click", () => goRegStep(1));
-$("rgNext2").addEventListener("click", () => { if (validateRegStep2()) goRegStep(3); });
-$("rgBack3").addEventListener("click", () => goRegStep(2));
+$("rgBackWelfare").addEventListener("click", () => goRegStep(1));
+$("rgNextWelfare").addEventListener("click", () => {
+    if (validateRegStep2() && validateRegStep3()) goRegStep(3);
+});
+$("rgBackReview").addEventListener("click", () => goRegStep(2));
 
+$("rg-education-status").addEventListener("change", updateYouthWelfareConditions);
+$("rg-birthdate").addEventListener("input", updateYouthWelfareAge);
+$("rg-birthdate").addEventListener("change", updateYouthWelfareAge);
 $("rg-gender").addEventListener("change", () => { if (regStepNow === 2) loadRegLeaders(); });
 $("rg-leader").addEventListener("change", () => { $("rg-leader").dataset.selected = $("rg-leader").value; updateRegAssignment(); });
 $("rgManualToggle").addEventListener("click", () => {
@@ -1084,9 +1161,17 @@ $("rgManualToggle").addEventListener("click", () => {
 });
 
 $("rgSubmit").addEventListener("click", async () => {
+    if (regSubmitting) return;
     if (!$("rg-consent").checked) { toast("Please read and agree to the privacy notice.", "alert-triangle"); $("rg-consent").focus(); return; }
+    if (!validateRegStep2() || !validateRegStep3()) {
+        goRegStep(2);
+        qsa('#regular-registration .reg-step[data-step="2"] [aria-invalid="true"]').at(0)?.focus({ preventScroll: true });
+        return;
+    }
     const manualOpen = !$("rgManualWrap").hidden,
-        leader = currentRegLeader();
+        leader = currentRegLeader(),
+        educationStatus = $("rg-education-status").value,
+        outOfSchool = educationStatus === "out_of_school";
     const payload = {
         full_name: $("rg-name").value.trim(),
         email: $("rg-email").value.trim(),
@@ -1096,11 +1181,32 @@ $("rgSubmit").addEventListener("click", async () => {
         ministry: $("rg-ministry").value,
         invited_by: $("rg-inviter").value.trim() || null,
         leader_person_id: !manualOpen && leader ? leader.leader_person_id : null,
-        leader_name_manual: manualOpen ? $("rg-manual").value.trim() : null
+        leader_name_manual: manualOpen ? $("rg-manual").value.trim() : null,
+        youth_welfare: {
+            consent: $("rg-youth-consent").checked,
+            messenger_facebook_name: $("rg-messenger").value.trim() || null,
+            complete_address: $("rg-address").value.trim(),
+            contact_number: $("rg-contact").value.trim(),
+            parent_guardian_name: $("rg-guardian-name").value.trim(),
+            parent_guardian_contact_number: $("rg-guardian-contact").value.trim(),
+            education_status: educationStatus,
+            grade_year_level: YW_GRADE_STATUSES.has(educationStatus) ? $("rg-grade-year").value : null,
+            school_stop_period: outOfSchool ? $("rg-school-stop-period").value || null : null,
+            school_stop_reasons: outOfSchool ? qsa('#regular-registration input[name="rg-school-stop-reason"]:checked').map(input => input.value) : [],
+            continue_studies: outOfSchool ? $("rg-continue-studies").value || null : null,
+            church_invited_at: $("rg-church-invited-date").value || null,
+            lcsol_enrolled: $("rg-lcsol-enrolled").value === "yes" ? true : $("rg-lcsol-enrolled").value === "no" ? false : null,
+            lcsol_status: $("rg-lcsol-status").value || null
+        }
     };
+    const submitError = $("rgSubmitError"), submitButton = $("rgSubmit");
+    submitError.hidden = true;
+    regSubmitting = true;
+    submitButton.setAttribute("aria-busy", "true");
     try {
         const r = await DB.addRegularRegistration(payload);
-        const note = r && r.review && r.review.needed ? (REG_REVIEW_NOTES[r.review.reason] || "Part of your registration is waiting for admin review.") : "";
+        let note = r && r.review && r.review.needed ? (REG_REVIEW_NOTES[r.review.reason] || "Part of your registration is waiting for admin review.") : "";
+        if (r?.welfare_submission === "pending_review") note = [note, "Your Youth Welfare answers were received as a proposed update. An authorized administrator will review them before they replace previously saved answers."].filter(Boolean).join(" ");
         showRegSuccess({
             title: "Registration Successful!",
             message: "Welcome to the LIFEGEN family. Your registration has been recorded.",
@@ -1108,6 +1214,12 @@ $("rgSubmit").addEventListener("click", async () => {
             fine: "Your details are stored securely in the LIFEGEN Supabase database."
         });
     } catch (err) {
-        toast("Registration failed: " + err.message, "alert-triangle");
+        const reason = err?.message || "A network or service error prevented the save from being confirmed.";
+        submitError.textContent = `Registration failed: ${reason} Your answers are still here. Check your connection or contact the LIFEGEN team, then retry.`;
+        submitError.hidden = false;
+        toast("Registration failed. Your answers are still here; please retry.", "alert-triangle");
+    } finally {
+        regSubmitting = false;
+        submitButton.removeAttribute("aria-busy");
     }
 });

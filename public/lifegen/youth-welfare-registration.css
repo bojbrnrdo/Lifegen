@@ -1,0 +1,42 @@
+/* Additive questionnaire styling inside the existing LIFEGEN registration card. */
+.yw-form-section{padding-top:14px;margin-top:14px;border-top:1px solid rgba(255,255,255,.13)}
+.yw-form-section:first-child{padding-top:0;margin-top:0;border-top:0}
+.yw-form-section h4{font-size:16px;color:var(--gold-soft);margin:0 0 13px}
+.yw-age-note{margin:-2px 0 13px;padding:9px 11px;border:1px solid rgba(217,169,78,.25);border-radius:10px;background:rgba(217,169,78,.08);color:#f5e4b7;font-size:12px}
+.yw-conditional{padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:13px;background:rgba(255,255,255,.025);margin:2px 0 14px}
+.yw-reasons{border:0;padding:0;min-width:0}
+.yw-reasons legend{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.6);margin-bottom:9px}
+.yw-checkbox-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.yw-checkbox-list label{display:flex;align-items:flex-start;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:10px;padding:9px 10px;color:rgba(255,255,255,.82);font-size:12px;line-height:1.4;cursor:pointer}
+.yw-checkbox-list input,.yw-consent input{flex:none;margin-top:3px;accent-color:var(--gold)}
+.yw-consent{display:flex;align-items:flex-start;gap:10px;color:#f6e7ab;font-size:12.5px;line-height:1.6;margin:16px 0}
+.yw-consent input{width:16px;height:16px}
+#regular-registration .field textarea{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:13px 15px;color:var(--paper);font-family:var(--sans);font-size:15px;line-height:1.5;resize:vertical;min-height:76px}
+#regular-registration .field textarea::placeholder{color:rgba(255,255,255,.32)}
+#regular-registration .field textarea:focus{outline:0;border-color:var(--gold-soft);background:rgba(255,255,255,.09)}
+#regular-registration .field.invalid textarea,#regular-registration .field.invalid select{border-color:var(--flame)}
+#regular-registration .field select option{color:#26302c;background:#fff}
+@media(max-width:520px){.yw-checkbox-list{grid-template-columns:1fr}.yw-conditional{padding:10px}}
+
+/* Mobile-first registration navigation and accessible tap targets. */
+.reg-choice__count{margin-top:5px;color:rgba(255,255,255,.72);font-size:12px;line-height:1.45}
+#regular-registration .reg-step-title{margin:0 0 14px;color:var(--paper);font-size:19px;line-height:1.2}
+#regular-registration .reg-subsection-title{margin:5px 0 13px;color:var(--gold-soft);font-family:var(--sans);font-size:14px;letter-spacing:.02em}
+#regSteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+#regSteps li{min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.25}
+#regular-registration .field input:not([type=checkbox]),
+#regular-registration .field select,
+#vip-signup-form .field input,
+#vip-signup-form .field select{min-height:48px}
+#regular-registration .reg-actions{flex-wrap:wrap;gap:10px}
+#regular-registration .reg-actions .btn{min-height:48px;min-width:120px}
+#regular-registration .yw-checkbox-list label{min-height:44px;align-items:center;padding:11px}
+#regular-registration .yw-checkbox-list input{width:20px;height:20px}
+#regular-registration .yw-consent input,
+#regular-registration .vip-consent input{width:20px;height:20px;flex:none}
+.reg-submit-error{margin:10px 0;padding:12px 14px;border:1px solid rgba(255,190,170,.45);border-radius:12px;background:rgba(127,29,29,.22);color:#ffe4dc;font-size:13px;line-height:1.5}
+@media(max-width:360px){
+ #regSteps li{gap:4px;padding:5px 4px;font-size:10px;letter-spacing:0}
+ #regSteps li span{width:15px;height:15px;font-size:9px}
+ #regular-registration .reg-actions .btn{min-width:calc(50% - 5px);flex:1}
+}

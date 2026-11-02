@@ -27,8 +27,21 @@ import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
 import {resolveLeaderScope} from './leader-scope.js';
 import {assertGlobalExportAccess} from './leader-export-policy.js';
 import { listServices, serviceByDate, serviceDetail, serviceAudit, openService, markAttendance, undoAttendance, updateService, reportYears, reportSummary, exportAttendanceCsv } from './attendance.js';
+import {
+  youthWelfareSummary, youthWelfarePeople, youthWelfarePerson, youthWelfareCellLeaderOptions, youthWelfareCheckPersonDuplicates, youthWelfareAddMember, setYouthWelfareCategory,
+  youthWelfareDataQuality, youthWelfareTasks, youthWelfareAssignees, createYouthWelfareTask,
+  updateYouthWelfareTask, youthWelfareReminders, dismissYouthWelfareReminder,
+  youthWelfareSavedViews, createYouthWelfareSavedView, updateYouthWelfareSavedView,
+  deleteYouthWelfareSavedView, youthWelfareReportTemplates, createYouthWelfareReportTemplate,
+  updateYouthWelfareReportTemplate, deleteYouthWelfareReportTemplate,
+  youthWelfareRegistrationReport, youthWelfareRegistrationTrend, youthWelfareCsv, youthWelfareGlobalSearch,
+  youthWelfareActivity, youthWelfareReconciliationStatus, youthWelfareTrackerAssignment,
+  updateYouthWelfareRecord, setYouthWelfareVerification, youthWelfarePendingUpdates, reviewYouthWelfareUpdate, youthWelfareRecordHistory,
+  youthWelfareAccessList, youthWelfareAccessSearch, setYouthWelfareAccess,
+  revokeYouthWelfareAccess, youthWelfareAccessActivity, youthWelfareDataStatus,
+} from './youth-welfare.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.5';
+const ADMIN_ASSET_VERSION='2.4.8';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -85,6 +98,61 @@ app.post('/api/auth/admin-recovery',async(req,res)=>{
 });
 app.post('/api/auth/logout',requireStaff,async(req,res)=>{checkOrigin(req);checkCsrf(req);await query('DELETE FROM staff_sessions WHERE token_hash=$1',[req.actor.session_hash]);clearStaffCookie(req,res);res.json({});});
 app.post('/api/auth/password',requireStaff,async(req,res)=>{checkOrigin(req);checkCsrf(req);res.json(await changePassword(req.actor,req.body.current,req.body.next));});
+// Dedicated Youth Welfare API. Every endpoint requires an explicit Youth Welfare
+// permission (the restricted Youth Welfare roles or main Admin); profile data comes
+// from the canonical People table and VIP-linked people are filtered server-side.
+const youthWelfareApi=express.Router();
+youthWelfareApi.use(requireStaff,(req,res,next)=>{try{requirePermission(req.actor,'youth_welfare:view');next();}catch(e){next(e);}});
+const protectYouthWrite=(permission='youth_welfare:manage')=>(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);requirePermission(req.actor,permission);next();}catch(e){next(e);}};
+const requireYouthManage=(req,res,next)=>{try{requirePermission(req.actor,'youth_welfare:manage');next();}catch(e){next(e);}};
+const requireYouthRecordsManage=(req,res,next)=>{try{requirePermission(req.actor,'youth_welfare:records:manage');next();}catch(e){next(e);}};
+const requireYouthAccessManage=(req,res,next)=>{try{const permissions=req.actor?.permissions||[];if(!permissions.includes('youth_welfare:access:manage')&&!permissions.includes('users:manage'))throw httpError(req.actor?403:401,'Your account is not allowed to manage Youth Welfare access.');next();}catch(e){next(e);}};
+const protectYouthAccess=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);const permissions=req.actor?.permissions||[];if(!permissions.includes('youth_welfare:access:manage')&&!permissions.includes('users:manage'))throw httpError(req.actor?403:401,'Your account is not allowed to manage Youth Welfare access.');next();}catch(e){next(e);}};
+const requireYouthTrackerView=(req,res,next)=>{try{const permissions=req.actor?.permissions||[];if(!permissions.includes('youth_welfare:tracker:view')&&!permissions.includes('lifegroups:view'))throw httpError(req.actor?403:401,'Your account is not allowed to view Lifegroup Tracker assignments.');next();}catch(e){next(e);}};
+const requireYouthPrivate=(req,res,next)=>{try{requirePermission(req.actor,'youth_welfare:profile:private');next();}catch(e){next(e);}};
+const requireYouthPeopleAdd=(req,res,next)=>{try{const permissions=req.actor?.permissions||[];if(!permissions.includes('youth_welfare:people:add')&&!permissions.includes('people:write'))throw httpError(req.actor?403:401,'Your account cannot add or link People records.');next();}catch(e){next(e);}};
+const protectYouthPeopleAdd=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
+youthWelfareApi.get('/summary',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareSummary(req.actor)));
+youthWelfareApi.get('/cell-leaders',requireYouthRecordsManage,async(req,res)=>res.set('Cache-Control','no-store').json({leaders:await youthWelfareCellLeaderOptions()}));
+youthWelfareApi.get('/people',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfarePeople({q:req.query.q,category:req.query.category,missing:req.query.missing,education_status:req.query.education_status,lcsol_enrolled:req.query.lcsol_enrolled,tab:req.query.tab,age_min:req.query.age_min,age_max:req.query.age_max,cell_leader:req.query.cell_leader,lcsol_status:req.query.lcsol_status,verification_status:req.query.verification_status,sort:req.query.sort,limit:req.query.limit,offset:req.query.offset},req.actor)));
+youthWelfareApi.post('/people/duplicate-check',protectYouthPeopleAdd,requireYouthPeopleAdd,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareCheckPersonDuplicates(req.body,req.actor)));
+youthWelfareApi.post('/people',protectYouthPeopleAdd,requireYouthPeopleAdd,async(req,res)=>{const result=await youthWelfareAddMember(req.body,req.actor);res.status(result.linked_existing?200:201).set('Cache-Control','no-store').json(result);});
+youthWelfareApi.get('/people/:id',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfarePerson(req.params.id,req.actor)));
+youthWelfareApi.get('/people/:id/lifegroup-tracker',requireYouthTrackerView,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareTrackerAssignment(req.params.id)));
+youthWelfareApi.put('/people/:id/welfare-record',protectYouthWrite('youth_welfare:records:manage'),async(req,res)=>res.json(await updateYouthWelfareRecord(req.params.id,req.body,req.actor)));
+youthWelfareApi.put('/people/:id/verification',protectYouthWrite('youth_welfare:manage'),async(req,res)=>res.json(await setYouthWelfareVerification(req.params.id,req.body?.status,req.actor)));
+youthWelfareApi.get('/people/:id/history',requireYouthPrivate,async(req,res)=>res.set('Cache-Control','no-store').json({history:await youthWelfareRecordHistory(req.params.id,{limit:Number(req.query.limit)||50})}));
+youthWelfareApi.put('/people/:id/category',protectYouthWrite('youth_welfare:classify'),async(req,res)=>res.json(await setYouthWelfareCategory(req.params.id,req.body?.category,req.actor)));
+youthWelfareApi.get('/updates/pending',requireYouthPrivate,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfarePendingUpdates({limit:Number(req.query.limit)||100})));
+youthWelfareApi.post('/updates/:id/review',protectYouthWrite('youth_welfare:profile:private'),async(req,res)=>res.json(await reviewYouthWelfareUpdate(req.params.id,req.body?.decision,req.actor)));
+youthWelfareApi.get('/data-quality',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareDataQuality({limit:Number(req.query.limit)||50,offset:Number(req.query.offset)||0,includePrivate:req.actor?.permissions?.includes('youth_welfare:profile:private')})));
+youthWelfareApi.get('/data-status',async(req,res)=>res.json(await youthWelfareDataStatus()));
+youthWelfareApi.get('/reconciliation',async(req,res)=>res.json(await youthWelfareReconciliationStatus()));
+youthWelfareApi.get('/access',requireYouthAccessManage,async(req,res)=>res.json(await youthWelfareAccessList()));
+youthWelfareApi.get('/access/search',requireYouthAccessManage,async(req,res)=>res.json(await youthWelfareAccessSearch(req.query.q)));
+youthWelfareApi.get('/access/activity',requireYouthAccessManage,async(req,res)=>res.json(await youthWelfareAccessActivity({limit:Number(req.query.limit)||100})));
+youthWelfareApi.put('/access/:userId',protectYouthAccess,async(req,res)=>res.json(await setYouthWelfareAccess(req.params.userId,req.body?.role_id,req.actor)));
+youthWelfareApi.delete('/access/:userId',protectYouthAccess,async(req,res)=>res.json(await revokeYouthWelfareAccess(req.params.userId,req.actor)));
+youthWelfareApi.get('/activity',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({events:await youthWelfareActivity({limit:Number(req.query.limit)||100})}));
+youthWelfareApi.get('/tasks/assignees',requireYouthManage,async(req,res)=>res.json({assignees:await youthWelfareAssignees()}));
+youthWelfareApi.get('/tasks',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({tasks:await youthWelfareTasks({status:req.query.status,q:req.query.q,assignee:req.query.assignee,limit:Number(req.query.limit)||100})}));
+youthWelfareApi.post('/tasks',protectYouthWrite(),async(req,res)=>res.status(201).json(await createYouthWelfareTask(req.body,req.actor)));
+youthWelfareApi.patch('/tasks/:id',protectYouthWrite(),async(req,res)=>res.json(await updateYouthWelfareTask(req.params.id,req.body,req.actor)));
+youthWelfareApi.get('/reminders',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({reminders:await youthWelfareReminders(req.actor)}));
+youthWelfareApi.post('/reminders/:id/dismiss',protectYouthWrite(),async(req,res)=>res.json(await dismissYouthWelfareReminder(req.params.id,req.body?.due_date,req.actor)));
+youthWelfareApi.get('/saved-views',async(req,res)=>res.json({views:await youthWelfareSavedViews(req.actor)}));
+youthWelfareApi.post('/saved-views',protectYouthWrite(),async(req,res)=>res.status(201).json(await createYouthWelfareSavedView(req.body,req.actor)));
+youthWelfareApi.patch('/saved-views/:id',protectYouthWrite(),async(req,res)=>res.json(await updateYouthWelfareSavedView(req.params.id,req.body,req.actor)));
+youthWelfareApi.delete('/saved-views/:id',protectYouthWrite(),async(req,res)=>res.json(await deleteYouthWelfareSavedView(req.params.id,req.actor)));
+youthWelfareApi.get('/report-templates',async(req,res)=>res.json(await youthWelfareReportTemplates(req.actor)));
+youthWelfareApi.post('/report-templates',protectYouthWrite(),async(req,res)=>res.status(201).json(await createYouthWelfareReportTemplate(req.body,req.actor)));
+youthWelfareApi.patch('/report-templates/:id',protectYouthWrite(),async(req,res)=>res.json(await updateYouthWelfareReportTemplate(req.params.id,req.body,req.actor)));
+youthWelfareApi.delete('/report-templates/:id',protectYouthWrite(),async(req,res)=>res.json(await deleteYouthWelfareReportTemplate(req.params.id,req.actor)));
+youthWelfareApi.get('/reports/summary',async(req,res)=>res.json(await youthWelfareRegistrationReport({from:req.query.from,to:req.query.to,compareFrom:req.query.compare_from,compareTo:req.query.compare_to,category:req.query.category})));
+youthWelfareApi.get('/reports/trend',async(req,res)=>res.json(await youthWelfareRegistrationTrend({from:req.query.from,to:req.query.to,months:Number(req.query.months)||12,category:req.query.category})));
+youthWelfareApi.get('/reports/export.csv',requireYouthManage,async(req,res)=>{const result=await youthWelfareCsv({q:req.query.q,category:req.query.category,missing:req.query.missing,education_status:req.query.education_status,lcsol_enrolled:req.query.lcsol_enrolled,tab:req.query.tab,age_min:req.query.age_min,age_max:req.query.age_max,cell_leader:req.query.cell_leader,lcsol_status:req.query.lcsol_status,verification_status:req.query.verification_status,from:req.query.from,to:req.query.to},req.actor);res.status(200).type('text/csv').set('Content-Disposition','attachment; filename="lifegen-youth-welfare.csv"').set('Cache-Control','no-store').send(result.csv);});
+youthWelfareApi.get('/search',async(req,res)=>res.json(await youthWelfareGlobalSearch(req.query.q,req.actor)));
+app.use('/api/youth-welfare',youthWelfareApi);
 app.get('/api/events',requireStaff,async(req,res)=>res.json({revision:await revision()}));
 app.get('/api/events/stream',requireStaff,async(req,res)=>{requirePermission(req.actor,'dashboard:view');await streamEvents(req,res);});
 const methods={
@@ -393,7 +461,8 @@ app.get('/',(req,res)=>{
  if(req.query.view==='admin')return res.redirect('/admin');
  return page(res,'lifegen');
 });
-app.get(['/admin','/admin/'],(req,res)=>page(res,'admin'));
+app.get(['/admin','/admin/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(actor?.role_id))return res.redirect(303,'/youth-welfare');return page(res,'admin');});
+app.get(['/youth-welfare','/youth-welfare/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(actor&&!actor.permissions.includes('youth_welfare:view'))return res.redirect(303,'/admin');return page(res,'youth-welfare');});
 app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'lifeide'));
 // Fullscreen VIP announcement projector. Deliberately public and read-only: it
 // exposes only the VIP full name and inviter that are already projected in the

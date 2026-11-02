@@ -9,6 +9,7 @@ import { currentInstant } from './service-cycle.js';
 import { vipAnnouncement, vipsForService, readCycle, persistCycleWindow, streamAnnouncementChanges, attributeServiceDate, isSundayKey as isSundayServiceDate } from './vip-announcement.js';
 import { readDesignBytes } from './vip-designs.js';
 import { handleLifegroupMethod, effectiveGroupCapacity } from './lifegroups.js';
+import { normalizeYouthWelfareAnswers, YOUTH_WELFARE_CONSENT_VERSION } from './youth-welfare-form.js';
 // ---------------------------------------------------------------------------
 // Public registration (VIP first-timer + regular attendee)
 // ---------------------------------------------------------------------------
@@ -18,6 +19,10 @@ import { handleLifegroupMethod, effectiveGroupCapacity } from './lifegroups.js';
 const PUBLIC_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
 const GENDER_TO_GROUP = { male: 'boys', female: 'girls' };
 const PUBLIC_MINISTRIES = ['Worship Team','Ushering','Media / Tech','Kids Ministry','Dance / Creative','Prayer','Production','Not yet in a ministry'];
+// Burst protection only: this is not a total attendee/registration cap. The
+// generous window allows large groups sharing a church or school IP to register.
+const PUBLIC_REGISTRATION_BURST_LIMIT = 1200;
+const PUBLIC_LEADER_LOOKUP_BURST_LIMIT = 1200;
 
 export const isIsoDate = (v) => {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -165,6 +170,17 @@ publicRouter.get('/vip-count',async(req,res)=>{
  const {total}=await vipsForService(cycle.announce_service_date);
  res.json({service_date:cycle.announce_service_date,service_date_display:cycle.announce_service_date_display,total,state:cycle.state,timezone:cycle.timezone});
 });
+// Public aggregate only: count distinct canonical People records that have a
+// verified regular public-registration audit event. There is no total cap.
+publicRouter.get('/registration-count',async(req,res)=>{
+ const {rows}=await query(`
+  SELECT count(DISTINCT p.id)::int AS total
+  FROM public.audit_log a
+  JOIN public.people p ON p.id::text=a.entity_id
+  WHERE a.entity='people' AND a.action='public_registration' AND p.is_demo=false
+ `);
+ res.set('Cache-Control','no-store').json({total:rows[0]?.total??0});
+});
 // The selected design's image bytes. Public and cacheable by checksum: the
 // artwork is meant to be projected in the room, and the URL carries the content
 // hash so a replaced file can never be served from a stale cache.
@@ -195,7 +211,7 @@ publicRouter.get('/vip',async(req,res)=>{
  res.json({registered:true,vip:vipShape(vip),csrf_token:vip.csrf_token,today:today(),timezone:'Asia/Manila',month,validated_count:validatedCount,sundays_this_month:sundayCount,prize_unlocked:validatedCount>=sundayCount,checkins:[...map].sort((a,b)=>a[0].localeCompare(b[0])).map(([date_key,status])=>({date_key,status})),prize:await currentPrize()});
 });
 publicRouter.post('/registrations',async(req,res)=>{
- checkOrigin(req);await rateLimit(req,'registration',15);
+ checkOrigin(req);await rateLimit(req,'registration',PUBLIC_REGISTRATION_BURST_LIMIT);
  const b=req.body||{};
  if(b.website)throw httpError(400,'Please leave the website field empty.');
  if(b.privacy_consent!==true)throw httpError(400,'Please read and agree to the privacy notice.');
@@ -298,7 +314,7 @@ publicRouter.post('/posts/:id/pray',async(req,res)=>{
 // whose Lifegroup matches it. Everything is read from the Lifegroups data the
 // admin already maintains; nothing is hardcoded.
 publicRouter.get('/leaders',async(req,res)=>{
- await rateLimit(req,'public-leaders',60,15);
+ await rateLimit(req,'public-leaders',PUBLIC_LEADER_LOOKUP_BURST_LIMIT);
  const gender=String(req.query.gender||'').trim();
  if(!PUBLIC_GENDERS.includes(gender))throw httpError(400,'Choose your gender first.');
  const groupGender=GENDER_TO_GROUP[gender]||null;
@@ -312,12 +328,13 @@ publicRouter.get('/leaders',async(req,res)=>{
 // assigns the Open cell (tier 'new'). Anything it cannot verify is flagged for
 // admin review instead of being guessed.
 publicRouter.post('/registrations/regular',async(req,res)=>{
- checkOrigin(req);await rateLimit(req,'registration',15);
+ checkOrigin(req);await rateLimit(req,'registration',PUBLIC_REGISTRATION_BURST_LIMIT);
  const b=req.body||{};
  if(b.website)throw httpError(400,'Please leave the website field empty.');
- if(b.privacy_consent!==true)throw httpError(400,'Please read and agree to the privacy notice.');
- const name=String(b.full_name||'').trim().replace(/\s+/g,' '),email=String(b.email||'').trim().toLowerCase(),birthdate=String(b.birthdate||'').trim(),gender=String(b.gender||'').trim(),school=String(b.school||'').trim();
- const ministry=String(b.ministry||'').trim(),invitedBy=String(b.invited_by||'').trim()||null,manualName=String(b.leader_name_manual||'').trim()||null;
+  if(b.privacy_consent!==true)throw httpError(400,'Please read and agree to the privacy notice.');
+  const youthWelfareAnswers=normalizeYouthWelfareAnswers(b.youth_welfare);
+  const name=String(b.full_name||'').trim().replace(/\s+/g,' '),email=String(b.email||'').trim().toLowerCase(),birthdate=String(b.birthdate||'').trim(),gender=String(b.gender||'').trim(),school=String(b.school||'').trim();
+  const ministry=String(b.ministry||'').trim(),invitedBy=String(b.invited_by||'').trim()||null,manualName=String(b.leader_name_manual||'').trim()||null;
  const rawLeader=b.leader_person_id==null||b.leader_person_id===''?null:Number(b.leader_person_id);
  if(rawLeader!==null&&(!Number.isSafeInteger(rawLeader)||rawLeader<1))throw httpError(400,'Choose a leader from the list.');
  if(name.length<2||name.length>200)throw httpError(400,'Please enter your full name.');
@@ -330,9 +347,12 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
  if(!PUBLIC_MINISTRIES.includes(ministry))throw httpError(400,'Please choose a ministry.');
  if(invitedBy&&invitedBy.length>200)throw httpError(400,'That invited-by name is too long.');
  if(manualName&&(manualName.length<2||manualName.length>120))throw httpError(400,'Please type your leader\'s name.');
- const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');
+  const rawKey=String(b.idempotency_key||'');if(!/^[a-zA-Z0-9_\-]{16,100}$/.test(rawKey))throw httpError(400,'Registration request key is missing. Reload and try again.');
+  const requestHash=hashToken(rawKey);
 
- const result=await withState(async({data,client})=>{
+  const result=await withState(async({data,client})=>{
+  const prior=(await client.query('SELECT response FROM public.public_registration_requests WHERE request_hash=$1 FOR SHARE',[requestHash])).rows[0];
+  if(prior)return prior.response;
   // ---- resolve the leader against the live data (never trust the browser) ----
   let leader=null,review=null;
   if(rawLeader!==null){
@@ -346,20 +366,25 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
    leader=candidates.find((c)=>normalizeName(c.leader_name)===normalizeName(manualName))||null;
    if(!leader)review={needed:true,reason:'manual_leader_unmatched',manual_leader_name:manualName};
   } else {
-   review={needed:true,reason:'no_leader_selected'};
+   throw httpError(400,'Choose or enter your Cell Leader’s name.');
   }
 
-  // ---- the person: reuse the same email, otherwise create one ----
-  const existing=data.people.find((p)=>!p.archived_at&&normalizeName(p.email)===email);
+  // ---- the person: reuse only one exact email match; ambiguous matches are
+  // written to the existing review log rather than merged by name or chosen
+  // arbitrarily. ----
+  const emailMatches=data.people.filter((p)=>!p.archived_at&&normalizeName(p.email)===email);
+  if(emailMatches.length>1){
+   for(const match of emailMatches)await logAction(client,null,'people',match.id,'public_registration_review',{reason:'ambiguous_exact_email_match',match_count:emailMatches.length});
+   const conflict={ok:false,error:'We could not safely match this email to one LIFEGEN profile. Please contact a LIFEGEN leader so the team can review the existing records.'};
+   await client.query('INSERT INTO public.public_registration_requests(request_hash,person_id,response) VALUES($1,NULL,$2::jsonb)',[requestHash,JSON.stringify(conflict)]);
+   return conflict;
+  }
+  const existing=emailMatches[0]||null;
   let person,created=false;
   if(existing){
+   // Public re-submissions may contribute separate Youth Welfare answers, but
+   // they are not an unauthenticated People-profile correction surface.
    person=existing;
-   if(!person.sex&&gender)person.sex=gender;
-   if(!person.birthdate&&birthdate)person.birthdate=birthdate;
-   if(!person.age&&age)person.age=age;
-   if(!person.school&&school)person.school=school;
-   if(!person.inviter&&invitedBy)person.inviter=invitedBy;
-   if(!person.ministry&&ministry)person.ministry=ministry;
    if(!person.privacy_consent_at)person.privacy_consent_at=today();
   } else {
    const parts=name.split(' ');
@@ -372,6 +397,43 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
    // still records a single audit entry.
    const queued=data.people.find((p)=>p.id===person.id);
    if(queued)await upsertRows(client,'people',[queued]);
+  }
+
+  // ---- save Youth Welfare answers separately from People and Tracker data ----
+  // Private family/contact fields are never copied onto the broadly used People row.
+  const welfareAnswers={
+   ...youthWelfareAnswers,
+   cell_leader_person_id:leader?Number(leader.leader_person_id):null,
+   cell_leader_manual_name:leader?null:manualName,
+   welfare_consent_version:YOUTH_WELFARE_CONSENT_VERSION,
+  };
+  const existingWelfare=(await client.query('SELECT person_id FROM public.youth_welfare_records WHERE person_id=$1 FOR UPDATE',[person.id])).rows[0];
+  let welfareSubmission='saved',welfareUpdateId=null;
+  if(existingWelfare){
+   const update=(await client.query(`
+    INSERT INTO public.youth_welfare_record_updates(person_id,proposed_answers,welfare_consent_at,source,request_hash)
+    VALUES($1,$2::jsonb,now(),'public_registration',$3)
+    ON CONFLICT(request_hash) DO NOTHING
+    RETURNING id
+   `,[person.id,JSON.stringify(welfareAnswers),requestHash])).rows[0];
+   welfareSubmission=update?'pending_review':'already_received';
+   welfareUpdateId=update?.id||null;
+   if(update)await logAction(client,null,'youth_welfare_record_updates',update.id,'public_update_submitted',{person_id:person.id,status:'pending'});
+  }else{
+   await client.query(`
+    INSERT INTO public.youth_welfare_records(
+     person_id,messenger_facebook_name,complete_address,contact_number,parent_guardian_name,parent_guardian_contact,
+     cell_leader_person_id,cell_leader_manual_name,education_status,grade_year_level,school_stop_period,school_stop_reasons,
+     continue_studies,church_invited_at,lcsol_enrolled,lcsol_status,welfare_consent_at,welfare_consent_version,source
+    ) VALUES(
+     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::text[],$13,$14,$15,$16,now(),$17,'public_registration'
+    )
+   `,[person.id,welfareAnswers.messenger_facebook_name,welfareAnswers.complete_address,welfareAnswers.contact_number,
+      welfareAnswers.parent_guardian_name,welfareAnswers.parent_guardian_contact,welfareAnswers.cell_leader_person_id,
+      welfareAnswers.cell_leader_manual_name,welfareAnswers.education_status,welfareAnswers.grade_year_level,
+      welfareAnswers.school_stop_period,welfareAnswers.school_stop_reasons,welfareAnswers.continue_studies,
+      welfareAnswers.church_invited_at,welfareAnswers.lcsol_enrolled,welfareAnswers.lcsol_status,YOUTH_WELFARE_CONSENT_VERSION]);
+   await logAction(client,null,'youth_welfare_records',person.id,'public_profile_created',{education_status:welfareAnswers.education_status,lcsol_enrolled:welfareAnswers.lcsol_enrolled,verification_status:'pending'});
   }
 
   // ---- the Open cell: tier 'new' in the leader's own Lifegroup ----
@@ -402,7 +464,10 @@ publicRouter.post('/registrations/regular',async(req,res)=>{
 
   await logAction(client,null,'people',person.id,'public_registration',{person_created:created,ministry,leader_person_id:leader?leader.leader_person_id:null,lifegroup_id:membership.lifegroup_id,review:review?review.reason:null});
   if(review)await logAction(client,null,'people',person.id,'public_registration_review',{reason:review.reason,manual_leader_name:review.manual_leader_name||null});
-  return {ok:true,person_created:created,person:{id:String(person.id),name:person.full_name||[person.first_name,person.last_name].filter(Boolean).join(' '),person_code:person.person_code||null},membership,review,leader};
+  const response={ok:true,person_created:created,person:{id:String(person.id),name:person.full_name||[person.first_name,person.last_name].filter(Boolean).join(' '),person_code:person.person_code||null},membership,review,leader,welfare_submission:welfareSubmission,welfare_update_id:welfareUpdateId};
+  await client.query('INSERT INTO public.public_registration_requests(request_hash,person_id,response) VALUES($1,$2,$3::jsonb)',[requestHash,person.id,JSON.stringify(response)]);
+  return response;
  },{write:true});
+ if(result?.ok===false)return res.status(409).json(result);
  res.status(result.person_created?201:200).json(result);
 });

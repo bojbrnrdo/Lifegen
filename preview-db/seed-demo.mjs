@@ -1,6 +1,7 @@
 // Seeds the preview database DIRECTLY via PGlite (gateway must be STOPPED).
-// Creates: demo admin user, 24 demo people, last 10 Sunday services with
-// attendance spread, calendar events, monthly prize, and the QA VIP rows
+// Creates: demo admin and restricted Youth Welfare users, 24 demo people,
+// ministry-only sample categories, last 10 Sunday services with attendance spread,
+// calendar events, monthly prize, and the QA VIP rows
 // (person id=25 / registration 901 / checkins 801-802).
 // Usage: node seed-demo.mjs
 import crypto from 'node:crypto';
@@ -36,6 +37,14 @@ if (!seededUser) {
     ['demo@lifegen.local', 'Demo Admin', `scrypt$32768$${salt}$${hash}`]);
   console.log('seeded staff user demo@lifegen.local');
 }
+const seededYouthUser = (await db.query("SELECT id FROM staff_users WHERE username=$1", ['demo-youth@lifegen.local'])).rows[0];
+if (!seededYouthUser) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync('DemoYouthWelfare2026!', salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }).toString('hex');
+  await db.query("INSERT INTO staff_users(username,display_name,password_hash,role_id) VALUES($1,$2,$3,'youth_welfare_admin')",
+    ['demo-youth@lifegen.local', 'Demo Youth Welfare', `scrypt$32768$${salt}$${hash}`]);
+  console.log('seeded restricted Youth Welfare preview user demo-youth@lifegen.local');
+}
 
 // ---- demo people ---------------------------------------------------------
 const personCount = (await db.query("SELECT count(*)::int AS n FROM people WHERE is_demo=true")).rows[0].n;
@@ -55,6 +64,31 @@ if (!personCount) {
   const { rows } = await db.query('SELECT id FROM people WHERE is_demo=true ORDER BY id');
   rows.forEach(r => personIds.push(r.id));
 }
+// Synthetic category overrides demonstrate the ministry-only classifier. They
+// never change the seeded People registration answers and are not production data.
+const demoYouthCategories = ['student', 'working_student', 'young_professional', 'working_employed', 'not_studying', 'unable_to_continue'];
+for (let i = 0; i < Math.min(demoYouthCategories.length, personIds.length); i++) {
+  await db.query(`INSERT INTO youth_welfare_categories(person_id,category)
+    VALUES($1,$2) ON CONFLICT(person_id) DO NOTHING`, [personIds[i], demoYouthCategories[i]]);
+}
+// Add a few harmless, fictional administrative tasks only to a fresh preview DB.
+// These never create or edit People records and demonstrate the reminder flow.
+const youthUserId = seededYouthUser?.id || (await db.query("SELECT id FROM staff_users WHERE username='demo-youth@lifegen.local'")).rows[0]?.id;
+const taskCount = (await db.query('SELECT count(*)::int AS n FROM youth_welfare_follow_up_tasks')).rows[0].n;
+if (!taskCount && personIds.length >= 2 && youthUserId) {
+  const dueSoon = new Date(); dueSoon.setDate(dueSoon.getDate() + 2);
+  const overdue = new Date(); overdue.setDate(overdue.getDate() - 3);
+  await db.query(`INSERT INTO youth_welfare_follow_up_tasks(person_id,task_type,title,notes,status,assigned_to,due_date,created_by,updated_by)
+    VALUES($1,'data_verification','Confirm school field on the regular registration','Administrative demo task only. Do not enter sensitive details.','needs_review',$3,$4,$3,$3),
+          ($2,'registration_review','Review an incomplete regular registration','Administrative demo task only. Do not enter sensitive details.','in_progress',$3,$5,$3,$3)`,
+  [personIds[0],personIds[1],youthUserId,iso(dueSoon),iso(overdue)]);
+}
+await db.query(`INSERT INTO youth_welfare_saved_views(user_id,name,filters)
+  VALUES($1,'Demo · Incomplete details','{"q":"","category":"all","missing":"incomplete"}'::jsonb)
+  ON CONFLICT(user_id,lower(btrim(name))) DO NOTHING`,[youthUserId]);
+await db.query(`INSERT INTO youth_welfare_report_templates(user_id,name,config)
+  VALUES($1,'Demo · Monthly registration events','{"type":"registration_summary","period":"month","category":"all"}'::jsonb)
+  ON CONFLICT(user_id,lower(btrim(name))) DO NOTHING`,[youthUserId]);
 
 // ---- services: last 10 Sundays -------------------------------------------
 const sundays = lastSundays(10);

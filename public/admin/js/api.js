@@ -42,7 +42,7 @@ export const api={
  qs,get:url=>call('get',url),
  status:async()=>{const r=await request('/api/auth/status');if(!r.user)stopSync?.();return r;},login:(username,password)=>request('/api/auth/login',{method:'POST',body:{username,password}}),setup:body=>request('/api/auth/setup',{method:'POST',body}),recoverAdmin:body=>request('/api/auth/admin-recovery',{method:'POST',body}),
  logout:async()=>{try{await request('/api/auth/logout',{method:'POST',body:{}});}finally{csrf=null;previewSessionToken=null;stopSync?.();}},
- clearPreviewSession:()=>{previewSessionToken=null;csrf=null;},
+ clearPreviewSession:()=>{previewSessionToken=null;csrf=null;},getPreviewSessionToken:()=>previewSessionToken,
 changePassword:(current,next)=>request('/api/auth/password',{method:'POST',body:{current,next}}),
  backup:async()=>{const r=await request('/api/backup',{blob:true});downloadBlob(r.blob,r.filename||'lifegen-supabase-backup.json');},
  blob:async url=>(await request(url,{blob:true})).blob,

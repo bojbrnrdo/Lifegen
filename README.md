@@ -1,8 +1,8 @@
 # LIFEGEN · Supabase PostgreSQL + integrated Lifegroup Tracker
 
-LIFEGEN serves its public website at `/` and its protected Admin portal at `/admin` from one Express app. The website, VIP registration flow, attendance, people records and Lifegroup Tracker use the same **server-side Supabase PostgreSQL** database. The browser talks only to same-origin `/api` endpoints; database credentials are never placed in public assets.
+LIFEGEN serves its public website at `/`, protected Admin portal at `/admin`, and separate Youth Welfare workspace at `/youth-welfare` from one Express app. Public Regular Attendee Registration includes the Youth Welfare questionnaire; VIP registration, QR destination, attendance, People, and Tracker continue using the existing workflows and shared **server-side Supabase PostgreSQL** database. The browser talks only to same-origin `/api` endpoints; database credentials are never placed in public assets.
 
-> **Preview note:** the current workspace/preview uses a temporary local PostgreSQL demonstration database. It is not connected to the church's Supabase project. No production Supabase credentials are included in this repository.
+> **Preview note:** this Arena preview is not connected to production Supabase, and live/authenticated API data is unavailable unless a database is configured. The repository's optional `preview-db/` PGlite environment is disposable demo infrastructure, not the church database. No production credentials are included.
 
 ## What is included
 
@@ -10,6 +10,7 @@ LIFEGEN serves its public website at `/` and its protected Admin portal at `/adm
 - Admin pages for people, Sunday attendance, VIP registrations, reports, settings and the Lifegroup Tracker.
 - Tracker pages for Networks, Lifegroups, active/former membership, Open/Closed cell tiers, weekly meeting reports and attendance progress.
 - Staff, Admin and read-only Viewer permissions with server-side authorization.
+- A Youth Welfare workspace at `/youth-welfare` inside the existing LIFEGEN app, using the shared staff login and password-change flow. Its responsive dark-violet interface includes dashboard, People Management, correction review, Education Monitoring, LCSOL Progress, follow-ups, reports, data-quality checks, data status, activity logs, saved views, access management, and settings. Admin, Staff, and Viewer portal access can be managed for existing LIFEGEN accounts without replacing their primary role; changes are audited and server-authorized. After migration 015, Youth Welfare answers and consent are stored separately by canonical Person ID; re-submissions for an existing Welfare record become Admin-reviewed proposals. The workspace reads regular registrations directly from the shared People database and excludes every VIP-linked person. Profiles expose only role-appropriate fields; Tracker access is limited to current Lifegroup/Network, eligible leaders, role/tier, and joined date. Former memberships, attendance/devotion, progress, and free-text Tracker notes are not exposed. School-stop reasons and family/contact data remain protected. Reports use actual source records and verified audit events, show denominators, and do not infer unanswered metrics or claim historical category snapshots. Before migration 015 is applied, protected-answer features are explicitly reported as unavailable.
 
 ### VIP → Lifegroup follow-up
 
@@ -149,7 +150,7 @@ sample name, date, inviter or count is ever hardcoded.
 
 Follow [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) for the exact SQL Editor sequence, Supabase connection URL guidance, deployment environment variables, and post-deploy checks.
 
-The SQL files are under `database/`. For a fresh LIFEGEN schema, run them in order from `001_init.sql` through `008_vip_design_library.sql`; `003`, `004`, and `005` are retained retired no-op migration markers. For an existing LIFEGEN deployment with migrations `001`–`005` already applied, back up first and run the additive `006_lifegroup_tracker.sql` migration to restore the tracker tables, then the additive `007_vip_service_date.sql` migration for the Sunday-service attribution behind the VIP announcement, then `008_vip_design_library.sql` for the announcement design library.
+The SQL files are under `database/`. For a fresh LIFEGEN schema, run them in order from `001_init.sql` through `015_youth_welfare_records.sql`; `003`, `004`, and `005` are retained retired no-op migration markers. Existing deployments should back up first and apply the pending versions in order using `npm run db:migrate` (with private database URLs configured), or follow the staging-first instructions in [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md). Migrations `011`–`014` add separate ministry categories, the portal workspace, least-privilege Admin/Staff/Viewer roles, and additive access assignments. Migration `015_youth_welfare_records.sql` stores the questionnaire answers and Youth Welfare consent separately from People, adds Admin-reviewed corrections and Admin-only history, enables RLS/revokes browser access, and adds hashed registration-request idempotency; no current values are backfilled or guessed. These migrations leave People, registration, attendance, and VIP records unchanged. Apply only after backup and staging verification; production migrations and deployment require explicit approval.
 
 Connection variables are private server settings (see [`.env.example`](.env.example)):
 

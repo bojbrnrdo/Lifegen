@@ -166,10 +166,10 @@ export async function flushState(client,before,after,actor) {
 }
 export async function withState(fn,{actor=null,write=false,dryRun=false,tables=TABLES}={}) {
  return transaction(async client=>{
-  const data=await loadState(client,{includeAudit:write,includeVipRegistrations:write,tables:write?TABLES:tables}); const before=structuredClone(data);
-  const context={data,client,actor,dirty:false};
+  const data=await loadState(client,{includeAudit:write,includeVipRegistrations:write,tables:write?TABLES:tables}); let persisted=structuredClone(data);
+  const context={data,client,actor,dirty:false,flushed:false,flush:async()=>{await flushState(client,persisted,data,actor);persisted=structuredClone(data);context.flushed=true;}};
   const result=await domainContext.run(context,()=>fn({data,client,context}));
-  if(write) await flushState(client,before,data,actor);
+  if(write) await context.flush();
   else if(context.dirty) throw new Error('A read operation attempted to change data.');
   return result;
  },{write,dryRun});
@@ -202,6 +202,24 @@ export async function databaseBackup(client) {
  state.vip_designs=designRows;
  state.vip_designs_bytes_excluded=designRows.length>0?'Image bytes are not part of this JSON export; they live in Supabase Storage or the vip_designs.data column.':null;
  state.vip_service_designs=(await client.query('SELECT * FROM vip_service_designs ORDER BY service_date')).rows;
+ // Youth Welfare additions are server-side ministry data; include them in the
+ // existing administrator-only backup without exposing them through browser DB roles.
+ state.youth_welfare_categories=(await client.query('SELECT * FROM youth_welfare_categories ORDER BY person_id')).rows;
+ const youthWelfareSchema=(await client.query(`SELECT to_regclass('public.youth_welfare_records') IS NOT NULL AS records,
+  to_regclass('public.youth_welfare_record_updates') IS NOT NULL AS updates,
+  to_regclass('public.youth_welfare_record_history') IS NOT NULL AS history,
+  to_regclass('public.public_registration_requests') IS NOT NULL AS requests,
+  to_regclass('public.youth_welfare_access') IS NOT NULL AS access`)).rows[0];
+ state.youth_welfare_response_schema_available=Boolean(youthWelfareSchema.records&&youthWelfareSchema.updates&&youthWelfareSchema.history&&youthWelfareSchema.requests);
+ state.youth_welfare_records=youthWelfareSchema.records?(await client.query('SELECT * FROM youth_welfare_records ORDER BY person_id')).rows:null;
+ state.youth_welfare_record_updates=youthWelfareSchema.updates?(await client.query('SELECT * FROM youth_welfare_record_updates ORDER BY id')).rows:null;
+ state.youth_welfare_record_history=youthWelfareSchema.history?(await client.query('SELECT * FROM youth_welfare_record_history ORDER BY id')).rows:null;
+ state.public_registration_requests=youthWelfareSchema.requests?(await client.query('SELECT * FROM public_registration_requests ORDER BY created_at,request_hash')).rows:null;
+ state.youth_welfare_access=youthWelfareSchema.access?(await client.query('SELECT * FROM youth_welfare_access ORDER BY user_id')).rows:null;
+ state.youth_welfare_follow_up_tasks=(await client.query('SELECT * FROM youth_welfare_follow_up_tasks ORDER BY id')).rows;
+ state.youth_welfare_saved_views=(await client.query('SELECT * FROM youth_welfare_saved_views ORDER BY user_id,id')).rows;
+ state.youth_welfare_report_templates=(await client.query('SELECT * FROM youth_welfare_report_templates ORDER BY user_id,id')).rows;
+ state.youth_welfare_reminder_dismissals=(await client.query('SELECT * FROM youth_welfare_reminder_dismissals ORDER BY user_id,task_id,due_date')).rows;
  return {app:'LifegenTracker',source:'supabase-postgresql',database_instance:state.settings.__database_instance,exported_at:new Date().toISOString(),...state};
 }
 export const closePool=async()=>{if(pool){await pool.end();pool=null;}};

@@ -238,4 +238,8 @@ const server = net.createServer((sock) => {
   sock.on('error', () => { cleanup(); sock.destroy(); });
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`PGlite wire gateway listening on 0.0.0.0:${PORT}`));
+// Keep the unauthenticated preview database private to this sandbox. The LIFEGEN
+// web server can connect over loopback; the PostgreSQL wire port must not be
+// exposed through a public preview hostname.
+const HOST = '127.0.0.1';
+server.listen(PORT, HOST, () => console.log(`PGlite wire gateway listening on ${HOST}:${PORT}`));

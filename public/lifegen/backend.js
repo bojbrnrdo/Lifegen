@@ -7,12 +7,39 @@ window.Lifegen=(()=>{
  const setDevice=()=>{if(vipState?.registered&&config?.legacy_restore_enabled===true){try{localStorage.removeItem('lifegen_device');}catch{}}};
  async function request(url,body){const headers={};if(body!==undefined)headers['Content-Type']='application/json';if(vipState?.csrf_token)headers['X-CSRF-Token']=vipState.csrf_token;const r=await fetch(url,{method:body===undefined?'GET':'POST',headers,credentials:'same-origin',cache:'no-store',body:body===undefined?undefined:JSON.stringify(body)});let data={};try{data=await r.json();}catch{}if(!r.ok){const e=new Error(data.message||'Could not complete this request.');e.status=r.status;throw e;}return data;}
  const refreshVip=async()=>vipState=await request('/api/public/vip');
+ const pendingRequestKeys=new Map();
+ function createRequestKey(){
+  const secure=globalThis.crypto;
+  if(typeof secure?.randomUUID==='function')return secure.randomUUID();
+  if(typeof secure?.getRandomValues==='function'){
+   const bytes=new Uint8Array(24);secure.getRandomValues(bytes);
+   return Array.from(bytes,value=>value.toString(16).padStart(2,'0')).join('');
+  }
+  throw new Error('This browser cannot securely prepare a registration retry. Please update your browser or use another device.');
+ }
+ function getRequestKey(slot){
+  let key=pendingRequestKeys.get(slot)||null;
+  try{key=sessionStorage.getItem(slot)||key;}catch{}
+  if(key&&!/^[A-Za-z0-9_-]{16,100}$/.test(key))key=null;
+  if(!key){key=createRequestKey();pendingRequestKeys.set(slot,key);try{sessionStorage.setItem(slot,key);}catch{}}
+  return key;
+ }
+ function clearRequestKey(slot){pendingRequestKeys.delete(slot);try{sessionStorage.removeItem(slot);}catch{}}
+ async function refreshRegistrationCount(){
+  const target=document.getElementById('regRegistrationCount');if(!target)return;
+  try{
+   const data=await request('/api/public/registration-count'),total=Number(data?.total);
+   if(!Number.isSafeInteger(total)||total<0)throw new Error('The registration total could not be verified.');
+   target.textContent=`${total.toLocaleString()} regular attendee registration${total===1?'':'s'} recorded. Registration remains open.`;
+  }catch(error){target.textContent='Registration is open. The current total is temporarily unavailable.';throw error;}
+ }
+
  // Keep notices visible below the banner, not as a spacer above the artwork.
  function showSiteNotice(note){(document.querySelector('.hero-lower')||document.body).prepend(note);}
  function showRecovery(code){let box=document.getElementById('recoveryCodeBox');if(!box){box=document.createElement('div');box.id='recoveryCodeBox';box.className='recovery-code-box';(document.getElementById('reg-success')||document.getElementById('vip-attendance-dashboard')).prepend(box);}box.innerHTML='<b>Save your private VIP recovery code</b><p>Use this on another phone or if browser cookies are cleared. Keep it private.</p>';const c=document.createElement('code');c.textContent=code;box.append(c);const b=document.createElement('button');b.type='button';b.className='btn btn-gold';b.textContent='Copy recovery code';b.onclick=()=>navigator.clipboard.writeText(code).then(()=>notify('Recovery code copied. Save it somewhere safe.','copy')).catch(()=>notify('Select and copy your code manually.','info'));box.append(b);}
  const DB={
-  addRegistration:async reg=>{const button=document.querySelector('#vip-signup-form button[type=submit]');button.disabled=true;try{let key=sessionStorage.getItem('lifegen_registration_request');if(!key){key=crypto.randomUUID();sessionStorage.setItem('lifegen_registration_request',key);}const r=await request('/api/public/registrations',{...reg,privacy_consent:document.getElementById('vip-consent').checked,idempotency_key:key,website:document.getElementById('vip-website').value});await refreshVip();sessionStorage.removeItem('lifegen_registration_request');if(r.recovery_code)showRecovery(r.recovery_code);}finally{button.disabled=false;}},
-  addRegularRegistration:async payload=>{const button=document.getElementById('rgSubmit');if(button)button.disabled=true;try{let key=sessionStorage.getItem('lifegen_regular_request');if(!key){key=crypto.randomUUID();sessionStorage.setItem('lifegen_regular_request',key);}const r=await request('/api/public/registrations/regular',{...payload,privacy_consent:document.getElementById('rg-consent').checked,idempotency_key:key,website:document.getElementById('rg-website').value});sessionStorage.removeItem('lifegen_regular_request');return r;}finally{if(button)button.disabled=false;}},
+  addRegistration:async reg=>{const button=document.querySelector('#vip-signup-form button[type=submit]');button.disabled=true;try{const key=getRequestKey('lifegen_registration_request');const r=await request('/api/public/registrations',{...reg,privacy_consent:document.getElementById('vip-consent').checked,idempotency_key:key,website:document.getElementById('vip-website').value});await refreshVip();clearRequestKey('lifegen_registration_request');if(r.recovery_code)showRecovery(r.recovery_code);}finally{button.disabled=false;}},
+  addRegularRegistration:async payload=>{const button=document.getElementById('rgSubmit');if(button)button.disabled=true;try{const key=getRequestKey('lifegen_regular_request');const r=await request('/api/public/registrations/regular',{...payload,privacy_consent:document.getElementById('rg-consent').checked,idempotency_key:key,website:document.getElementById('rg-website').value});if(r?.ok!==true||!r?.person?.id)throw new Error('We could not confirm that your registration was saved. Your answers are still here; please retry.');clearRequestKey('lifegen_regular_request');refreshRegistrationCount().catch(()=>{});return r;}finally{if(button)button.disabled=false;}},
   listLeaders:gender=>request('/api/public/leaders?gender='+encodeURIComponent(gender)),
   listCheckinsFor:async()=> (await refreshVip()).checkins||[],addCheckin:()=>request('/api/public/checkins',{}),
   listPosts:()=>request('/api/public/posts'),addPost:p=>request('/api/public/posts',{type:p.type,author:p.author,content:p.content,is_anonymous:p.isAnonymous}),
@@ -23,6 +50,7 @@ window.Lifegen=(()=>{
   for(const id of ['adminToggle','footerAdmin'])document.getElementById(id)?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();location.assign('/admin');},true);
   document.getElementById('show-vip-recovery').onclick=()=>{document.getElementById('vip-recovery-form').hidden=false;document.getElementById('vip-recovery-code').focus();};
   document.getElementById('vip-recovery-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await request('/api/public/vip/restore',{recovery_code:document.getElementById('vip-recovery-code').value});await refreshVip();sync();e.target.hidden=true;toast('Welcome back. Your VIP portal is restored.','check');}catch(err){document.getElementById('vip-recovery-error').textContent=err.message;}finally{b.disabled=false;}};
+  refreshRegistrationCount().catch(()=>{});
   try{config=await request('/api/public/config');clockBase=new Date(config.server_time).getTime();clockAt=performance.now();
    if(config.hosted_preview&&!config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Connected preview · your Supabase database. New registrations are saved here.';showSiteNotice(note);}
    if(config.preview){const note=document.createElement('div');note.className='public-preview';note.textContent='Demonstration · temporary local PostgreSQL, not your Supabase project. Test records only.';showSiteNotice(note);}
