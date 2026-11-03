@@ -34,14 +34,14 @@ test('optimized MP4 is present, deployable, and has the correct file signature',
  assert.equal(buf.toString('ascii',4,8),'ftyp');
 });
 
-test('native HTML5 playback uses built-in controls and preserves original fallback link',()=>{
+test('native HTML5 playback uses built-in controls without a Google Vids editor option',()=>{
  assert.ok(player.includes('if (embed.type === "video")'));
  assert.ok(player.includes('document.createElement("video")'));
  assert.ok(player.includes('controls: true'));
  assert.ok(player.includes('playsInline: true'));
  assert.ok(player.includes('frame.replaceChildren(v)'));
  assert.match(page,/7 min 19 sec · Plays on LIFEGEN/);
- assert.match(page,/Open original in Google Vids/);
+ assert.doesNotMatch(page,/Open original in Google Vids|docs\.google\.com\/videos/);
  assert.doesNotMatch(page,/<iframe/);
 });
 

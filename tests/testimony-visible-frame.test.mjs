@@ -32,8 +32,8 @@ test('first-party video uses 16:9 without iframe offset or frame cropping',()=>{
  assert.ok(player.includes('embed.type === "video"'));
 });
 
-test('original Google Vids link remains available and native CSS is cache-busted',()=>{
- assert.match(page,/Open original in Google Vids/);
+test('Google Vids editor option is absent and native CSS is cache-busted',()=>{
+ assert.doesNotMatch(page,/Open original in Google Vids|docs\.google\.com\/videos/);
  const pageVersion=page.match(/\/lifegen\/styles\.css\?v=(\d+\.\d+\.\d+)/)?.[1];
  assert.ok(pageVersion&&atLeast(pageVersion,'2.4.18'),`styles.css?v=${pageVersion} must be >= 2.4.18`);
  assert.equal(versions['/lifegen/styles.css'].version,pageVersion);
