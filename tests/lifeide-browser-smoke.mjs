@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,mkdir,writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -16,6 +16,8 @@ const workspace=await mkdtemp(path.join(os.tmpdir(),'lifeide-repo-'));
 const git=(...args)=>execFileSync('git',args,{cwd:workspace,encoding:'utf8'}).trim();
 git('init','-q');git('config','user.name','LifeIDE Browser Test');git('config','user.email','lifeide@example.invalid');
 await (await import('node:fs/promises')).writeFile(path.join(workspace,'README.md'),'LifeIDE browser repository test');
+await mkdir(path.join(workspace,'src','components'),{recursive:true});
+await writeFile(path.join(workspace,'src','components','Example.js'),'export const example = true;');
 git('add','README.md');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
 const realAuth=process.env.LIFEIDE_BROWSER_REAL_AUTH==='true';
 if(realAuth&&(!process.env.LIFEIDE_TEST_USERNAME||!process.env.LIFEIDE_TEST_PASSWORD||!process.env.DATABASE_URL))throw Error('Real-auth browser test requires disposable DATABASE_URL and LIFEIDE_TEST_USERNAME/PASSWORD');
@@ -242,6 +244,27 @@ try {
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('modeLabel').textContent==='REPOSITORY'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'REPOSITORY');
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='renamed-smoke.ts')?.content"),'const second = 2;','Switching to repository must preserve browser-local files');
+
+ // Folder expansion must not rebuild the Explorer or clear the active editor.
+ await evaluate("window.__repoOriginalReadme=[...document.querySelectorAll('#tree .node')].find(b=>b.title==='README.md');window.__repoOriginalReadme.click()");
+ for(let i=0;i<40;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='README.md'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.title==='src').click()");
+ for(let i=0;i<40;i++){if(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components\"]'))"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components\"]'))"),true,'Expanding src displays the immediate child folder');
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src\"]').getAttribute('aria-expanded')"),'true');
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"README.md\"]')===window.__repoOriginalReadme"),true,'Expanding one folder must preserve sibling DOM nodes');
+ await evaluate("document.querySelector('#tree .node[title=\"src/components\"]').click()");
+ for(let i=0;i<40;i++){if(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components/Example.js\"]'))"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components/Example.js\"]'))"),true,'Nested files load under their parent');
+ await evaluate("window.__repoOriginalNested=document.querySelector('#tree .node[title=\"src/components/Example.js\"]');document.querySelector('#tree .node[title=\"src\"]').click()");
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src\"]').getAttribute('aria-expanded')"),'false');
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src/components\"]').closest('.repo-children').hidden"),true,'Collapse should hide children');
+ await evaluate("document.querySelector('#tree .node[title=\"src\"]').click()");
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]')===window.__repoOriginalNested"),true,'Reopening a folder uses cached children without rebuilding');
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md','Folder toggle must not change open editor file');
+ console.log('PASS LifeIDE repository browser: inline nested folder expansion, collapse, stable tree and editor');
+
 
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='browser-repository.js';document.getElementById('dialogForm').requestSubmit()");
