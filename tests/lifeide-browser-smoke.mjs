@@ -264,6 +264,11 @@ try {
  assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]')===window.__repoOriginalNested"),true,'Reopening a folder uses cached children without rebuilding');
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md','Folder toggle must not change open editor file');
  console.log('PASS LifeIDE repository browser: inline nested folder expansion, collapse, stable tree and editor');
+ // Explicit refresh resets the creation destination to repository root.
+ await evaluate("document.getElementById('refresh').click()");
+ for(let i=0;i<40;i++){if(await evaluate("Boolean([...document.querySelectorAll('#tree .node')].find(b=>b.title==='README.md'))"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("Boolean([...document.querySelectorAll('#tree .node')].find(b=>b.title==='README.md'))"),true);
+
 
 
  await evaluate("document.getElementById('newFile').click()");
