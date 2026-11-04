@@ -1593,3 +1593,31 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 @media(max-width:1023px){
  .main.main--lifeide{height:calc(100dvh - 60px)}
 }
+
+
+/* LIFEGEN developer Git console. Uses the existing Admin design tokens. */
+.devgit{display:flex;flex-direction:column;gap:20px;min-width:0}
+.devgit__section{min-width:0;overflow:hidden}
+.devgit__section .card__body>p{margin:0 0 12px}
+.devgit__buttons{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0 10px}
+.devgit__buttons>.btn{min-height:40px}
+.devgit__buttons label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650}
+.devgit__buttons select{min-width:140px;max-width:250px}
+.devgit__status{background:var(--bg,#f8fafc);border:1px solid var(--border,#dfe5eb);border-radius:9px;padding:12px;min-height:75px;max-height:360px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+.devgit__file{display:flex;justify-content:space-between;align-items:center;gap:12px;overflow-wrap:anywhere;padding:7px 0;border-top:1px solid var(--border,#dfe5eb)}
+.devgit__file>span:first-child{min-width:0}
+.devgit__history{border:1px solid var(--border,#dfe5eb);border-radius:9px;max-height:540px;overflow:auto}
+.devgit__commit{display:flex;justify-content:space-between;gap:16px;padding:15px 18px;border-bottom:1px solid var(--border,#dfe5eb);align-items:center}
+.devgit__commit:last-child{border-bottom:0}
+.devgit__detail{min-width:0;overflow-wrap:anywhere}
+.devgit__detail>a{font:700 12px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#087e8b)}
+.devgit__detail p{margin:5px 0 4px;font:500 13px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+.devgit__commit-buttons{display:flex;gap:8px;flex-shrink:0}
+.devgit__commit-buttons .btn{white-space:nowrap}
+@media(max-width:650px){
+ .devgit__buttons{align-items:stretch}
+ .devgit__buttons>*{flex:1 1 135px}
+ .devgit__buttons label{flex-direction:column;align-items:stretch}
+ .devgit__commit{align-items:flex-start}
+ .devgit__commit-buttons{flex-direction:column}
+}
