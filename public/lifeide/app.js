@@ -39,9 +39,9 @@ $('tree').addEventListener('keydown',e=>{
  e.preventDefault();
  target?.focus();
 });
-function select(id){const f=node(id);if(!f||f.type!=='file')return;current=id;selectedFolder=f.parent;$('renameFile').disabled=repoMode;if(!opened.includes(id))opened.push(id);$('editor').disabled=false;$('editor').value=f.content||'';$('fileTitle').textContent=pathOf(f);$('language').textContent=(f.name.split('.').pop()||'txt').toUpperCase();renderTabs();renderTree();if(document.activeElement===document.body||document.activeElement===$('tree')){const target=[...$('tree').querySelectorAll('button.node')].find(b=>b.dataset.entryId===id);target?.focus();}updateLines();}
+function select(id){const f=node(id);if(!f||f.type!=='file')return;current=id;$('saveFile').disabled=false;selectedFolder=f.parent;$('renameFile').disabled=repoMode;if(!opened.includes(id))opened.push(id);$('editor').disabled=false;$('editor').value=f.content||'';$('fileTitle').textContent=pathOf(f);$('language').textContent=(f.name.split('.').pop()||'txt').toUpperCase();renderTabs();renderTree();if(document.activeElement===document.body||document.activeElement===$('tree')){const target=[...$('tree').querySelectorAll('button.node')].find(b=>b.dataset.entryId===id);target?.focus();}updateLines();}
 function renderTabs(){const container=$('tabs');container.replaceChildren();for(const id of opened){const f=node(id);if(!f)continue;const tab=document.createElement('div');tab.className='tab'+(id===current?' active':'');const open=document.createElement('button');open.type='button';open.className='tab-open';open.textContent=f.name;open.addEventListener('click',()=>select(id));const close=document.createElement('button');close.type='button';close.className='close';close.textContent='×';close.setAttribute('aria-label','Close '+f.name);close.addEventListener('click',e=>{e.stopPropagation();opened=opened.filter(x=>x!==id);if(id===current){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}renderTabs();renderTree();});tab.append(open,close);container.append(tab);}}
-function emptyEditor(){$('renameFile').disabled=true;$('editor').value='# Welcome to LifeIDE!\n# Select a file to begin.';$('editor').disabled=true;$('fileTitle').textContent='No file selected';$('language').textContent='Plain text';updateLines();}
+function emptyEditor(){$('saveFile').disabled=true;$('renameFile').disabled=true;$('editor').value='# Welcome to LifeIDE!\n# Select a file to begin.';$('editor').disabled=true;$('fileTitle').textContent='No file selected';$('language').textContent='Plain text';updateLines();}
 function updateLines(){const el=$('editor'),lines=el.value.split('\n').length;$('lineNumbers').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');const pos=el.selectionStart,preceding=el.value.slice(0,pos).split('\n');$('position').textContent='Ln '+preceding.length+', Col '+(preceding.at(-1).length+1);$('lineNumbers').scrollTop=el.scrollTop;}
 function openDialog(title,label,action,prefill=''){dialogAction=action;$('dialogTitle').textContent=title;$('dialogLabel').textContent=label;$('dialogInput').value=prefill;$('dialogError').textContent='';$('dialog').hidden=false;$('dialogInput').focus();}
 function closeDialog(){$('dialog').hidden=true;dialogAction=null;}
@@ -96,11 +96,17 @@ $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy)
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
 const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
 function githubEditControls(open=false){
- $('editGithub').hidden=!githubMode||!open;
- $('saveGithubDraft').hidden=!githubMode||!open;
+ // Keep the legacy workflows available without crowding the source editor.
+ $('editGithub').hidden=true;
+ $('saveGithubDraft').hidden=true;
  $('publishGithub').hidden=!githubMode||!open;
  $('githubNative').hidden=!githubMode||!open;
- $('editGithub').textContent=githubEditing?'Stop editing':'Edit source';
+ $('githubNative').textContent='GitHub';
+ $('renameFile').hidden=githubMode;
+ $('gitChanges').hidden=githubMode;
+ $('commit').hidden=githubMode;
+ $('saveFile').disabled=!current;
+ $('saveFile').title=githubMode?'Save a browser-local draft (Ctrl+S), not a GitHub commit':'Save file (Ctrl+S)';
  $('saveGithubDraft').disabled=!githubEditing;
  $('publishGithub').disabled=!githubEditing;
 }
@@ -140,7 +146,7 @@ $('publishGithub').addEventListener('click',async()=>{
 });
 
 // Native GitHub writes require the existing isolated-preview developer API.
-// Production never obtains write privileges or uses browser-stored tokens.
+// Production write access remains governed by server-side flags and branch restrictions.
 let devWriteAvailable=false,devBusy=false;
 function nativeStatus(message){$('githubWorkflowStatus').textContent=message;}
 async function devRequest(route,{method='GET',body}={}){
@@ -381,12 +387,12 @@ async function openRepoFile(rel){
  if(githubMode&&sequence!==githubOpenSequence)return;
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
- githubEditing=false;githubEditControls(true);
- $('editor').disabled=githubMode;$('editor').value=file.content;
+ githubEditing=githubMode;githubEditControls(true);
+ $('editor').disabled=false;$('editor').value=file.content;
  if(githubMode){
   try{
    const saved=JSON.parse(localStorage.getItem(draftKey(rel))||'null');
-   if(saved&&typeof saved.content==='string'&&saved.content!==file.content&&saved.base===file.version&&confirm('A browser draft exists for '+rel+'. Restore it?')){
+   if(saved&&typeof saved.content==='string'&&saved.content!==file.content&&saved.base===file.version){
     githubEditing=true;$('editor').disabled=false;$('editor').value=saved.content;
     githubEditControls(true);
    }
@@ -394,7 +400,7 @@ async function openRepoFile(rel){
  }
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
- $('status').textContent=githubMode?(githubEditing?'Draft restored; not committed to GitHub':'GitHub main · choose Edit source to change a draft'):'Repository file opened • Cmd/Ctrl+S to save';
+ $('status').textContent=githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
 }
 async function connectGithubSource(){
  if(repoMode||githubMode)return;
@@ -412,7 +418,7 @@ async function connectGithubSource(){
   $('repositoryMode').textContent='Local Workspace';
   $('newFile').disabled=true;$('newFolder').disabled=true;
   $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
-  $('status').textContent='Connected to LIFEGEN GitHub files · read-only';
+  $('status').textContent='GitHub source loaded · edits save as browser drafts until committed to a development branch';
   scheduleGithubPrefetch('');
  }catch(error){githubMode=false;renderTree();throw error;}
 }
@@ -470,21 +476,29 @@ $('commit').addEventListener('click',async()=>{
  }catch(e){$('status').textContent='Commit rejected: '+e.message;}
  finally{commitBusy=false;$('commit').disabled=!repoMode||selectedGit.size===0;}
 });
-$('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent=githubMode?'Unsaved GitHub draft — Save draft before switching files':'Unsaved repository changes';}});
-document.addEventListener('keydown',async e=>{
- if(!repoMode||githubMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
- e.preventDefault();
- if(saveBusy)return;
+$('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent=githubMode?'Unsaved changes · Ctrl+S saves in this browser':'Unsaved repository changes';}});
+async function saveActiveFile(){
+ if(!current)return;
+ if(!repoMode){save();return;}
+ if(githubMode){$('saveGithubDraft').click();return;}
+ if(saveBusy||commitBusy)return;
  const path=current,f=repoFiles.get(path);if(!f)return;
  const content=$('editor').value;
- saveBusy=true;
+ saveBusy=true;$('saveFile').disabled=true;
  try{
   const result=await repoApi('/file',{method:'PUT',body:JSON.stringify({path,content,version:f.version})});
   f.version=result.version;f.content=content;
   if(current===path&&$('editor').value===content){repoDirty=false;$('status').textContent='Saved to local repository';}
   else $('status').textContent='File saved; newer edits remain unsaved.';
  }catch(err){$('status').textContent='Save failed: '+err.message;}
- finally{saveBusy=false;}
+ finally{saveBusy=false;$('saveFile').disabled=!current;}
+}
+$('saveFile').addEventListener('click',saveActiveFile);
+document.addEventListener('keydown',e=>{
+ if(!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
+ if(!repoMode)return; // Browser-local workspace retains existing autosave.
+ e.preventDefault();
+ saveActiveFile();
 },true);
 renderTree();emptyEditor();
 if(new URLSearchParams(location.search).get('source')==='github')connectGithubSource().catch(error=>{$('status').textContent='GitHub connection failed: '+error.message;});
