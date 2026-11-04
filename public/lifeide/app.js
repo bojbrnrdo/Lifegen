@@ -129,11 +129,13 @@ $('publishGithub').addEventListener('click',async()=>{
  if(!confirm('Continue editing '+file+' on GitHub? Your draft will be copied. Paste it into GitHub and commit to a NEW branch, not main.'))return;
  try{
   localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));
-  await navigator.clipboard.writeText(content);
   const url='https://github.com/bojbrnrdo/Lifegen/edit/main/'+file.split('/').map(encodeURIComponent).join('/');
   window.open(url,'_blank','noopener,noreferrer');
-  repoDirty=false;$('status').textContent='Draft copied. Paste into GitHub editor, then commit to a new branch and create a pull request.';
- }catch(error){$('status').textContent='Clipboard permission blocked. Copy the editor text manually before opening GitHub.';}
+  try{
+   await navigator.clipboard.writeText(content);
+   repoDirty=false;$('status').textContent='Draft copied. Paste into GitHub editor, commit to a NEW branch, and create a pull request.';
+  }catch(error){$('status').textContent='GitHub opened, but clipboard permission was blocked. Copy your draft from the editor manually.';}
+ }catch(error){$('status').textContent='Could not prepare the GitHub handoff: '+error.message;}
 });
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+(githubMode?'/remote':'')+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
