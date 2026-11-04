@@ -169,6 +169,19 @@ try {
  assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'ArrowLeft on a collapsed child should focus its parent');
  console.log('PASS LifeIDE browser: Explorer arrow-key navigation and focus preservation');
 
+ // Root destination remains available after selecting a nested file or folder.
+ await evaluate("document.getElementById('workspaceRoot').click()");
+ assert.equal(await evaluate("document.getElementById('workspaceRoot').getAttribute('aria-pressed')"),'true','Root selection must be announced');
+ await evaluate("document.getElementById('newFolder').click()");
+ await evaluate("document.getElementById('dialogInput').value='root-level';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='root-level')?.parent"),null,'New folder must be at workspace root');
+ await evaluate("document.getElementById('newFile').click()");
+ await evaluate("document.getElementById('dialogInput').value='root-note.txt';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='root-note.txt')?.parent"),null,'New file must be at workspace root');
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
+ console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
+
+
 
 
 
