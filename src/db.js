@@ -78,7 +78,7 @@ export function applicationPoolOptions({serverless=Boolean(process.env.VERCEL)}=
 export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCEL),mode=process.env.LIFEGEN_DB_POOL_MODE}={}) {
  if(!url||!serverless||mode==='session')return url;
  const u=new URL(url);
- const pooler=/(^|\\.)pooler\\.supabase\\.com$/i.test(u.hostname);
+ const pooler=/(^|\.)pooler\.supabase\.com$/i.test(u.hostname);
  if(!pooler||u.port!=='5432'||!decodeURIComponent(u.username).includes('.'))return url;
  u.port='6543';
  return u.toString();
