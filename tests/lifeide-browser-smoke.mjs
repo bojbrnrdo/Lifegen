@@ -151,13 +151,17 @@ try {
  console.log('PASS LifeIDE browser: touch and keyboard delete controls confirm before removing');
 
  // Explorer keyboard traversal should preserve focus when folders rerender.
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('samples')).getAttribute('aria-expanded')"),'true','Expanded folder must announce its state');
  await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('samples')).focus()");
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
  assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'Collapsing should retain focus on folder');
  assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('hello.js'))"),false,'ArrowLeft should collapse the folder');
+ assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"),'false','Collapsed folder must announce its state');
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}))");
  assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'Expanding should retain focus on folder');
  assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('hello.js'))"),true,'ArrowRight should expand the folder');
+ assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"),'true','Expanded folder must update its accessible state');
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('hello.js')).getAttribute('aria-label')"),'File samples/hello.js','File name should include its location');
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}))");
  assert.equal(await evaluate("document.activeElement.textContent.includes('nested')"),true,'ArrowDown should focus the next visible folder');
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
