@@ -40,6 +40,50 @@ export function createLifeIdeRouter({workspace=path.resolve(process.cwd()),authe
  const base=workspace;
  const safePath=(raw,options={})=>verifyLifeIdePath(raw,{...options,workspace:base});
  const requestLimit=expressRateLimit({windowMs:60_000,limit:90,standardHeaders:'draft-7',legacyHeaders:false,message:{message:'Too many LifeIDE requests. Retry shortly.'}});
+
+// Read-only GitHub browser for the production Admin IDE. Source is a public
+// repository, but the API still requires a signed-in LIFEGEN administrator.
+// It never accepts a repository/branch from the client and never exposes a token.
+const GITHUB_SOURCE='https://api.github.com/repos/bojbrnrdo/Lifegen/contents';
+const SOURCE_IGNORE=new Set(['.git','node_modules','.vercel','.next','backup','preview-db']);
+const sourcePath=raw=>{
+ if(raw===undefined||raw===null||raw==='')return '';
+ if(typeof raw!=='string'||raw.length>300||raw.includes('\\')||/[\x00-\x1f\x7f]/.test(raw))throw httpError(400,'Invalid source path.');
+ const parts=raw.split('/');
+ if(parts.some(x=>!x||x==='.'||x==='..'||SOURCE_IGNORE.has(x)||x==='.env'||x.startsWith('.env.')||x.endsWith('.pem')||x.endsWith('.key')))throw httpError(400,'Restricted source path.');
+ return parts.map(encodeURIComponent).join('/');
+};
+const remoteCache=new Map();
+async function githubSource(remotePath){
+ const cached=remoteCache.get(remotePath);
+ if(cached&&cached.expires>Date.now())return cached.data;
+ const url=GITHUB_SOURCE+(remotePath?'/'+remotePath:'')+'?ref=main';
+ const response=await fetch(url,{headers:{accept:'application/vnd.github+json','user-agent':'LIFEGEN-LifeIDE'},signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw httpError(response.status===404?404:503,response.status===404?'Repository path not found.':'GitHub source is temporarily unavailable.');
+ const data=await response.json();
+ remoteCache.set(remotePath,{data,expires:Date.now()+60000});
+ if(remoteCache.size>80)remoteCache.delete(remoteCache.keys().next().value);
+ return data;
+}
+router.get('/remote/tree',authenticate,checkRole,requestLimit,async(req,res)=>{
+ const remotePath=sourcePath(req.query.path);
+ const data=await githubSource(remotePath);
+ if(!Array.isArray(data))throw httpError(400,'Not a source directory.');
+ const items=data.filter(x=>['dir','file'].includes(x.type)&&x.name!=='.env'&&!x.name.startsWith('.env.')&&!SOURCE_IGNORE.has(x.name)&&!x.name.endsWith('.pem')&&!x.name.endsWith('.key')).map(x=>({name:x.name,type:x.type==='dir'?'folder':'file'})).sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='folder'?-1:1);
+ res.set('Cache-Control','private, no-store').json({path:req.query.path||'',items,source:'github',branch:'main'});
+});
+router.get('/remote/file',authenticate,checkRole,requestLimit,async(req,res)=>{
+ const remotePath=sourcePath(req.query.path);
+ if(!remotePath)throw httpError(400,'Select a file.');
+ const data=await githubSource(remotePath);
+ if(Array.isArray(data)||data.type!=='file')throw httpError(400,'Not a source file.');
+ if(data.size>512*1024||data.encoding!=='base64'||typeof data.content!=='string')throw httpError(413,'Only source text files under 512 KB can be viewed.');
+ const bytes=Buffer.from(data.content.replace(/\\s/g,''),'base64');
+ if(bytes.length>512*1024||bytes.includes(0))throw httpError(415,'Binary or oversized files cannot be opened.');
+ let content;try{content=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw httpError(415,'Only UTF-8 source files can be viewed.');}
+ res.set('Cache-Control','private, no-store').json({path:req.query.path,content,version:data.sha,readOnly:true,source:'github',branch:'main'});
+});
+
  router.use(access,authenticate,checkRole,requestLimit);
 router.get('/tree',async(req,res)=>{
  const dir=typeof req.query.path==='string'&&req.query.path?req.query.path:null;
