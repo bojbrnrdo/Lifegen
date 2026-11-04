@@ -221,7 +221,7 @@ export function registerDevWorkspace(app){
   if(!allowedBranch(branch))return deny(res);
   const commits=await request(apiRoot+'/commits?sha='+encodeURIComponent(branch)+'&per_page=25');
   res.set('Cache-Control','no-store').json({branch,commits:commits.map(c=>({
-   sha:c.sha,subject:String(c.commit?.message||'').split('\\n')[0].slice(0,200),
+   sha:c.sha,subject:String(c.commit?.message||'').split('\n')[0].slice(0,200),
    author:c.commit?.author?.name||'Unknown',date:c.commit?.author?.date||'',
    url:c.html_url
   }))});
