@@ -186,6 +186,13 @@ try {
  assert.equal(await evaluate("document.activeElement?.dataset?.entryId===JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='root-note.txt')?.id"),true,'Explorer must retain focus on the opened file');
  console.log('PASS LifeIDE browser: file selection retains keyboard focus');
 
+ // Deleting from a focused Explorer action must move focus to a surviving entry.
+ await evaluate("(()=>{const b=[...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete file root-note.txt');window.confirm=()=>true;b.focus();b.click();})()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='root-note.txt')"),false,'The chosen file should be removed');
+ assert.equal(await evaluate("Boolean(document.activeElement?.closest?.('#tree')&&document.activeElement.matches('button.node'))"),true,'Focus should move to a remaining Explorer item');
+ console.log('PASS LifeIDE browser: delete restores focus to remaining Explorer item');
+
+
 
 
 
