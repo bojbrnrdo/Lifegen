@@ -187,7 +187,7 @@ try {
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
  // Reference-style IDE: dark two-pane layout with working Explorer search and no AI panel.
- assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(12, 12, 16)','Main editor must use the dark IDE theme');
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(255, 255, 255)','Main editor must retain the LIFEGEN light theme');
  assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),2,'Workspace should use Explorer and editor panes only');
  assert.equal(await evaluate("!document.querySelector('[id*=aiAgent], .ai-agent, .agent-panel')"),true,'No AI panel should be displayed');
  await evaluate("document.getElementById('explorerSearch').value='root-note';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
