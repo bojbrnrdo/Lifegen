@@ -64,7 +64,13 @@ export function connectionHint(error) {
  if(/enetunreach|ehostunreach|eai_again|getaddrinfo/.test(text)) return 'Network: this runtime cannot reach the database host, which is often the IPv6-only direct Supabase host. Use the Supabase Session Pooler URL on port 5432 for DATABASE_DIRECT_URL and the pooler URL for DATABASE_URL.';
  return null;
 }
-export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),max:3,idleTimeoutMillis:10000,allowExitOnIdle:true}); }
+// Keep serverless instances from monopolizing Supavisor session-pool slots.
+// Each warm Vercel instance maintains its own Pool; a large per-instance limit
+// multiplies against Supabase's relatively small session-pool capacity.
+export function applicationPoolOptions({serverless=Boolean(process.env.VERCEL)}={}) {
+ return {max:serverless?1:3,idleTimeoutMillis:serverless?1000:10000,allowExitOnIdle:true};
+}
+export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),...applicationPoolOptions()}); }
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
  if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}
