@@ -85,7 +85,7 @@ test('GitHub source drafts have an explicit GitHub handoff and stay browser-loca
  assert.match(client,/lifegen\.lifeide\.github-draft\.v1:/);
  assert.match(client,/localStorage\.setItem\(draftKey\(file\)/);
  assert.match(client,/navigator\.clipboard\.writeText\(content\)/);
- assert.match(client,/https:\/\/github\.com\/bojbrnrdo\/Lifegen\/edit\/main\//);
+ assert.ok(client.includes('https://github.com/bojbrnrdo/Lifegen/edit/main/'));
  assert.match(client,/githubMode\|\|!current/);
  assert.match(client,/!repoMode\|\|githubMode\|\|!/);
  const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
