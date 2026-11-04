@@ -225,24 +225,69 @@ async function repoApi(url,options={}){
 }
 let repoExpanded=new Set(),repoParent='';
 async function treeFolder(){
- const tree=$('tree');tree.replaceChildren();
- async function appendFolder(prefix,depth){
+ const tree=$('tree');
+ tree.replaceChildren();
+ async function appendFolder(prefix,depth,container){
   const result=await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
+  const fragment=document.createDocumentFragment();
   for(const entry of result.items){
    const rel=prefix?prefix+'/'+entry.name:entry.name;
+   const wrapper=document.createElement('div');wrapper.className='repo-tree-entry';
    const el=document.createElement('button');el.type='button';el.className='node';
-   el.style.paddingLeft=(8+depth*15)+'px';el.title=rel;el.setAttribute('aria-label',entry.type+' '+rel);
-   const a=document.createElement('span');a.className='arrow';a.textContent=entry.type==='folder'?(repoExpanded.has(rel)?'▾':'▸'):' ';
-   const n=document.createElement('span');n.className='name';n.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
-   el.append(a,n);tree.append(el);
-   el.onclick=async()=>{try{
-    if(entry.type==='folder'){repoParent=rel;repoExpanded.has(rel)?repoExpanded.delete(rel):repoExpanded.add(rel);await treeFolder();}
-    else await openRepoFile(rel);
-   }catch(e){$('status').textContent=e.message;}};
-   if(entry.type==='folder'&&repoExpanded.has(rel))await appendFolder(rel,depth+1);
+   el.style.paddingLeft=(8+depth*15)+'px';el.title=rel;
+   el.setAttribute('aria-label',entry.type+' '+rel);
+   const arrow=document.createElement('span');arrow.className='arrow';
+   arrow.textContent=entry.type==='folder'?'▸':' ';
+   const name=document.createElement('span');name.className='name';
+   name.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
+   el.append(arrow,name);wrapper.append(el);
+   if(entry.type==='folder'){
+    const children=document.createElement('div');children.className='repo-children';children.hidden=true;
+    el.setAttribute('aria-expanded','false');
+    wrapper.append(children);
+    let loaded=false,loading=false;
+    const toggle=async()=>{
+     if(loading)return;
+     repoParent=rel;
+     if(repoExpanded.has(rel)){
+      repoExpanded.delete(rel);
+      children.hidden=true;
+      arrow.textContent='▸';el.setAttribute('aria-expanded','false');
+      return;
+     }
+     loading=true;arrow.textContent='…';el.setAttribute('aria-busy','true');
+     try{
+      if(!loaded){await appendFolder(rel,depth+1,children);loaded=true;}
+      repoExpanded.add(rel);
+      children.hidden=false;arrow.textContent='▾';el.setAttribute('aria-expanded','true');
+      filterRepoTree();
+     }catch(error){
+      children.hidden=true;arrow.textContent='▸';
+      $('status').textContent='Unable to open '+rel+': '+error.message;
+     }finally{loading=false;el.removeAttribute('aria-busy');}
+    };
+    el.addEventListener('click',toggle);
+    if(repoExpanded.has(rel)){
+     // Restore open folders after explicit Explorer refresh without changing the other rows.
+     try{
+      await appendFolder(rel,depth+1,children);loaded=true;
+      children.hidden=false;arrow.textContent='▾';el.setAttribute('aria-expanded','true');
+     }catch(error){repoExpanded.delete(rel);$('status').textContent=error.message;}
+    }
+   }else{
+    el.addEventListener('click',async()=>{
+     try{
+      await openRepoFile(rel);
+      tree.querySelectorAll('.node.selected').forEach(n=>n.classList.remove('selected'));
+      el.classList.add('selected');
+     }catch(error){$('status').textContent=error.message;}
+    });
+   }
+   fragment.append(wrapper);
   }
+  container.append(fragment);
  }
- await appendFolder('',0);
+ await appendFolder('',0,tree);
  filterRepoTree();
 }
 async function createRepoEntry(type,name){
