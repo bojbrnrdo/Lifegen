@@ -8,107 +8,130 @@ const writeNotice=data=>data.connected&&!data.writesEnabled?'<div class="alert a
 const field=`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="develop" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
 
 export async function renderDevGit({main}){
- main.innerHTML=heading('Git','Repository status and development branches')+'<div class="card"><div class="card__body">Loading…</div></div>';
- const data=await api('status');
- main.innerHTML=heading('Git','Developer workspace — safe development branches only')+offline(data)+
- `<div class="grid grid--2"><section class="card"><div class="card__header"><h2>Repository</h2></div><div class="card__body stack">
- <p><b>${esc(data.repository)}</b></p><p class="small muted">Deployed environment: ${esc(data.environment)} · Commit: ${esc(data.commit||'Not available')}</p>
- <p class="small muted">Working branch: ${esc(data.branch||'Not available')}</p>
- <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/pulls" target="_blank" rel="noopener noreferrer">View pull requests ↗</a>
- <div class="row"><button type="button" id="checkDevConnection" class="btn btn--sm">Test GitHub connection</button></div>
- <p class="small muted" id="devConnectionResult" role="status">Connection has not been tested.</p>
- <div class="row"><button type="button" id="checkDevReadiness" class="btn btn--sm">Check setup readiness</button></div>
- <div class="stack small" id="devReadinessResult" role="status"></div>
- <div class="field"><label for="newDevBranch">New development branch</label><input id="newDevBranch" placeholder="feature/my-change" spellcheck="false"/></div>
- <button type="button" id="createDevBranch" class="btn" ${data.writesEnabled?'':'disabled'}>Create branch from develop</button>
- <p class="small muted" role="status" id="createBranchStatus"></p>
- </div></section><section class="card"><div class="card__header"><h2>Branch files</h2></div><div class="card__body stack">
- ${field}<button type="button" id="devBrowse" class="btn btn--primary" ${data.connected?'':'disabled'}>Browse files</button>
- <p id="devGitStatus" class="small muted" role="status"></p>
- <div class="field"><label for="devFileFilter">Filter files</label><input id="devFileFilter" type="search" placeholder="Search paths…" disabled/></div><div id="devGitFiles" class="stack"></div>
- </div></section></div>
- <section class="card mt-2"><div class="card__header"><h2>Submit for review</h2></div><div class="card__body stack">
- <p class="small muted">Create a draft pull request from a feature/fix branch into develop. Nothing is merged or deployed automatically.</p>
- <div class="field"><label for="prBranch">Source branch</label><input id="prBranch" placeholder="feature/my-change" spellcheck="false"/></div>
- <div class="field"><label for="prTitle">Pull request title</label><input id="prTitle" maxlength="120" placeholder="feat: describe the change"/></div>
- <div class="field"><label for="prDescription">Review notes</label><textarea id="prDescription" rows="4" maxlength="4000" placeholder="What changed and what should reviewers test?"></textarea></div>
- <button type="button" id="createDraftPr" class="btn btn--primary" ${data.writesEnabled?'':'disabled'}>Create draft pull request</button>
- <p class="small muted" role="status" id="draftPrStatus"></p><div id="draftPrLink"></div>
- </div></section>
- <section class="card mt-2"><div class="card__header"><h2>Open development pull requests</h2><button type="button" class="btn btn--sm" id="refreshDevPrs" ${data.connected?'':'disabled'}>Refresh</button></div>
- <div class="card__body"><p class="small muted" id="devPrStatus" role="status">Load current review requests.</p><div class="stack" id="devPrList"></div></div></section>`;
- const refreshPrs=async()=>{
-  const status=main.querySelector('#devPrStatus'),list=main.querySelector('#devPrList');status.textContent='Loading pull requests…';list.replaceChildren();
-  try{const result=await api('pull-requests');status.textContent=result.pulls.length+' open pull requests into develop';
-   result.pulls.forEach(pr=>{const row=document.createElement('div');row.className='row row--between';
-    const details=document.createElement('div');const title=document.createElement('a');title.href=pr.html_url;title.target='_blank';title.rel='noopener noreferrer';title.textContent='#'+pr.number+' · '+pr.title;
-    const sub=document.createElement('p');sub.className='small muted';sub.textContent=pr.branch+' → '+pr.base+(pr.draft?' · Draft':' · Ready for review');
-    details.append(title,sub);row.append(details);list.append(row);});
-  }catch(error){status.textContent=error.message;}
- };
- main.querySelector('#refreshDevPrs').onclick=refreshPrs;
- if(data.connected)refreshPrs();
- main.querySelector('#checkDevReadiness').onclick=async()=>{
-  const list=main.querySelector('#devReadinessResult');
-  list.replaceChildren();list.textContent='Checking development environment…';
-  try{const result=await api('readiness');list.replaceChildren();
-   result.checks.forEach(check=>{const row=document.createElement('p');row.textContent=(check.ready?'✓ ':'○ ')+check.label;list.append(row);});
-   const note=document.createElement('p');note.className='small muted';note.textContent=result.note;list.append(note);
-  }catch(error){list.textContent=error.message;}
- };
- main.querySelector('#checkDevConnection').onclick=async()=>{
-  const status=main.querySelector('#devConnectionResult');
-  status.textContent='Checking GitHub repository access…';
-  try{const result=await api('connection-check');
-   status.textContent=result.connected?'Connected to '+result.repository+' · develop readable · write access not yet verified':'Not connected: '+(result.reason||'unknown');
-  }catch(error){status.textContent='Connection failed: '+error.message;}
- };
- main.querySelector('#createDevBranch').onclick=async()=>{
-  const name=main.querySelector('#newDevBranch').value.trim(),status=main.querySelector('#createBranchStatus');
-  status.textContent='Creating branch…';
-  try{const result=await api('branch',{method:'POST',body:{name}});status.textContent='Created '+result.name;
-   main.querySelector('#devBranch').value=result.name;
-   main.querySelector('#prBranch').value=result.name;
-  }catch(error){status.textContent=error.message;}
- };
- main.querySelector('#createDraftPr').onclick=async()=>{
-  const button=main.querySelector('#createDraftPr');
-  const status=main.querySelector('#draftPrStatus');
-  const output=main.querySelector('#draftPrLink');
-  button.disabled=true;status.textContent='Creating draft pull request…';output.replaceChildren();
+ const repoUrl='https://github.com/bojbrnrdo/Lifegen';
+ main.innerHTML=heading('Git Version Control','LIFEGEN repository management')+'<div class="card"><div class="card__body">Loading GitHub connection…</div></div>';
+ let info;
+ try{info=await api('status');}catch(e){main.innerHTML='<div class="alert alert--info">'+esc(e.message)+'</div>';return;}
+ const connected=Boolean(info.connected),writable=Boolean(info.writesEnabled);
+ main.innerHTML=heading('Git Version Control','Manage source control and development branches')+
+ `<div class="devgit">
+  <section class="card devgit__section"><div class="card__header"><h2>GitHub Cloud Sync</h2></div><div class="card__body">
+   <p><b>Remote Repository:</b> <a href="${repoUrl}" rel="noopener noreferrer" target="_blank">${repoUrl}</a></p>
+   <p><b>Sync Status:</b> <span id="gitSync">${connected?'Connected':'Disconnected'}</span></p>
+   <p><b>Current Branch:</b> <strong id="gitBranchLabel">develop</strong></p>
+   <div class="devgit__buttons">
+    <button class="btn" id="gitPull" ${connected?'':'disabled'}>↓ Pull from Remote</button>
+    <button class="btn" id="gitPush" ${writable?'':'disabled'}>↑ Push to Remote</button>
+    <button class="btn" id="gitCreateBranch" ${writable?'':'disabled'}>Create Branch</button>
+    <label>Change Branch <select class="input" id="gitBranchSelect" ${connected?'':'disabled'}><option>develop</option></select></label>
+    <button class="btn" id="gitCreatePr" ${writable?'':'disabled'}>Create Pull Request</button>
+   </div>
+   <p class="small muted">Pull refreshes GitHub branch data; no persistent local Git checkout exists on Vercel. Push opens the existing protected LifeIDE commit workflow. ${writable?'Feature/fix branch writes are enabled.':'Remote writes are disabled.'} Main is protected.</p>
+   <p id="gitMessage" role="status" class="small muted"></p>
+  </div></section>
+  <section class="card devgit__section"><div class="card__header"><h2>Branch Status</h2><button class="btn btn--sm" id="gitCheck" ${connected?'':'disabled'}>✓ Check Status</button></div>
+   <div class="card__body"><p class="small muted">Compare remote branch changes against develop.</p>
+    <div class="devgit__status" id="gitStatus" role="status">Click Check Status to inspect the selected branch.</div>
+   </div></section>
+  <section class="card devgit__section"><div class="card__header"><h2>Commit History</h2><button class="btn btn--sm" id="gitReloadHistory" ${connected?'':'disabled'}>Refresh</button></div>
+   <div class="card__body"><p class="small muted" id="gitHistoryMessage">Loading commit history…</p><div class="devgit__history" id="gitHistory"></div></div>
+  </section>
+  <section class="card devgit__section" id="gitPrPanel" hidden><div class="card__header"><h2>Create Draft Pull Request</h2></div>
+   <div class="card__body stack"><p class="small muted">Review before merging feature/fix branches into develop. No automatic deployment.</p>
+    <label for="gitPrTitle">Title</label><input id="gitPrTitle" class="input" maxlength="120" placeholder="fix: describe the change">
+    <label for="gitPrBody">Review notes</label><textarea id="gitPrBody" class="input" rows="3" maxlength="4000"></textarea>
+    <div class="row"><button class="btn btn--primary" id="gitSubmitPr">Create draft PR</button><button class="btn" id="gitCancelPr">Cancel</button></div>
+    <p class="small muted" role="status" id="gitPrStatus"></p>
+   </div></section></div>`;
+ const el=id=>main.querySelector('#'+id);
+ let branch='develop',revision=0;
+ const note=message=>{el('gitMessage').textContent=message;};
+ const check=async()=>{
+  const seq=revision,which=branch;
+  const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
   try{
-   const result=await api('pull-request',{method:'POST',body:{
-    branch:main.querySelector('#prBranch').value.trim(),
-    title:main.querySelector('#prTitle').value.trim(),
-    description:main.querySelector('#prDescription').value.trim()
-   }});
-   status.textContent='Draft PR #'+result.number+' created for review.';
-   const link=document.createElement('a');link.href=result.url;link.textContent='Open pull request #'+result.number+' ↗';link.target='_blank';link.rel='noopener noreferrer';link.className='btn';output.append(link);
-  }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
+   const result=await api('branch-status?branch='+encodeURIComponent(which));
+   if(seq!==revision)return;
+   host.replaceChildren();
+   const text=document.createElement('p');text.textContent=result.branch+' vs develop — '+result.ahead+' ahead, '+result.behind+' behind';host.append(text);
+   const status=document.createElement('p');status.className='small muted';status.textContent=result.files.length+' changed files'+(result.truncated?' (first 100 shown)':'');host.append(status);
+   for(const file of result.files){
+    const row=document.createElement('div');row.className='devgit__file';
+    const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
+    const counts=document.createElement('span');counts.className='small muted';counts.textContent='+'+file.additions+' / -'+file.deletions;
+    row.append(name,counts);host.append(row);
+   }
+   el('gitSync').textContent=result.behind?'Behind develop':result.ahead?'Ahead of develop':'Up to date with develop';
+  }catch(e){if(seq===revision)host.textContent=e.message;}
  };
- let listedFiles=[],listedBranch='',browseSequence=0;
- const filter=main.querySelector('#devFileFilter');
- const files=main.querySelector('#devGitFiles'),status=main.querySelector('#devGitStatus');
- const clearListing=()=>{listedFiles=[];listedBranch='';files.replaceChildren();filter.disabled=true;};
- main.querySelector('#devBranch').addEventListener('input',()=>{++browseSequence;clearListing();status.textContent='Branch changed. Browse files again to load this branch.';});
- filter.oninput=()=>{
-  files.replaceChildren();const term=filter.value.trim().toLowerCase();
-  listedFiles.filter(f=>f.path.toLowerCase().includes(term)).slice(0,150).forEach(file=>{
-   const a=document.createElement('a');
-   a.href='#/dev/ide?branch='+encodeURIComponent(listedBranch)+'&path='+encodeURIComponent(file.path);
-   a.textContent=file.path;a.className='small';files.append(a);
-  });
- };
- main.querySelector('#devBrowse').onclick=async()=>{
-  const branch=main.querySelector('#devBranch').value.trim(),sequence=++browseSequence;
-  clearListing();status.textContent='Loading files for '+branch+'…';
+ const loadHistory=async()=>{
+  const seq=revision,which=branch;
+  el('gitHistoryMessage').textContent='Loading '+which+' history…';el('gitHistory').replaceChildren();
   try{
-   const result=await api('tree?branch='+encodeURIComponent(branch));
-   if(sequence!==browseSequence)return;
-   listedBranch=branch;listedFiles=result.files;filter.disabled=false;filter.oninput();
-   status.textContent=result.files.length+' source files from '+branch+(result.truncated?' (list truncated)':'');
-  }catch(e){if(sequence===browseSequence)status.textContent=e.message;}
+   const result=await api('history?branch='+encodeURIComponent(which));
+   if(seq!==revision)return;
+   el('gitHistoryMessage').textContent=result.commits.length+' recent commits on '+which;
+   for(const c of result.commits){
+    const row=document.createElement('div');row.className='devgit__commit';
+    const desc=document.createElement('div');desc.className='devgit__detail';
+    const hash=document.createElement('a');hash.href=c.url;hash.target='_blank';hash.rel='noopener noreferrer';hash.textContent=c.sha.slice(0,7);
+    const title=document.createElement('p');title.textContent=c.subject;
+    const author=document.createElement('small');author.className='muted';author.textContent=c.author+' · '+(c.date?new Date(c.date).toLocaleString():'');
+    desc.append(hash,title,author);
+    const buttons=document.createElement('div');buttons.className='devgit__commit-buttons';
+    const diff=document.createElement('a');diff.className='btn btn--sm';diff.textContent='Diff';diff.href=c.url;diff.target='_blank';diff.rel='noopener noreferrer';
+    const revert=document.createElement('button');revert.className='btn btn--sm';revert.textContent='Revert';revert.disabled=true;revert.title='Reverts require a reviewed fix branch; direct revert is not yet supported.';
+    buttons.append(diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
+   }
+  }catch(e){if(seq===revision)el('gitHistoryMessage').textContent=e.message;}
  };
+ const choose=async(value)=>{
+  branch=value;revision++;el('gitBranchLabel').textContent=value;
+  await Promise.all([check(),loadHistory()]);
+ };
+ el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');await choose(branch);note('Remote data refreshed. No local files were changed.');};
+ el('gitCheck').onclick=check;el('gitReloadHistory').onclick=loadHistory;
+ el('gitBranchSelect').onchange=e=>choose(e.target.value);
+ el('gitPush').onclick=()=>{if(!writable)return;note('Open LifeIDE to commit to a feature/fix branch. No direct push occurs on this page.');window.location.hash='#/dev/ide';};
+ el('gitCreateBranch').onclick=async()=>{
+  if(!writable)return;
+  const proposed=window.prompt('Create development branch from develop (feature/name or fix/name)','feature/my-change');
+  if(proposed===null)return;
+  const name=proposed.trim();
+  if(!/^(feature|fix)\/[A-Za-z0-9._-]{1,90}$/.test(name)){note('Use feature/name or fix/name.');return;}
+  if(!window.confirm('Create '+name+' from develop?'))return;
+  note('Creating branch…');
+  try{
+   const result=await api('branch',{method:'POST',body:{name}});
+   const option=document.createElement('option');option.value=result.name;option.textContent=result.name;
+   el('gitBranchSelect').append(option);el('gitBranchSelect').value=result.name;
+   await choose(result.name);note('Created '+result.name+' from develop.');
+  }catch(e){note('Branch creation failed: '+e.message);}
+ };
+ el('gitCreatePr').onclick=()=>{
+  if(!writable)return;
+  if(!/^(feature|fix)\//.test(branch)){note('Choose a feature/fix branch first.');return;}
+  el('gitPrPanel').hidden=false;el('gitPrTitle').focus();
+ };
+ el('gitCancelPr').onclick=()=>{el('gitPrPanel').hidden=true;};
+ el('gitSubmitPr').onclick=async()=>{
+  if(!writable||!/^(feature|fix)\//.test(branch))return;
+  const button=el('gitSubmitPr');button.disabled=true;el('gitPrStatus').textContent='Creating draft pull request…';
+  try{
+   const pr=await api('pull-request',{method:'POST',body:{branch,title:el('gitPrTitle').value.trim(),description:el('gitPrBody').value.trim()}});
+   const link=document.createElement('a');link.href=pr.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open draft PR #'+pr.number;
+   el('gitPrStatus').replaceChildren(link);
+  }catch(e){el('gitPrStatus').textContent=e.message;}finally{button.disabled=false;}
+ };
+ if(!connected){el('gitHistoryMessage').textContent='GitHub App connection unavailable. Verify server-side configuration.';return;}
+ try{
+  const result=await api('branches');el('gitBranchSelect').replaceChildren();
+  if(!result.branches.some(b=>b.name==='develop'))result.branches.unshift({name:'develop'});
+  for(const item of result.branches){
+   const option=document.createElement('option');option.value=item.name;option.textContent=item.name;el('gitBranchSelect').append(option);
+  }
+  el('gitBranchSelect').value='develop';await choose('develop');
+ }catch(e){note('Cannot load GitHub branches: '+e.message);}
 }
 
 // Show the full IDE inside the existing Admin navigation. The legacy GitHub
