@@ -186,6 +186,18 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
+ // Reference-style IDE: dark two-pane layout with working Explorer search and no AI panel.
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(255, 255, 255)','Main editor must retain the LIFEGEN light theme');
+ assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),2,'Workspace should use Explorer and editor panes only');
+ assert.equal(await evaluate("!document.querySelector('[id*=aiAgent], .ai-agent, .agent-panel')"),true,'No AI panel should be displayed');
+ await evaluate("document.getElementById('explorerSearch').value='root-note';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('root-note.txt'))"),true,'Search should find matching files');
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('README.md'))"),false,'Search should hide nonmatching files');
+ await evaluate("document.getElementById('explorerSearch').value='';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('README.md'))"),true,'Clearing search should restore all files');
+ console.log('PASS LifeIDE browser: dark two-pane layout and Explorer search');
+
+
  // Rebuilding the Explorer after opening a file must not strand keyboard focus.
  await evaluate("(()=>{const b=[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('root-note.txt'));b.focus();b.click();})()");
  assert.equal(await evaluate("document.activeElement?.dataset?.entryId===JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='root-note.txt')?.id"),true,'Explorer must retain focus on the opened file');
