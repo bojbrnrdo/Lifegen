@@ -379,11 +379,11 @@ try {
  // Prefetched GitHub files should open without making another upstream request,
  // including a second selection of the same file.
  for(let i=0;i<80;i++){
-  if(await evaluate("githubFileCache.has('src/components/Example.js') && githubFileCache.has('README.md')"))break;
+  if(githubFileRequests>=2)break;
   await new Promise(r=>setTimeout(r,50));
  }
- assert.equal(await evaluate("githubFileCache.has('src/components/Example.js')"),true,'Expanded folder file is prefetched');
- assert.equal(await evaluate("githubFileCache.has('README.md')"),true,'Root source file is prefetched');
+ assert.equal(githubFileRequests,2,'Root and nested file contents were prefetched exactly once');
+ await new Promise(r=>setTimeout(r,100));
  const upstreamBeforeOpen=githubFileRequests;
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  for(let i=0;i<40;i++){
