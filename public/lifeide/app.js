@@ -99,6 +99,7 @@ function githubEditControls(open=false){
  $('editGithub').hidden=!githubMode||!open;
  $('saveGithubDraft').hidden=!githubMode||!open;
  $('publishGithub').hidden=!githubMode||!open;
+ $('githubNative').hidden=!githubMode||!open;
  $('editGithub').textContent=githubEditing?'Stop editing':'Edit source';
  $('saveGithubDraft').disabled=!githubEditing;
  $('publishGithub').disabled=!githubEditing;
@@ -136,6 +137,85 @@ $('publishGithub').addEventListener('click',async()=>{
    repoDirty=false;$('status').textContent='Draft copied. Paste into GitHub editor, commit to a NEW branch, and create a pull request.';
   }catch(error){$('status').textContent='GitHub opened, but clipboard permission was blocked. Copy your draft from the editor manually.';}
  }catch(error){$('status').textContent='Could not prepare the GitHub handoff: '+error.message;}
+});
+
+// Native GitHub writes require the existing isolated-preview developer API.
+// Production never obtains write privileges or uses browser-stored tokens.
+let devWriteAvailable=false,devBusy=false;
+function nativeStatus(message){$('githubWorkflowStatus').textContent=message;}
+async function devRequest(route,{method='GET',body}={}){
+ const response=await fetch('/api/admin/dev/'+route,{
+  method,credentials:'same-origin',cache:'no-store',
+  headers:body===undefined?{}:{'content-type':'application/json','x-csrf-token':csrf},
+  body:body===undefined?undefined:JSON.stringify(body)
+ });
+ const result=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(result.error||result.message||'GitHub developer request failed.');
+ return result;
+}
+$('githubNative').addEventListener('click',async()=>{
+ if(!githubMode||!githubEditing||!current||devBusy)return;
+ $('githubWorkflow').hidden=false;
+ nativeStatus('Checking whether isolated GitHub developer writes are enabled...');
+ try{
+  const info=await devRequest('status');
+  devWriteAvailable=Boolean(info.writesEnabled);
+  if(!devWriteAvailable){
+   nativeStatus('Direct commits are disabled on this deployment. Use Commit via GitHub to submit the draft safely; production does not have repository write access.');
+   return;
+  }
+  const auth=await fetch('/api/auth/status',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json());
+  if(!auth.csrf_token)throw Error('Administrator session is missing a CSRF token. Sign in again.');
+  csrf=auth.csrf_token;
+  nativeStatus('Connected to isolated development GitHub writes. Create or select a feature/fix branch before committing.');
+ }catch(error){devWriteAvailable=false;nativeStatus('GitHub write access unavailable: '+error.message);}
+});
+$('closeGithubWorkflow').addEventListener('click',()=>{$('githubWorkflow').hidden=true;});
+function validWorkingBranch(value){return /^(?:feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(value);}
+$('createGithubBranch').addEventListener('click',async()=>{
+ if(!devWriteAvailable||devBusy){nativeStatus('GitHub writes are not enabled in this environment.');return;}
+ const name=$('githubBranch').value.trim();
+ if(!validWorkingBranch(name)){nativeStatus('Branch name must begin with feature/ or fix/.');return;}
+ if(!confirm('Create branch '+name+' from develop?'))return;
+ devBusy=true;$('createGithubBranch').disabled=true;
+ try{
+  const result=await devRequest('branch',{method:'POST',body:{name}});
+  nativeStatus('Created '+result.name+' from develop. Review the file before committing.');
+ }catch(error){nativeStatus('Branch creation failed: '+error.message);}
+ finally{devBusy=false;$('createGithubBranch').disabled=false;}
+});
+$('commitGithubDraft').addEventListener('click',async()=>{
+ if(!devWriteAvailable||devBusy||!githubMode||!githubEditing||!current){nativeStatus('Open and edit a GitHub source file in an isolated development environment first.');return;}
+ const branch=$('githubBranch').value.trim(),message=$('githubCommitMessage').value.trim();
+ if(!validWorkingBranch(branch)||message.length<8||message.length>160){nativeStatus('Use a feature/fix branch and a descriptive commit message of 8–160 characters.');return;}
+ const file=current,content=$('editor').value;
+ if(!confirm('Commit '+file+' to '+branch+'? This will NOT modify main.'))return;
+ devBusy=true;$('commitGithubDraft').disabled=true;
+ try{
+  const remote=await devRequest('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(file));
+  if(!remote.editable)throw Error('This path or branch is protected and cannot be edited.');
+  if(content===remote.content)throw Error('No changes compared with the target branch.');
+  if(remote.content!==repoFiles.get(file)?.content&&!confirm('This branch has different content from main. Commit your draft over the current branch version?'))return;
+  if(file!==current)throw Error('File selection changed while preparing the commit.');
+  const result=await devRequest('file',{method:'PUT',body:{branch,path:file,sha:remote.sha,content,message}});
+  if(!result.ok)throw Error('GitHub did not acknowledge the commit.');
+  try{localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));}catch{}
+  repoDirty=false;nativeStatus('Committed to '+branch+' ('+String(result.commit||'').slice(0,8)+'). Create a draft pull request to request review.');
+ }catch(error){nativeStatus('Commit failed: '+error.message);}
+ finally{devBusy=false;$('commitGithubDraft').disabled=false;}
+});
+$('submitGithubPr').addEventListener('click',async()=>{
+ if(!devWriteAvailable||devBusy){nativeStatus('Direct GitHub PR creation is available only in an isolated development environment.');return;}
+ const branch=$('githubBranch').value.trim(),title=$('githubPrTitle').value.trim();
+ if(!validWorkingBranch(branch)||title.length<8||title.length>120){nativeStatus('Select a feature/fix branch and a title of 8–120 characters.');return;}
+ if(!confirm('Create a DRAFT pull request from '+branch+' into develop?'))return;
+ devBusy=true;$('submitGithubPr').disabled=true;
+ try{
+  const result=await devRequest('pull-request',{method:'POST',body:{branch,title,description:'Prepared in LifeIDE for review. Source file: '+(current||'unspecified')+'. Please validate changes before merging.'}});
+  nativeStatus('Draft pull request created: '+result.url+' — review before merging.');
+  if(result.url&&new URL(result.url).hostname==='github.com')window.open(result.url,'_blank','noopener,noreferrer');
+ }catch(error){nativeStatus('Pull request creation failed: '+error.message);}
+ finally{devBusy=false;$('submitGithubPr').disabled=false;}
 });
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+(githubMode?'/remote':'')+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
@@ -219,7 +299,7 @@ async function connectGithubSource(){
 }
 async function repositoryConnect(){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
  if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
