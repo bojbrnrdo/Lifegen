@@ -239,8 +239,13 @@ try {
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
  for(let i=0;i<50;i++){if((await readFile(path.join(workspace,'browser-repository.js'),'utf8'))==='const browserRepository = true;')break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await readFile(path.join(workspace,'browser-repository.js'),'utf8'),'const browserRepository = true;');
+ // Disk writes can finish before the save handler clears its in-flight flag.
+ for(let i=0;i<50;i++){if(await evaluate("document.getElementById('status').textContent==='Saved to local repository'"))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate("document.getElementById('status').textContent"),'Saved to local repository','Wait for repository save to settle before Git review');
  await evaluate("document.getElementById('gitChanges').click()");
  for(let i=0;i<50;i++){if(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"))break;await new Promise(r=>setTimeout(r,100));}
+ const gitReview=await evaluate("({checkboxes:document.querySelectorAll('#tabs input[type=checkbox]').length,status:document.getElementById('status').textContent})");
+ assert.ok(gitReview.checkboxes,'Git status should show a selectable change: '+gitReview.status);
  await evaluate("document.querySelector('#tabs input[type=checkbox]').click()");
  assert.equal(await evaluate("document.getElementById('commit').disabled"),false);
  await evaluate("window.prompt=()=> 'Verify browser commit';window.confirm=()=>true;document.getElementById('commit').click()");
