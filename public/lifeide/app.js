@@ -90,7 +90,7 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;resetGithubFiles();}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
@@ -223,6 +223,48 @@ async function repoApi(url,options={}){
  if(!response.ok)throw Error(data.message||'Repository request failed.');
  return data;
 }
+// Browser-session source cache: repeated file opens are instantaneous. Prefetch
+// only a few nearby files to avoid flooding GitHub or the authenticated API.
+const githubFileCache=new Map(),githubFilePending=new Map(),githubPrefetchQueue=[];
+let githubPrefetchActive=0,githubPrefetchBudget=16,githubOpenSequence=0;
+function resetGithubFiles(){
+ githubFileCache.clear();githubFilePending.clear();
+ githubPrefetchQueue.length=0;githubPrefetchBudget=16;
+ githubOpenSequence++;
+}
+function githubFile(rel){
+ if(githubFileCache.has(rel))return Promise.resolve(githubFileCache.get(rel));
+ if(githubFilePending.has(rel))return githubFilePending.get(rel);
+ const request=repoApi('/file?path='+encodeURIComponent(rel)).then(file=>{
+  if(githubMode){githubFileCache.set(rel,file);
+   if(githubFileCache.size>30)githubFileCache.delete(githubFileCache.keys().next().value);}
+  return file;
+ }).finally(()=>githubFilePending.delete(rel));
+ githubFilePending.set(rel,request);
+ return request;
+}
+function scheduleGithubPrefetch(prefix){
+ if(!githubMode||!githubTreeIndex||githubPrefetchBudget<=0)return;
+ const siblings=githubTreeIndex.get(prefix)||[];
+ for(const entry of siblings){
+  if(githubPrefetchBudget<=0||githubPrefetchQueue.length>=12)break;
+  if(entry.type!=='file'||entry.size>64000)continue;
+  const rel=prefix?prefix+'/'+entry.name:entry.name;
+  if(githubFileCache.has(rel)||githubFilePending.has(rel)||githubPrefetchQueue.includes(rel))continue;
+  githubPrefetchQueue.push(rel);githubPrefetchBudget--;
+ }
+ drainGithubPrefetch();
+}
+function drainGithubPrefetch(){
+ while(githubMode&&githubPrefetchActive<2&&githubPrefetchQueue.length){
+  const rel=githubPrefetchQueue.shift(),generation=githubOpenSequence;
+  githubPrefetchActive++;
+  githubFile(rel).catch(()=>{}).finally(()=>{
+   githubPrefetchActive--;
+   if(githubOpenSequence===generation)drainGithubPrefetch();
+  });
+ }
+}
 let repoExpanded=new Set(),repoParent='';
 let githubTreeIndex=null,githubTreePending=null;
 async function loadGithubTree(){
@@ -237,7 +279,7 @@ async function loadGithubTree(){
    const parts=entry.path.split('/'),name=parts.pop(),parent=parts.join('/');
    if(!name)continue;
    if(!children.has(parent))children.set(parent,[]);
-   children.get(parent).push({name,type:entry.type});
+   children.get(parent).push({name,type:entry.type,size:Number(entry.size)||0});
   }
   for(const items of children.values())items.sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='folder'?-1:1);
   githubTreeIndex=children;
@@ -285,6 +327,7 @@ async function treeFolder(){
       if(!loaded){await appendFolder(rel,depth+1,children);loaded=true;}
       repoExpanded.add(rel);
       children.hidden=false;arrow.textContent='▾';el.setAttribute('aria-expanded','true');
+      if(githubMode)scheduleGithubPrefetch(rel);
       filterRepoTree();
      }catch(error){
       children.hidden=true;arrow.textContent='▸';
@@ -330,7 +373,12 @@ async function createRepoEntry(type,name){
 async function openRepoFile(rel){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before changing files.';return;}
  if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
- const file=await repoApi('/file?path='+encodeURIComponent(rel));
+ const sequence=++githubOpenSequence;
+ if(githubMode){
+  $('status').textContent=githubFileCache.has(rel)?'Opening cached file…':'Opening '+rel+'…';
+ }
+ const file=githubMode?await githubFile(rel):await repoApi('/file?path='+encodeURIComponent(rel));
+ if(githubMode&&sequence!==githubOpenSequence)return;
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  githubEditing=false;githubEditControls(true);
@@ -365,11 +413,12 @@ async function connectGithubSource(){
   $('newFile').disabled=true;$('newFolder').disabled=true;
   $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
   $('status').textContent='Connected to LIFEGEN GitHub files · read-only';
+  scheduleGithubPrefetch('');
  }catch(error){githubMode=false;renderTree();throw error;}
 }
 async function repositoryConnect(){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);githubTreeIndex=null;githubTreePending=null;$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);githubTreeIndex=null;githubTreePending=null;resetGithubFiles();$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
  if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
