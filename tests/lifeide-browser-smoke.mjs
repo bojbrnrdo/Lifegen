@@ -150,6 +150,21 @@ try {
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='renamed-smoke.ts')"),true,'Other files must be preserved');
  console.log('PASS LifeIDE browser: touch and keyboard delete controls confirm before removing');
 
+ // Explorer keyboard traversal should preserve focus when folders rerender.
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('samples')).focus()");
+ await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'Collapsing should retain focus on folder');
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('hello.js'))"),false,'ArrowLeft should collapse the folder');
+ await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'Expanding should retain focus on folder');
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('hello.js'))"),true,'ArrowRight should expand the folder');
+ await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.activeElement.textContent.includes('nested')"),true,'ArrowDown should focus the next visible folder');
+ await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'ArrowLeft on a collapsed child should focus its parent');
+ console.log('PASS LifeIDE browser: Explorer arrow-key navigation and focus preservation');
+
+
 
 
 
