@@ -65,6 +65,41 @@ async function githubSource(remotePath){
  if(remoteCache.size>80)remoteCache.delete(remoteCache.keys().next().value);
  return data;
 }
+// GitHub's recursive tree endpoint returns the complete source structure in
+// one request. Browser Explorer folders then open without additional HTTP calls.
+// Keep it administrator-only and reject truncated trees, rather than silently
+// hiding files in an incomplete index.
+let treeIndexCache={expires:0,data:null,pending:null};
+async function githubTreeIndex(){
+ if(treeIndexCache.data&&treeIndexCache.expires>Date.now())return treeIndexCache.data;
+ if(treeIndexCache.pending)return treeIndexCache.pending;
+ const pending=(async()=>{
+  const response=await fetch('https://api.github.com/repos/bojbrnrdo/Lifegen/git/trees/main?recursive=1',{
+   headers:{accept:'application/vnd.github+json','user-agent':'LIFEGEN-LifeIDE'},
+   signal:AbortSignal.timeout(12000)
+  });
+  if(!response.ok)throw httpError(503,'GitHub repository structure is temporarily unavailable.');
+  const result=await response.json();
+  if(result.truncated||!Array.isArray(result.tree)||result.tree.length>12000)throw httpError(503,'GitHub returned an incomplete repository tree.');
+  const paths=result.tree.filter(x=>x.type==='tree'||x.type==='blob').flatMap(x=>{
+   const raw=x.path;
+   try{
+    if(!raw||sourcePath(raw)==='')return [];
+   }catch{return [];}
+   return [{path:raw,type:x.type==='tree'?'folder':'file'}];
+  });
+  const data={paths,sha:result.sha,source:'github',branch:'main'};
+  treeIndexCache={expires:Date.now()+60000,data,pending:null};
+  return data;
+ })();
+ treeIndexCache.pending=pending;
+ try{return await pending;}finally{if(treeIndexCache.pending===pending)treeIndexCache.pending=null;}
+}
+router.get('/remote/index',authenticate,checkRole,requestLimit,async(req,res)=>{
+ const data=await githubTreeIndex();
+ res.set('Cache-Control','private, no-store').json(data);
+});
+
 router.get('/remote/tree',authenticate,checkRole,requestLimit,async(req,res)=>{
  const remotePath=sourcePath(req.query.path);
  const data=await githubSource(remotePath);
