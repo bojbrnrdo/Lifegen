@@ -93,7 +93,48 @@ function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.f
 $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,githubMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
+let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
+const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
+function githubEditControls(open=false){
+ $('editGithub').hidden=!githubMode||!open;
+ $('saveGithubDraft').hidden=!githubMode||!open;
+ $('publishGithub').hidden=!githubMode||!open;
+ $('editGithub').textContent=githubEditing?'Stop editing':'Edit source';
+ $('saveGithubDraft').disabled=!githubEditing;
+ $('publishGithub').disabled=!githubEditing;
+}
+$('editGithub').addEventListener('click',()=>{
+ if(!githubMode||!current)return;
+ if(githubEditing){
+  if(repoDirty&&!confirm('Discard unsaved edits? Save a draft first if you want to keep them.'))return;
+  githubEditing=false;repoDirty=false;
+  $('editor').value=repoFiles.get(current)?.content||'';
+  $('editor').disabled=true;
+ }else{
+  githubEditing=true;$('editor').disabled=false;$('editor').focus();
+ }
+ githubEditControls(true);updateLines();
+ $('status').textContent=githubEditing?'Editing draft — no changes have been committed to GitHub':'GitHub source is read-only';
+});
+$('saveGithubDraft').addEventListener('click',()=>{
+ if(!githubMode||!githubEditing||!current)return;
+ try{
+  localStorage.setItem(draftKey(current),JSON.stringify({content:$('editor').value,base:repoFiles.get(current)?.version,updated:Date.now()}));
+  repoDirty=false;$('status').textContent='Draft saved in this browser. Not committed to GitHub.';
+ }catch(error){$('status').textContent='Unable to save draft: '+error.message;}
+});
+$('publishGithub').addEventListener('click',async()=>{
+ if(!githubMode||!githubEditing||!current)return;
+ const file=current,content=$('editor').value;
+ if(!confirm('Continue editing '+file+' on GitHub? Your draft will be copied. Paste it into GitHub and commit to a NEW branch, not main.'))return;
+ try{
+  localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));
+  await navigator.clipboard.writeText(content);
+  const url='https://github.com/bojbrnrdo/Lifegen/edit/main/'+file.split('/').map(encodeURIComponent).join('/');
+  window.open(url,'_blank','noopener,noreferrer');
+  repoDirty=false;$('status').textContent='Draft copied. Paste into GitHub editor, then commit to a new branch and create a pull request.';
+ }catch(error){$('status').textContent='Clipboard permission blocked. Copy the editor text manually before opening GitHub.';}
+});
 async function repoApi(url,options={}){
  const response=await fetch('/api/lifeide'+(githubMode?'/remote':'')+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
@@ -140,10 +181,20 @@ async function openRepoFile(rel){
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
+ githubEditing=false;githubEditControls(true);
  $('editor').disabled=githubMode;$('editor').value=file.content;
+ if(githubMode){
+  try{
+   const saved=JSON.parse(localStorage.getItem(draftKey(rel))||'null');
+   if(saved&&typeof saved.content==='string'&&saved.content!==file.content&&saved.base===file.version&&confirm('A browser draft exists for '+rel+'. Restore it?')){
+    githubEditing=true;$('editor').disabled=false;$('editor').value=saved.content;
+    githubEditControls(true);
+   }
+  }catch{}
+ }
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
- $('status').textContent=githubMode?'GitHub main · read-only':'Repository file opened • Cmd/Ctrl+S to save';
+ $('status').textContent=githubMode?(githubEditing?'Draft restored; not committed to GitHub':'GitHub main · choose Edit source to change a draft'):'Repository file opened • Cmd/Ctrl+S to save';
 }
 async function connectGithubSource(){
  if(repoMode||githubMode)return;
@@ -154,7 +205,7 @@ async function connectGithubSource(){
  try{
   await treeFolder();
   repoMode=true;
-  current=null;opened=[];repoFiles.clear();emptyEditor();
+  current=null;opened=[];repoFiles.clear();emptyEditor();githubEditing=false;githubEditControls(false);
   $('workspaceRoot').hidden=true;
   $('modeLabel').textContent='GITHUB · MAIN';
   $('storageInfo').textContent='bojbrnrdo/Lifegen · main · read-only';
@@ -166,7 +217,7 @@ async function connectGithubSource(){
 }
 async function repositoryConnect(){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
  if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
@@ -218,7 +269,7 @@ $('commit').addEventListener('click',async()=>{
  }catch(e){$('status').textContent='Commit rejected: '+e.message;}
  finally{commitBusy=false;$('commit').disabled=!repoMode||selectedGit.size===0;}
 });
-$('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent='Unsaved repository changes';}});
+$('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent=githubMode?'Unsaved GitHub draft — Save draft before switching files':'Unsaved repository changes';}});
 document.addEventListener('keydown',async e=>{
  if(!repoMode||githubMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
  e.preventDefault();
