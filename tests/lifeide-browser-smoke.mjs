@@ -181,6 +181,12 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
+ // Rebuilding the Explorer after opening a file must not strand keyboard focus.
+ await evaluate("(()=>{const b=[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('root-note.txt'));b.focus();b.click();})()");
+ assert.equal(await evaluate("document.activeElement?.dataset?.entryId===JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='root-note.txt')?.id"),true,'Explorer must retain focus on the opened file');
+ console.log('PASS LifeIDE browser: file selection retains keyboard focus');
+
+
 
 
 
