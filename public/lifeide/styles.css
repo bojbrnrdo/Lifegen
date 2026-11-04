@@ -53,3 +53,8 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .folder-rename{display:inline-flex;align-items:center;justify-content:center;min-width:28px;min-height:28px;margin-left:4px;vertical-align:middle;cursor:pointer}
 
 .explorer-entry{display:flex;align-items:center;min-width:0;width:100%}.explorer-entry>.node{flex:1;min-width:0;width:auto}.explorer-entry>.folder-rename{flex:none;margin:0 2px;min-width:28px;min-height:32px;padding:3px 5px}@media(max-width:680px){.explorer-entry>.folder-rename{min-width:30px;min-height:36px}}
+
+/* Visible touch and keyboard action for browser-local entries. */
+.explorer-entry>.entry-delete{flex:none;min-width:30px;min-height:32px;margin:0 2px;padding:3px 5px;font-size:18px;line-height:1;color:#9d3030;background:transparent;border:1px solid transparent}
+.explorer-entry>.entry-delete:hover,.explorer-entry>.entry-delete:focus-visible{background:#fde8e8;border-color:#eac4c4}
+@media(max-width:680px){.explorer-entry>.entry-delete{min-width:32px;min-height:36px}}
