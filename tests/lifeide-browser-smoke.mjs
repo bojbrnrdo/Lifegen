@@ -18,7 +18,7 @@ git('init','-q');git('config','user.name','LifeIDE Browser Test');git('config','
 await (await import('node:fs/promises')).writeFile(path.join(workspace,'README.md'),'LifeIDE browser repository test');
 await mkdir(path.join(workspace,'src','components'),{recursive:true});
 await writeFile(path.join(workspace,'src','components','Example.js'),'export const example = true;');
-git('add','README.md');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
+git('add','README.md','src/components/Example.js');git('commit','-qm','baseline');git('checkout','-qb','feature/browser-acceptance');
 const realAuth=process.env.LIFEIDE_BROWSER_REAL_AUTH==='true';
 if(realAuth&&(!process.env.LIFEIDE_TEST_USERNAME||!process.env.LIFEIDE_TEST_PASSWORD||!process.env.DATABASE_URL))throw Error('Real-auth browser test requires disposable DATABASE_URL and LIFEIDE_TEST_USERNAME/PASSWORD');
 if(realAuth){
