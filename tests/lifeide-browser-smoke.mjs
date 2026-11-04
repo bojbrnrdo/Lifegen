@@ -161,6 +161,7 @@ try {
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}))");
  assert.equal(await evaluate("document.activeElement.textContent.includes('nested')"),true,'ArrowDown should focus the next visible folder');
  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
+ await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
  assert.equal(await evaluate("document.activeElement.textContent.includes('samples')"),true,'ArrowLeft on a collapsed child should focus its parent');
  console.log('PASS LifeIDE browser: Explorer arrow-key navigation and focus preservation');
 
