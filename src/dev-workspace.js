@@ -192,6 +192,40 @@ export function registerDevWorkspace(app){
   });
   res.json({ok:true,commit:data.commit?.sha,sha:data.content?.sha});
  }));
+ // Read-only branch status and history for the Git console. These endpoints
+ // never execute git locally or modify the remote repository.
+ app.get('/api/admin/dev/branches',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const list=await request(apiRoot+'/branches?per_page=100');
+  const branches=list.filter(b=>allowedBranch(b.name)).map(b=>({
+   name:b.name,sha:b.commit?.sha||'',protected:Boolean(b.protected)
+  }));
+  res.set('Cache-Control','no-store').json({branches,base:'develop'});
+ }));
+ app.get('/api/admin/dev/branch-status',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||'develop');
+  if(!allowedBranch(branch))return deny(res);
+  const result=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+  res.set('Cache-Control','no-store').json({
+   branch,base:'develop',ahead:result.ahead_by||0,behind:result.behind_by||0,
+   status:result.status||'identical',truncated:(result.files||[]).length>=100,
+   files:(result.files||[]).slice(0,100).filter(f=>allowedPath(f.filename)).map(f=>({
+    path:f.filename,status:f.status,additions:f.additions||0,deletions:f.deletions||0
+   }))
+  });
+ }));
+ app.get('/api/admin/dev/history',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||'develop');
+  if(!allowedBranch(branch))return deny(res);
+  const commits=await request(apiRoot+'/commits?sha='+encodeURIComponent(branch)+'&per_page=25');
+  res.set('Cache-Control','no-store').json({branch,commits:commits.map(c=>({
+   sha:c.sha,subject:String(c.commit?.message||'').split('\\n')[0].slice(0,200),
+   author:c.commit?.author?.name||'Unknown',date:c.commit?.author?.date||'',
+   url:c.html_url
+  }))});
+ }));
  app.get('/api/admin/dev/pull-requests',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
   const branch=String(req.query.branch||'').trim();
   if(branch&&!editableBranch(branch))return deny(res);
