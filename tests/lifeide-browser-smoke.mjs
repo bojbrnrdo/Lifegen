@@ -396,6 +396,22 @@ try {
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'src/components/Example.js');
  assert.equal(githubFileRequests,upstreamBeforeOpen,'Opening prefetched and previously viewed files must not call GitHub again');
+ assert.equal(await evaluate("document.getElementById('editor').disabled"),false,'GitHub source files should open editable');
+ assert.equal(await evaluate("document.getElementById('editGithub').hidden"),true,'Legacy Edit source control is hidden');
+ assert.equal(await evaluate("document.getElementById('saveGithubDraft').hidden"),true,'Legacy Save draft control is hidden');
+ assert.equal(await evaluate("document.getElementById('saveFile').disabled"),false,'Save is enabled when a source file is open');
+ assert.equal(await evaluate("document.getElementById('publishGithub').closest('.github-workflow')!==null"),true,'GitHub handoff is in advanced workflow');
+ await evaluate("document.getElementById('editor').value='export const example = 42;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
+ const storedDraft=await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js'))");
+ assert.equal(storedDraft.content,'export const example = 42;','Ctrl+S persists GitHub source draft in browser only');
+ assert.equal(await evaluate("document.getElementById('status').textContent.includes('Not committed to GitHub')"),true);
+ await evaluate("document.getElementById('editor').value='export const example = 43;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('saveFile').click()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Save button persists same draft as Ctrl+S');
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Saved draft restores automatically when source file reopens');
+ console.log('PASS LifeIDE simplified editor: editable on open; Save and Ctrl+S preserve safe GitHub drafts');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
 
 
