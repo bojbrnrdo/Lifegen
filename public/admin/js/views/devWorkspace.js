@@ -121,10 +121,11 @@ export async function renderDevIDE({main,query={}}){
   </div>
   <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/"></iframe>
  </section>`;
+ let legacyCleanup;
  main.querySelector('#ideLegacyEditor').addEventListener('click',()=>{
-  renderDevIDEGitHub({main,query}).catch(error=>{main.textContent='Unable to open GitHub editor: '+error.message;});
+  renderDevIDEGitHub({main,query}).then(cleanup=>{legacyCleanup=cleanup;}).catch(error=>{main.textContent='Unable to open GitHub editor: '+error.message;});
  });
- return ()=>{};
+ return ()=>{legacyCleanup?.();};
 }
 
 async function renderDevIDEGitHub({main,query={}}){
