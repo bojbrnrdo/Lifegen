@@ -65,67 +65,36 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .workspace-root[hidden]{display:none}
 @media(max-width:680px){.workspace-root{font-size:11px;min-height:36px;padding:6px}}
 
-/* LifeIDE reference layout: focused dark, two-pane code workspace; no AI sidebar. */
-:root{color-scheme:dark;--ide-bg:#0d0b13;--ide-panel:#14111d;--ide-header:#171420;--ide-border:#302b3c;--ide-text:#f1eef6;--ide-muted:#a8a0b9;--ide-accent:#2ac8e6;color:var(--ide-text);background:var(--ide-bg)}
-body{background:var(--ide-bg);color:var(--ide-text)}
-button{background:#211d2b;color:var(--ide-text);border:1px solid var(--ide-border);border-radius:4px}
-button:hover:not(:disabled){background:#332c40}
-button:focus-visible,.node:focus-visible{outline-color:var(--ide-accent)}
-.topbar{height:62px;gap:12px;padding:0 16px;background:#14111d;border-bottom:1px solid var(--ide-border);box-shadow:none}
-.brand{font-size:17px;color:var(--ide-text)}
-.brandmark{background:var(--ide-accent);color:#091319;border-radius:5px}
-.accent{color:var(--ide-accent)}
-.project-tag{background:#211d2b;border-color:var(--ide-border);color:var(--ide-muted)}
-#repositoryMode{background:#211d2b;color:var(--ide-text);border-color:var(--ide-border);font-size:12px;padding:8px 10px}
+/* Reference-inspired IDE layout; preserve LIFEGEN's existing light green theme. */
+.topbar{height:62px;gap:12px;padding:0 16px}
+.brand{font-size:17px}
+.project-tag{font-size:10px}
+#repositoryMode{font-size:12px;padding:8px 10px}
 .top-actions{margin-left:auto;gap:8px}
-.top-actions button{background:#211d2b;color:var(--ide-text);border:1px solid var(--ide-border);font-size:12px;padding:9px 12px}
-.top-actions button:hover{background:#332c40}
+.top-actions button{font-size:12px;padding:9px 12px}
 .explorer-search-label{width:clamp(145px,19vw,255px);flex:none;min-width:0}
-.explorer-search-label input{width:100%;height:36px;padding:0 11px;border-radius:5px;background:#0e0c16;border:1px solid var(--ide-border);color:var(--ide-text);font-size:12px;outline:none}
-.explorer-search-label input::placeholder{color:#9b92ab}
-.explorer-search-label input:focus{border-color:var(--ide-accent)}
+.explorer-search-label input{width:100%;height:36px;padding:0 11px;border-radius:6px;background:#fff;border:1px solid var(--life-border);color:var(--life-dark);font-size:12px;outline:none}
+.explorer-search-label input::placeholder{color:#77907b}
+.explorer-search-label input:focus{border-color:var(--life-mid);box-shadow:0 0 0 2px rgba(46,125,50,.12)}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.workspace{background:var(--ide-bg)}
-.sidebar{width:258px;min-width:200px;max-width:38vw;background:#100d18;border-right:1px solid var(--ide-border)}
-.sidebar-title{height:48px;color:#e5deec;border-bottom-color:var(--ide-border);padding:0 12px}
-.sidebar-title button{background:transparent;border-color:var(--ide-border)}
-.sortbar{padding:8px 10px;border-bottom:1px solid var(--ide-border)}
-.sortbar>span{color:#d9d1e2;font-size:11px}
-.sort-toggle{border-color:var(--ide-border)}
-.sort-toggle button{background:transparent;color:var(--ide-muted);padding:6px 9px}
-.sort-toggle button.active{background:var(--ide-accent);color:#0a141a}
+.workspace{min-width:0}
+.sidebar{width:258px;min-width:200px;max-width:38vw}
+.sidebar-title{height:48px;padding:0 12px}
+.sortbar{padding:8px 10px}
+.sortbar>span{font-size:11px}
+.sort-toggle button{padding:6px 9px}
 .filetree{padding:4px}
-.node{min-height:30px;padding:5px 7px;color:#e6e2ee;border:0;background:transparent;border-radius:3px;gap:6px}
-.node:hover{background:#282337}
-.node.selected{background:#233746;color:#e8faff}
+.node{min-height:30px;padding:5px 7px;border-radius:3px;gap:6px}
 .node .name{font-size:12px}
-.node .glyph{color:#6dc4fa}
-.node .arrow{color:#a59eb4}
-.explorer-entry>.folder-rename,.explorer-entry>.entry-delete{min-height:28px;min-width:26px;background:transparent;border-color:transparent;color:#c6bed0}
-.explorer-entry>.entry-delete{color:#df949b}
-.explorer-entry>.entry-delete:hover,.explorer-entry>.entry-delete:focus-visible{background:#49262f;border-color:#83404e}
-.workspace-root{background:transparent;color:var(--ide-muted);border-color:var(--ide-border);min-height:32px}
-.workspace-root[aria-pressed="true"]{background:#243544;color:#daf6ff;border-color:#36647b}
-.sidebar-footer{background:#120f1c;border-top-color:var(--ide-border);color:var(--ide-muted)}
-.main{background:#0c0c10;min-width:0}
-.editor-toolbar{height:52px;background:#16131f;border-bottom:1px solid var(--ide-border);gap:12px;padding:0 14px}
-.editor-heading{font-size:14px;font-weight:750;color:var(--ide-text)}
-.file-title{color:var(--ide-muted)}
+.explorer-entry>.folder-rename,.explorer-entry>.entry-delete{min-height:28px;min-width:26px}
+.workspace-root{min-height:32px}
+.main{min-width:0}
+.editor-toolbar{height:52px;gap:12px;padding:0 14px}
+.editor-heading{font-size:14px;font-weight:750}
 .editor-tools{gap:6px;min-width:0}
-.editor-tools button{font-size:12px;padding:7px 10px;background:#211d2b;color:var(--ide-text);border-color:var(--ide-border)}
+.editor-tools button{font-size:12px;padding:7px 10px}
 .editor-tools #refresh,.editor-tools #commit{margin-left:0}
-.tabs{background:#14111d;border-bottom:1px solid var(--ide-border)}
-.tab{background:#191522;color:var(--ide-muted);border-right-color:var(--ide-border)}
-.tab.active{background:#0c0c10;color:var(--ide-text);border-top-color:var(--ide-accent)}
-.tab .close{color:var(--ide-muted)}
-.lines{width:48px;background:#242532;color:#858da0;border-right-color:#343443}
-textarea#editor{background:#0e0e12;color:#e0edf5;caret-color:var(--ide-accent)}
-.statusbar{background:#16131f;color:#b9b0c6;border-top:1px solid var(--ide-border)}
-.dialog{background:#1e1928;border-color:#494052;box-shadow:0 20px 70px #000a;color:var(--ide-text)}
-.dialog label{color:#c8bdcf}.dialog input{background:#100d18;border-color:#52485d;color:#fff}
-.dialog-actions .primary{background:var(--ide-accent);color:#06171e}
-.error{color:#ff939b}
-.tabs input[type=checkbox]{accent-color:var(--ide-accent)}
+.lines{width:48px}
 @media(max-width:800px){
  .topbar{gap:7px;padding:8px 10px;height:auto;min-height:58px;flex-wrap:wrap}
  .top-actions{margin-left:auto}
