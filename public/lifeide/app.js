@@ -90,7 +90,7 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
@@ -224,11 +224,36 @@ async function repoApi(url,options={}){
  return data;
 }
 let repoExpanded=new Set(),repoParent='';
+let githubTreeIndex=null,githubTreePending=null;
+async function loadGithubTree(){
+ if(githubTreeIndex)return githubTreeIndex;
+ if(githubTreePending)return githubTreePending;
+ githubTreePending=(async()=>{
+  const result=await repoApi('/index');
+  if(!Array.isArray(result.paths))throw Error('Invalid GitHub repository tree response.');
+  const children=new Map();
+  for(const entry of result.paths){
+   if(typeof entry.path!=='string'||!['file','folder'].includes(entry.type))continue;
+   const parts=entry.path.split('/'),name=parts.pop(),parent=parts.join('/');
+   if(!name)continue;
+   if(!children.has(parent))children.set(parent,[]);
+   children.get(parent).push({name,type:entry.type});
+  }
+  for(const items of children.values())items.sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='folder'?-1:1);
+  githubTreeIndex=children;
+  return children;
+ })();
+ try{return await githubTreePending;}finally{githubTreePending=null;}
+}
 async function treeFolder(){
  const tree=$('tree');
+ // Fetch the complete GitHub tree once, before rebuilding any visible rows.
+ // Folder toggles thereafter only touch cached browser elements.
+ const indexed=githubMode?await loadGithubTree():null;
  tree.replaceChildren();
  async function appendFolder(prefix,depth,container){
-  const result=await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
+  const result=githubMode?{items:indexed.get(prefix)||[]}:
+   await repoApi('/tree'+(prefix?'?path='+encodeURIComponent(prefix):''));
   const fragment=document.createDocumentFragment();
   for(const entry of result.items){
    const rel=prefix?prefix+'/'+entry.name:entry.name;
@@ -344,7 +369,7 @@ async function connectGithubSource(){
 }
 async function repositoryConnect(){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);githubTreeIndex=null;githubTreePending=null;$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
  if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();

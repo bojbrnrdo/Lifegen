@@ -26,7 +26,26 @@ if(realAuth){
  if(!['127.0.0.1','localhost','::1'].includes(db.hostname)||process.env.LOCAL_DEMO!=='true')
   throw Error('Real-auth browser test requires LOCAL_DEMO=true and a loopback-only database');
 }
+let githubTreeRequests=0,githubIndexRequests=0,githubDirectoryRequests=0;
+const originalGlobalFetch=globalThis.fetch;
+globalThis.fetch=async(url,options)=>{
+ if(String(url).includes('/repos/bojbrnrdo/Lifegen/git/trees/main?recursive=1')){
+  githubTreeRequests++;
+  return new Response(JSON.stringify({
+   sha:'smoke-tree',truncated:false,tree:[
+    {path:'src',type:'tree'},{path:'src/components',type:'tree'},
+    {path:'src/components/Example.js',type:'blob'},{path:'README.md',type:'blob'}
+   ]
+  }),{status:200});
+ }
+ return originalGlobalFetch(url,options);
+};
 const app=express();
+app.use((req,res,next)=>{
+ if(req.path==='/api/lifeide/remote/index')githubIndexRequests++;
+ if(req.path==='/api/lifeide/remote/tree')githubDirectoryRequests++;
+ next();
+});
 app.use(express.json());
 app.use(expressRateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-7',legacyHeaders:false}));
 if(realAuth){
@@ -330,8 +349,29 @@ try {
  assert.ok(narrow.editor>80,'Editor must remain visible on small phones');
  console.log('PASS LifeIDE narrow mobile viewport: 320px');
 
+ // In GitHub source mode, the entire structure is fetched exactly once. Every
+ // nested folder expands locally without another Vercel/GitHub request.
+ await evaluate("location.href='/lifeide/?source=github'");
+ for(let i=0;i<80;i++){
+  if(await evaluate("document.getElementById('modeLabel')?.textContent==='GITHUB · MAIN'"))break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'GITHUB · MAIN');
+ assert.equal(githubIndexRequests,1,'GitHub Explorer startup should request one full tree');
+ await evaluate("document.querySelector('#tree .node[title=\"src\"]').click()");
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src\"]').getAttribute('aria-expanded')"),'true');
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components\"]'))"),true);
+ await evaluate("document.querySelector('#tree .node[title=\"src/components\"]').click()");
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .node[title=\"src/components/Example.js\"]'))"),true);
+ await evaluate("document.querySelector('#tree .node[title=\"src\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"src\"]').click()");
+ assert.equal(githubDirectoryRequests,0,'Folder expansion must never request individual GitHub directories');
+ assert.equal(githubIndexRequests,1,'Reopening folders must reuse browser-side tree index');
+ assert.equal(githubTreeRequests,1,'A GitHub index should use only one upstream GitHub API call');
+ console.log('PASS LifeIDE GitHub Explorer: one index request and instant nested folder toggles');
+
 
 
 }finally{
- ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});if(realAuth)await closePool();
+ ws?.close();chrome?.kill();await new Promise(resolve=>server.close(resolve));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:150});await rm(workspace,{recursive:true,force:true});if(realAuth)await closePool();globalThis.fetch=originalGlobalFetch;
 }

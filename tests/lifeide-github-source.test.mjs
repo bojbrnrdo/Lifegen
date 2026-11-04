@@ -9,6 +9,13 @@ test('admin-only GitHub source browsing returns real folders and readable files 
  globalThis.fetch=async(url,options)=>{
   if(!String(url).startsWith('https://api.github.com/'))return previous(url,options);
   upstreamCalls++;
+  if(String(url).includes('/git/trees/main?recursive=1'))return new Response(JSON.stringify({
+   sha:'tree123',truncated:false,tree:[
+    {path:'src',type:'tree'},{path:'src/components',type:'tree'},
+    {path:'src/components/Example.js',type:'blob'},{path:'README.md',type:'blob'},
+    {path:'.env',type:'blob'},{path:'node_modules/pkg.js',type:'blob'}
+   ]
+  }),{status:200});
   if(String(url).includes('/contents/src/hello.js'))return new Response(JSON.stringify({type:'file',size:21,encoding:'base64',content:Buffer.from('export const life = 1;').toString('base64'),sha:'abc'}),{status:200});
   return new Response(JSON.stringify([{name:'src',type:'dir'},{name:'README.md',type:'file'},{name:'.env',type:'file'}]),{status:200});
  };
@@ -24,6 +31,16 @@ test('admin-only GitHub source browsing returns real folders and readable files 
   const noAuth=await previous(base+'/api/lifeide/remote/tree');
   assert.equal(noAuth.status,401);
   const headers={'x-test-admin':'true'};
+  const unauthorizedIndex=await previous(base+'/api/lifeide/remote/index');
+  assert.equal(unauthorizedIndex.status,401);
+  const fullIndex=await previous(base+'/api/lifeide/remote/index',{headers});
+  assert.equal(fullIndex.status,200);
+  assert.deepEqual((await fullIndex.json()).paths,[
+   {path:'src',type:'folder'},{path:'src/components',type:'folder'},
+   {path:'src/components/Example.js',type:'file'},{path:'README.md',type:'file'}
+  ]);
+  const repeatedIndex=await previous(base+'/api/lifeide/remote/index',{headers});
+  assert.equal(repeatedIndex.status,200,'Cached index remains available');
   const root=await previous(base+'/api/lifeide/remote/tree',{headers});
   assert.equal(root.status,200);
   assert.deepEqual((await root.json()).items,[{name:'src',type:'folder'},{name:'README.md',type:'file'}]);
@@ -34,6 +51,6 @@ test('admin-only GitHub source browsing returns real folders and readable files 
   assert.equal(traversal.status,400);
   const write=await previous(base+'/api/lifeide/remote/file',{method:'PUT',headers});
   assert.equal(write.status,404);
-  assert.equal(upstreamCalls,2);
+  assert.equal(upstreamCalls,3,'Whole-tree index should require only one upstream request, including repeat reads');
  }finally{server.close();globalThis.fetch=previous;}
 });
