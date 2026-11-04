@@ -114,6 +114,8 @@ export async function renderDevGit({main}){
 // Show the full IDE inside the existing Admin navigation. The legacy GitHub
 // editor remains accessible separately and retains its original write guards.
 export async function renderDevIDE({main,query={}}){
+ // Deep links from the Git page must still open the requested repository file.
+ if(query.path)return renderDevIDEGitHub({main,query});
  main.innerHTML=`<section class="admin-lifeide" aria-label="LifeIDE developer workspace">
   <div class="admin-lifeide__header">
    <div><h1>LifeIDE</h1><p class="small muted">File explorer and editor · browser-local files stay on this device</p></div>
