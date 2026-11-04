@@ -57,7 +57,16 @@ function renameLocal(id,name){
  renderTabs();renderTree();
 }
 $('renameFile').addEventListener('click',()=>{if(repoMode||!node(current))return;const id=current;openDialog('Rename File','New file name',async name=>renameLocal(id,name),node(id).name);});
-function remove(id){const descendants=new Set([id]);let changed=true;while(changed){changed=false;for(const x of items)if(descendants.has(x.parent)&&!descendants.has(x.id)){descendants.add(x.id);changed=true;}}items=items.filter(x=>!descendants.has(x.id));if(descendants.has(selectedFolder))selectedFolder=null;opened=opened.filter(x=>!descendants.has(x));if(descendants.has(current)){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}save();renderTabs();renderTree();}
+function remove(id){
+ const tree=$('tree'),active=document.activeElement;
+ const entries=[...tree.querySelectorAll('button.node')];
+ const focusedEntry=active?.closest?.('.explorer-entry');
+ const restoreFocus=Boolean(focusedEntry&&tree.contains(focusedEntry));
+ const focusedIndex=entries.findIndex(b=>focusedEntry?.contains(b));
+ const descendants=new Set([id]);let changed=true;while(changed){changed=false;for(const x of items)if(descendants.has(x.parent)&&!descendants.has(x.id)){descendants.add(x.id);changed=true;}}items=items.filter(x=>!descendants.has(x.id));if(descendants.has(selectedFolder))selectedFolder=null;opened=opened.filter(x=>!descendants.has(x));if(descendants.has(current)){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}save();renderTabs();renderTree();if(restoreFocus){
+ const remaining=[...tree.querySelectorAll('button.node')];
+ (remaining[Math.min(Math.max(0,focusedIndex),remaining.length-1)]||$('workspaceRoot')).focus();
+ }}
 $('workspaceRoot').addEventListener('click',()=>{if(repoMode)return;selectedFolder=null;renderTree();$('status').textContent='New entries will be created at the workspace root';});
 $('newFile').addEventListener('click',()=>openDialog('New File','File name',async name=>{if(repoMode)return createRepoEntry('file',name);create('file',name,chosenParent());}));
 $('newFolder').addEventListener('click',()=>openDialog('New Folder','Folder name',async name=>{if(repoMode)return createRepoEntry('folder',name);create('folder',name,chosenParent());}));
