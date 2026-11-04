@@ -140,6 +140,17 @@ try {
  assert.equal(nestedResult,true,'New file should use the selected nested folder');
  console.log('PASS LifeIDE browser: selected folders are creation destinations');
 
+ // Touch and keyboard delete actions must confirm, preserve cancelled work, and remove only the target.
+ assert.equal(await evaluate("Boolean([...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete file samples/nested/inside.txt'))"),true);
+ await evaluate("window.confirm=()=>false;[...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete file samples/nested/inside.txt').click()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='inside.txt')"),true,'Cancelled delete should preserve the file');
+ await evaluate("window.confirm=()=>true;[...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete file samples/nested/inside.txt').click()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='inside.txt')"),false,'Confirmed delete should remove the selected file');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='nested')"),true,'Deleting a file must preserve its folder');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='renamed-smoke.ts')"),true,'Other files must be preserved');
+ console.log('PASS LifeIDE browser: touch and keyboard delete controls confirm before removing');
+
+
 
 
 
