@@ -116,18 +116,12 @@ export async function renderDevGit({main}){
 export async function renderDevIDE({main,query={}}){
  // Deep links from the Git page must still open the requested repository file.
  if(query.path)return renderDevIDEGitHub({main,query});
+ // Keep Admin navigation visible, but let the IDE consume every remaining pixel.
+ main.classList.add('main--lifeide');
  main.innerHTML=`<section class="admin-lifeide" aria-label="LifeIDE developer workspace">
-  <div class="admin-lifeide__header">
-   <div><h1>LifeIDE</h1><p class="small muted">File explorer and editor · browser-local files stay on this device</p></div>
-   <div class="admin-lifeide__actions"><a class="btn btn--sm" href="/lifeide/" target="_blank" rel="noopener noreferrer">Open full screen ↗</a><button class="btn btn--sm" type="button" id="ideLegacyEditor">GitHub file editor</button></div>
-  </div>
   <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/"></iframe>
  </section>`;
- let legacyCleanup;
- main.querySelector('#ideLegacyEditor').addEventListener('click',()=>{
-  renderDevIDEGitHub({main,query}).then(cleanup=>{legacyCleanup=cleanup;}).catch(error=>{main.textContent='Unable to open GitHub editor: '+error.message;});
- });
- return ()=>{legacyCleanup?.();};
+ return ()=>{main.classList.remove('main--lifeide');};
 }
 
 async function renderDevIDEGitHub({main,query={}}){
