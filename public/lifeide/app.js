@@ -79,9 +79,13 @@ $('editor').addEventListener('click',updateLines);
 $('editor').addEventListener('keyup',updateLines);
 $('editor').addEventListener('scroll',()=>{$('lineNumbers').scrollTop=$('editor').scrollTop;});
 $('editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const el=e.target,start=el.selectionStart,end=el.selectionEnd;el.setRangeText('  ',start,end,'end');el.dispatchEvent(new Event('input'));}});
-$('explorerSearch').addEventListener('input',()=>renderTree());
-$('sortName').addEventListener('click',()=>{sort='name';$('sortName').classList.add('active');$('sortDate').classList.remove('active');renderTree();});
-$('sortDate').addEventListener('click',()=>{sort='date';$('sortDate').classList.add('active');$('sortName').classList.remove('active');renderTree();});
+function filterRepoTree(){
+ const term=$('explorerSearch').value.trim().toLowerCase();
+ for(const el of $('tree').querySelectorAll('.node'))el.hidden=Boolean(term&&!el.title.toLowerCase().includes(term));
+}
+$('explorerSearch').addEventListener('input',()=>{if(repoMode)filterRepoTree();else renderTree();});
+$('sortName').addEventListener('click',()=>{sort='name';$('sortName').classList.add('active');$('sortDate').classList.remove('active');if(!repoMode)renderTree();});
+$('sortDate').addEventListener('click',()=>{sort='date';$('sortDate').classList.add('active');$('sortName').classList.remove('active');if(!repoMode)renderTree();});
 $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collapsed'));
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
@@ -89,9 +93,9 @@ function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.f
 $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(repoDirty&&!confirm('Discard unsaved changes and reload repository?'))return;repoDirty=false;repoExpanded.clear();repoParent='';repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
-let repoMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
+let repoMode=false,githubMode=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
 async function repoApi(url,options={}){
- const response=await fetch('/api/lifeide'+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
+ const response=await fetch('/api/lifeide'+(githubMode?'/remote':'')+url,{credentials:'same-origin',...options,headers:{...(options.body?{'content-type':'application/json','x-csrf-token':csrf}:{}),...(options.headers||{})}});
  const data=await response.json().catch(()=>({}));
  if(!response.ok)throw Error(data.message||'Repository request failed.');
  return data;
@@ -104,7 +108,7 @@ async function treeFolder(){
   for(const entry of result.items){
    const rel=prefix?prefix+'/'+entry.name:entry.name;
    const el=document.createElement('button');el.type='button';el.className='node';
-   el.style.paddingLeft=(8+depth*15)+'px';
+   el.style.paddingLeft=(8+depth*15)+'px';el.title=rel;el.setAttribute('aria-label',entry.type+' '+rel);
    const a=document.createElement('span');a.className='arrow';a.textContent=entry.type==='folder'?(repoExpanded.has(rel)?'▾':'▸'):' ';
    const n=document.createElement('span');n.className='name';n.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
    el.append(a,n);tree.append(el);
@@ -116,8 +120,10 @@ async function treeFolder(){
   }
  }
  await appendFolder('',0);
+ filterRepoTree();
 }
 async function createRepoEntry(type,name){
+ if(githubMode)throw Error('GitHub files are read-only. Switch to Local Workspace to create files.');
  if(saveBusy||commitBusy)throw Error('Finish the pending save or commit before creating files.');
  if(repoDirty)throw Error('Save or discard your current repository edits before creating another entry.');
  if(!name||name.startsWith('.')||name==='..'||name.includes('/')||name.includes('\\')||name.trim()!==name)throw Error('Invalid name');
@@ -134,14 +140,34 @@ async function openRepoFile(rel){
  const file=await repoApi('/file?path='+encodeURIComponent(rel));
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
- $('editor').disabled=false;$('editor').value=file.content;
+ $('editor').disabled=githubMode;$('editor').value=file.content;
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
- $('status').textContent='Repository file opened • Cmd/Ctrl+S to save';
+ $('status').textContent=githubMode?'GitHub main · read-only':'Repository file opened • Cmd/Ctrl+S to save';
+}
+async function connectGithubSource(){
+ if(repoMode||githubMode)return;
+ const response=await fetch('/api/auth/status',{credentials:'same-origin'});
+ const auth=await response.json().catch(()=>({}));
+ if(!response.ok||auth.user?.role_id!=='admin')throw Error('Sign into LIFEGEN Admin as an administrator to view project files.');
+ githubMode=true;
+ try{
+  await treeFolder();
+  repoMode=true;
+  current=null;opened=[];repoFiles.clear();emptyEditor();
+  $('workspaceRoot').hidden=true;
+  $('modeLabel').textContent='GITHUB · MAIN';
+  $('storageInfo').textContent='bojbrnrdo/Lifegen · main · read-only';
+  $('repositoryMode').textContent='Local Workspace';
+  $('newFile').disabled=true;$('newFolder').disabled=true;
+  $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
+  $('status').textContent='Connected to LIFEGEN GitHub files · read-only';
+ }catch(error){githubMode=false;renderTree();throw error;}
 }
 async function repositoryConnect(){
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
- if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent='Repository';$('newFile').disabled=false;$('newFolder').disabled=false;return;}
+ if(repoMode){if(repoDirty&&!confirm('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
+ if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
   const r=await fetch('/api/auth/status',{credentials:'same-origin'});const auth=await r.json();
   if(!auth.user||auth.user.role_id!=='admin')throw Error('Sign into LIFEGEN Admin with an administrator account.');
@@ -153,6 +179,7 @@ async function repositoryConnect(){
 }
 $('repositoryMode').addEventListener('click',repositoryConnect);
 $('gitChanges').addEventListener('click',async()=>{
+ if(githubMode){$('status').textContent='GitHub main is read-only. Git changes require a local development workspace.';return;}
  if(!repoMode){$('status').textContent='Switch to Repository mode to view Git changes.';return;}
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before reviewing Git changes.';return;}
  try{
@@ -176,7 +203,7 @@ $('gitChanges').addEventListener('click',async()=>{
  }catch(e){$('status').textContent=e.message;}
 });
 $('commit').addEventListener('click',async()=>{
- if(commitBusy||!repoMode||!selectedGit.size)return;
+ if(commitBusy||!repoMode||githubMode||!selectedGit.size)return;
  if(saveBusy){$('status').textContent='Wait for the current save to finish before committing.';return;}
  if(repoDirty){$('status').textContent='Save or discard unsaved changes before committing.';return;}
  const paths=[...selectedGit];
@@ -193,7 +220,7 @@ $('commit').addEventListener('click',async()=>{
 });
 $('editor').addEventListener('input',()=>{if(repoMode){repoDirty=true;$('status').textContent='Unsaved repository changes';}});
 document.addEventListener('keydown',async e=>{
- if(!repoMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
+ if(!repoMode||githubMode||!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
  e.preventDefault();
  if(saveBusy)return;
  const path=current,f=repoFiles.get(path);if(!f)return;
@@ -208,4 +235,5 @@ document.addEventListener('keydown',async e=>{
  finally{saveBusy=false;}
 },true);
 renderTree();emptyEditor();
+if(new URLSearchParams(location.search).get('source')==='github')connectGithubSource().catch(error=>{$('status').textContent='GitHub connection failed: '+error.message;});
 })();

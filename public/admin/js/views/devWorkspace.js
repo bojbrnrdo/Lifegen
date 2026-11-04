@@ -119,7 +119,7 @@ export async function renderDevIDE({main,query={}}){
  // Keep Admin navigation visible, but let the IDE consume every remaining pixel.
  main.classList.add('main--lifeide');
  main.innerHTML=`<section class="admin-lifeide" aria-label="LifeIDE developer workspace">
-  <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/"></iframe>
+  <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/?source=github"></iframe>
  </section>`;
  return ()=>{main.classList.remove('main--lifeide');};
 }
