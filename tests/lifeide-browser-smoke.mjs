@@ -26,15 +26,22 @@ if(realAuth){
  if(!['127.0.0.1','localhost','::1'].includes(db.hostname)||process.env.LOCAL_DEMO!=='true')
   throw Error('Real-auth browser test requires LOCAL_DEMO=true and a loopback-only database');
 }
-let githubTreeRequests=0,githubIndexRequests=0,githubDirectoryRequests=0;
+let githubTreeRequests=0,githubIndexRequests=0,githubDirectoryRequests=0,githubFileRequests=0;
 const originalGlobalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
+ if(String(url).includes('/repos/bojbrnrdo/Lifegen/contents/')){
+  githubFileRequests++;
+  const requested=new URL(String(url)).pathname;
+  const content=requested.endsWith('/README.md')?'# LIFEGEN source': 'export const example = true;';
+  return new Response(JSON.stringify({type:'file',size:content.length,encoding:'base64',
+   content:Buffer.from(content).toString('base64'),sha:requested.endsWith('/README.md')?'mock-readme':'mock-example'}),{status:200});
+ }
  if(String(url).includes('/repos/bojbrnrdo/Lifegen/git/trees/main?recursive=1')){
   githubTreeRequests++;
   return new Response(JSON.stringify({
    sha:'smoke-tree',truncated:false,tree:[
     {path:'src',type:'tree'},{path:'src/components',type:'tree'},
-    {path:'src/components/Example.js',type:'blob'},{path:'README.md',type:'blob'}
+    {path:'src/components/Example.js',type:'blob',size:28},{path:'README.md',type:'blob',size:16}
    ]
   }),{status:200});
  }
@@ -369,6 +376,28 @@ try {
  assert.equal(githubIndexRequests,1,'Reopening folders must reuse browser-side tree index');
  assert.equal(githubTreeRequests,1,'A GitHub index should use only one upstream GitHub API call');
  console.log('PASS LifeIDE GitHub Explorer: one index request and instant nested folder toggles');
+ // Prefetched GitHub files should open without making another upstream request,
+ // including a second selection of the same file.
+ for(let i=0;i<80;i++){
+  if(githubFileRequests>=2)break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ assert.equal(githubFileRequests,2,'Root and nested file contents were prefetched exactly once');
+ await new Promise(r=>setTimeout(r,100));
+ const upstreamBeforeOpen=githubFileRequests;
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("document.getElementById('fileTitle').textContent==='src/components/Example.js'"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = true;');
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md');
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'src/components/Example.js');
+ assert.equal(githubFileRequests,upstreamBeforeOpen,'Opening prefetched and previously viewed files must not call GitHub again');
+ console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
+
 
 
 

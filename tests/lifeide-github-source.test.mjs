@@ -36,8 +36,8 @@ test('admin-only GitHub source browsing returns real folders and readable files 
   const fullIndex=await previous(base+'/api/lifeide/remote/index',{headers});
   assert.equal(fullIndex.status,200);
   assert.deepEqual((await fullIndex.json()).paths,[
-   {path:'src',type:'folder'},{path:'src/components',type:'folder'},
-   {path:'src/components/Example.js',type:'file'},{path:'README.md',type:'file'}
+   {path:'src',type:'folder',size:0},{path:'src/components',type:'folder',size:0},
+   {path:'src/components/Example.js',type:'file',size:0},{path:'README.md',type:'file',size:0}
   ]);
   const repeatedIndex=await previous(base+'/api/lifeide/remote/index',{headers});
   assert.equal(repeatedIndex.status,200,'Cached index remains available');
