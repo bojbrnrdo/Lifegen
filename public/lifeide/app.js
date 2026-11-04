@@ -39,9 +39,9 @@ $('tree').addEventListener('keydown',e=>{
  e.preventDefault();
  target?.focus();
 });
-function select(id){const f=node(id);if(!f||f.type!=='file')return;current=id;selectedFolder=f.parent;$('renameFile').disabled=repoMode;if(!opened.includes(id))opened.push(id);$('editor').disabled=false;$('editor').value=f.content||'';$('fileTitle').textContent=pathOf(f);$('language').textContent=(f.name.split('.').pop()||'txt').toUpperCase();renderTabs();renderTree();if(document.activeElement===document.body||document.activeElement===$('tree')){const target=[...$('tree').querySelectorAll('button.node')].find(b=>b.dataset.entryId===id);target?.focus();}updateLines();}
+function select(id){const f=node(id);if(!f||f.type!=='file')return;current=id;$('saveFile').disabled=false;selectedFolder=f.parent;$('renameFile').disabled=repoMode;if(!opened.includes(id))opened.push(id);$('editor').disabled=false;$('editor').value=f.content||'';$('fileTitle').textContent=pathOf(f);$('language').textContent=(f.name.split('.').pop()||'txt').toUpperCase();renderTabs();renderTree();if(document.activeElement===document.body||document.activeElement===$('tree')){const target=[...$('tree').querySelectorAll('button.node')].find(b=>b.dataset.entryId===id);target?.focus();}updateLines();}
 function renderTabs(){const container=$('tabs');container.replaceChildren();for(const id of opened){const f=node(id);if(!f)continue;const tab=document.createElement('div');tab.className='tab'+(id===current?' active':'');const open=document.createElement('button');open.type='button';open.className='tab-open';open.textContent=f.name;open.addEventListener('click',()=>select(id));const close=document.createElement('button');close.type='button';close.className='close';close.textContent='×';close.setAttribute('aria-label','Close '+f.name);close.addEventListener('click',e=>{e.stopPropagation();opened=opened.filter(x=>x!==id);if(id===current){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}renderTabs();renderTree();});tab.append(open,close);container.append(tab);}}
-function emptyEditor(){$('renameFile').disabled=true;$('editor').value='# Welcome to LifeIDE!\n# Select a file to begin.';$('editor').disabled=true;$('fileTitle').textContent='No file selected';$('language').textContent='Plain text';updateLines();}
+function emptyEditor(){$('saveFile').disabled=true;$('renameFile').disabled=true;$('editor').value='# Welcome to LifeIDE!\n# Select a file to begin.';$('editor').disabled=true;$('fileTitle').textContent='No file selected';$('language').textContent='Plain text';updateLines();}
 function updateLines(){const el=$('editor'),lines=el.value.split('\n').length;$('lineNumbers').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');const pos=el.selectionStart,preceding=el.value.slice(0,pos).split('\n');$('position').textContent='Ln '+preceding.length+', Col '+(preceding.at(-1).length+1);$('lineNumbers').scrollTop=el.scrollTop;}
 function openDialog(title,label,action,prefill=''){dialogAction=action;$('dialogTitle').textContent=title;$('dialogLabel').textContent=label;$('dialogInput').value=prefill;$('dialogError').textContent='';$('dialog').hidden=false;$('dialogInput').focus();}
 function closeDialog(){$('dialog').hidden=true;dialogAction=null;}
@@ -99,7 +99,7 @@ function githubEditControls(open=false){
  // Keep the legacy workflows available without crowding the source editor.
  $('editGithub').hidden=true;
  $('saveGithubDraft').hidden=true;
- $('publishGithub').hidden=true;
+ $('publishGithub').hidden=!githubMode||!open;
  $('githubNative').hidden=!githubMode||!open;
  $('githubNative').textContent='GitHub';
  $('renameFile').hidden=githubMode;
@@ -146,7 +146,7 @@ $('publishGithub').addEventListener('click',async()=>{
 });
 
 // Native GitHub writes require the existing isolated-preview developer API.
-// Production never obtains write privileges or uses browser-stored tokens.
+// Production write access remains governed by server-side flags and branch restrictions.
 let devWriteAvailable=false,devBusy=false;
 function nativeStatus(message){$('githubWorkflowStatus').textContent=message;}
 async function devRequest(route,{method='GET',body}={}){
@@ -418,7 +418,7 @@ async function connectGithubSource(){
   $('repositoryMode').textContent='Local Workspace';
   $('newFile').disabled=true;$('newFolder').disabled=true;
   $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
-  $('status').textContent='Connected to LIFEGEN GitHub files · read-only';
+  $('status').textContent='GitHub source loaded · edits save as browser drafts until committed to a development branch';
   scheduleGithubPrefetch('');
  }catch(error){githubMode=false;renderTree();throw error;}
 }
