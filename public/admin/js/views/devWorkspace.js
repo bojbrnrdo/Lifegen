@@ -111,7 +111,26 @@ export async function renderDevGit({main}){
  };
 }
 
+// Show the full IDE inside the existing Admin navigation. The legacy GitHub
+// editor remains accessible separately and retains its original write guards.
 export async function renderDevIDE({main,query={}}){
+ // Deep links from the Git page must still open the requested repository file.
+ if(query.path)return renderDevIDEGitHub({main,query});
+ main.innerHTML=`<section class="admin-lifeide" aria-label="LifeIDE developer workspace">
+  <div class="admin-lifeide__header">
+   <div><h1>LifeIDE</h1><p class="small muted">File explorer and editor · browser-local files stay on this device</p></div>
+   <div class="admin-lifeide__actions"><a class="btn btn--sm" href="/lifeide/" target="_blank" rel="noopener noreferrer">Open full screen ↗</a><button class="btn btn--sm" type="button" id="ideLegacyEditor">GitHub file editor</button></div>
+  </div>
+  <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/"></iframe>
+ </section>`;
+ let legacyCleanup;
+ main.querySelector('#ideLegacyEditor').addEventListener('click',()=>{
+  renderDevIDEGitHub({main,query}).then(cleanup=>{legacyCleanup=cleanup;}).catch(error=>{main.textContent='Unable to open GitHub editor: '+error.message;});
+ });
+ return ()=>{legacyCleanup?.();};
+}
+
+async function renderDevIDEGitHub({main,query={}}){
  main.innerHTML=heading('LifeIDE','Edit and commit repository source files from LIFEGEN — no production branch edits')+'<div class="card"><div class="card__body">Loading…</div></div>';
  const data=await api('status');
  main.innerHTML=heading('LifeIDE','Browse develop; edit only feature/* or fix/* branches. Each save creates a commit.')+offline(data)+
