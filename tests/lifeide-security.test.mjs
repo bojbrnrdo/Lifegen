@@ -93,3 +93,20 @@ test('GitHub source drafts have an explicit GitHub handoff and stay browser-loca
  assert.match(html,/id="saveGithubDraft"[^>]*hidden/);
  assert.match(html,/id="publishGithub"[^>]*hidden/);
 });
+
+test('native branch, commit and PR controls use the existing protected developer API',()=>{
+ const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
+ const dev=readFileSync(new URL('../src/dev-workspace.js',import.meta.url),'utf8');
+ assert.match(html,/id="githubNative"[^>]*hidden/);
+ assert.match(html,/id="githubWorkflow"[^>]*hidden/);
+ assert.match(html,/id="createGithubBranch"/);
+ assert.match(html,/id="commitGithubDraft"/);
+ assert.match(html,/id="submitGithubPr"/);
+ assert.match(client,/devWriteAvailable=Boolean\(info\.writesEnabled\)/);
+ assert.match(client,/devRequest\('branch',\{method:'POST'/);
+ assert.match(client,/devRequest\('file',\{method:'PUT'/);
+ assert.match(client,/devRequest\('pull-request',\{method:'POST'/);
+ assert.match(dev,/VERCEL_ENV!=='production'/);
+ assert.match(dev,/LIFEGEN_DEV_DATABASE_ISOLATED==='true'/);
+ assert.match(dev,/checkOrigin\(req\);checkCsrf\(req\)/);
+});
