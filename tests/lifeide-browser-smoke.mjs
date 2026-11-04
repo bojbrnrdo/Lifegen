@@ -49,14 +49,19 @@ let chrome,ws;
 try {
  await new Promise(resolve=>server.once('listening',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/lifeide/';
- chrome=spawn(chromePath,['--headless','--no-first-run','--disable-gpu','--remote-debugging-port=0','--user-data-dir='+profile,url],{stdio:'ignore'});
+ const chromeArgs=['--headless','--no-first-run','--disable-gpu','--remote-debugging-port=0','--user-data-dir='+profile];
+ if(process.platform==='linux')chromeArgs.push('--no-sandbox','--disable-dev-shm-usage');
+ chromeArgs.push(url);
+ chrome=spawn(chromePath,chromeArgs,{stdio:['ignore','ignore','pipe']});
+ let chromeErrors='';
+ chrome.stderr.on('data',chunk=>{chromeErrors=(chromeErrors+chunk.toString()).slice(-4000);});
  let port;
  for(let i=0;i<100;i++){
-  if(chrome.exitCode!==null)throw Error('Chrome exited before starting');
+  if(chrome.exitCode!==null)throw Error('Chrome exited before starting (code '+chrome.exitCode+'): '+chromeErrors);
   try{const info=(await readFile(path.join(profile,'DevToolsActivePort'),'utf8')).split('\n');port=Number(info[0]);if(port)break;}catch{}
   await new Promise(r=>setTimeout(r,100));
  }
- assert.ok(port,'Chrome DevTools did not start');
+ assert.ok(port,'Chrome DevTools did not start: '+chromeErrors);
  const pages=await(await fetch('http://127.0.0.1:'+port+'/json')).json();
  ws=new WebSocket(pages.find(p=>p.type==='page').webSocketDebuggerUrl);
  await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
