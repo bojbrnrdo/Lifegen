@@ -227,6 +227,7 @@ export function registerDevWorkspace(app){
   }))});
  }));
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
+  if(process.env.VERCEL_ENV==='production')return res.status(403).json({error:'Package workflow dispatch is limited to isolated previews.'});
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
   const now=Date.now(),last=packageRequests.get(branch)||0;
