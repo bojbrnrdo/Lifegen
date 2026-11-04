@@ -290,6 +290,17 @@ try {
  assert.ok(narrow.editor>80,'Editor must remain visible on small phones');
  console.log('PASS LifeIDE narrow mobile viewport: 320px');
 
+ // The confirmed return to browser-local mode must restore saved local files and controls.
+ await evaluate("window.confirm=()=>true;document.getElementById('repositoryMode').click()");
+ assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'LOCAL WORKSPACE','Confirmed switch should leave repository mode');
+ assert.equal(await evaluate("document.getElementById('workspaceRoot').hidden"),false,'Workspace root must reappear in local mode');
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('renamed-smoke.ts'))"),true,'Saved browser-local files should reappear in Explorer');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('renamed-smoke.ts')).click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const second = 2;','Saved local content must survive both mode switches');
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'renamed-smoke.ts');
+ console.log('PASS LifeIDE browser: return to local workspace preserves files and restores controls');
+
+
 
 
 }finally{
