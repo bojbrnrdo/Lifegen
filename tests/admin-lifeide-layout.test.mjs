@@ -10,7 +10,7 @@ const standalone=await readFile(new URL('../public/lifeide/index.html',import.me
 test('Admin LifeIDE route embeds the full Explorer and editor workspace',()=>{
  assert.ok(routes.includes('view: renderDevIDE'), 'Admin router must use the embedded LifeIDE view');
  assert.match(view,/export async function renderDevIDE\(/);
- assert.match(view,/iframe class="admin-lifeide__frame"[^>]+src="\/lifeide\/"/);
+ assert.match(view,/iframe class="admin-lifeide__frame"[^>]+src="\/lifeide\/\?source=github"/);
  assert.match(standalone,/id="tree"/);
  assert.match(standalone,/id="editor"/);
  assert.match(css,/\.admin-lifeide__frame\s*\{/);
