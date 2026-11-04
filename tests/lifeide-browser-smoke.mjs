@@ -126,6 +126,20 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'samples/hello.js');
  console.log('PASS LifeIDE browser: folder rename preserves descendants and updates paths');
 
+ // A selected Explorer folder must be the parent for new files and subfolders.
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('samples')).click()");
+ await evaluate("document.getElementById('newFolder').click()");
+ await evaluate("document.getElementById('dialogInput').value='nested';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='nested')?.parent"),'examples','New subfolder should use the selected folder');
+ await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('nested')).click()");
+ await evaluate("document.getElementById('newFile').click()");
+ await evaluate("document.getElementById('dialogInput').value='inside.txt';document.getElementById('dialogForm').requestSubmit()");
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'samples/nested/inside.txt');
+ const nestedResult=await evaluate("(()=>{const files=JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1'));return files.find(f=>f.name==='inside.txt')?.parent===files.find(f=>f.name==='nested')?.id})()");
+ assert.equal(nestedResult,true,'New file should use the selected nested folder');
+ console.log('PASS LifeIDE browser: selected folders are creation destinations');
+
+
 
 
  if(realAuth){
