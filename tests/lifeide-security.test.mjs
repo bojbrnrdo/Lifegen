@@ -80,3 +80,16 @@ test('repository operations are rate-limited and avoid following file symlinks',
  assert.match(server,/O_NOFOLLOW/);
  assert.match(server,/handle\.stat\(\)/);
 });
+
+test('GitHub source drafts have an explicit GitHub handoff and stay browser-local',()=>{
+ assert.match(client,/lifegen\.lifeide\.github-draft\.v1:/);
+ assert.match(client,/localStorage\.setItem\(draftKey\(file\)/);
+ assert.match(client,/navigator\.clipboard\.writeText\(content\)/);
+ assert.match(client,/https:\/\/github\.com\/bojbrnrdo\/Lifegen\/edit\/main\//);
+ assert.match(client,/githubMode\|\|!current/);
+ assert.match(client,/!repoMode\|\|githubMode\|\|!/);
+ const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
+ assert.match(html,/id="editGithub"[^>]*hidden/);
+ assert.match(html,/id="saveGithubDraft"[^>]*hidden/);
+ assert.match(html,/id="publishGithub"[^>]*hidden/);
+});
