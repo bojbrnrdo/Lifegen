@@ -70,7 +70,20 @@ export function connectionHint(error) {
 export function applicationPoolOptions({serverless=Boolean(process.env.VERCEL)}={}) {
  return {max:serverless?1:3,idleTimeoutMillis:serverless?1000:10000,allowExitOnIdle:true};
 }
-export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),...applicationPoolOptions()}); }
+// Supavisor session mode on port 5432 caps active clients to the DB pool size.
+// In Vercel, share a smaller number of backend connections using Supavisor
+// transaction mode (6543). Only rewrite a verified project-qualified Supabase
+// pooler URL; never rewrite arbitrary Postgres or direct DB URLs.
+// The original session/direct URL remains untouched for maintenance clients.
+export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCEL),mode=process.env.LIFEGEN_DB_POOL_MODE}={}) {
+ if(!url||!serverless||mode==='session')return url;
+ const u=new URL(url);
+ const pooler=/(^|\.)pooler\.supabase\.com$/i.test(u.hostname);
+ if(!pooler||u.port!=='5432'||!decodeURIComponent(u.username).includes('.'))return url;
+ u.port='6543';
+ return u.toString();
+}
+export function getPool() { return pool ||= new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()}); }
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
  if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}

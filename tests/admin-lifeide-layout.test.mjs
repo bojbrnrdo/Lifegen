@@ -14,11 +14,14 @@ test('Admin LifeIDE route embeds the full Explorer and editor workspace',()=>{
  assert.match(standalone,/id="tree"/);
  assert.match(standalone,/id="editor"/);
  assert.match(css,/\.admin-lifeide__frame\s*\{/);
+ assert.match(view,/main\.classList\.add\('main--lifeide'\)/);
+ assert.match(view,/main\.classList\.remove\('main--lifeide'\)/);
+ assert.match(css,/\.main\.main--lifeide\s*\{/);
+ assert.match(css,/\.main\.main--lifeide \.admin-lifeide__frame\s*\{/);
 });
 
 test('Admin LifeIDE keeps the existing GitHub editor available separately',()=>{
- assert.match(view,/id="ideLegacyEditor"/);
+ assert.match(view,/if\(query\.path\)return renderDevIDEGitHub/);
  assert.match(view,/async function renderDevIDEGitHub\(/);
- assert.match(view,/legacyCleanup\?\.\(\)/);
  assert.match(view,/GitHub integration is not yet configured on the server/);
 });
