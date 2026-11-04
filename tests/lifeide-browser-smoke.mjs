@@ -197,6 +197,22 @@ try {
  assert.equal(await evaluate("Boolean(document.activeElement?.closest?.('#tree')&&document.activeElement.matches('button.node'))"),true,'Focus should move to a remaining Explorer item');
  console.log('PASS LifeIDE browser: delete restores focus to remaining Explorer item');
 
+ // QA: canceling folder removal must preserve all descendants; confirmation removes only the subtree.
+ await evaluate("window.confirm=()=>false;[...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete folder samples').click()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='samples')"),true,'Cancel must preserve the parent folder');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).some(f=>f.name==='hello.js')"),true,'Cancel must preserve descendant files');
+ await evaluate("window.confirm=()=>true;[...document.querySelectorAll('.entry-delete')].find(b=>b.getAttribute('aria-label')==='Delete folder samples').click()");
+ const subtree=await evaluate("(()=>{const files=JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1'));return {folder:files.some(f=>f.id==='examples'),file:files.some(f=>f.id==='sample'),nested:files.some(f=>f.name==='nested'),unrelated:files.some(f=>f.name==='renamed-smoke.ts'),root:files.some(f=>f.name==='root-level')}})()");
+ assert.equal(subtree.folder,false,'Confirmed delete must remove the selected folder');
+ assert.equal(subtree.file,false,'Confirmed delete must remove descendant files');
+ assert.equal(subtree.nested,false,'Confirmed delete must remove descendant folders');
+ assert.equal(subtree.unrelated,true,'Unrelated root files must survive folder deletion');
+ assert.equal(subtree.root,true,'Unrelated root folders must survive folder deletion');
+ await evaluate("document.getElementById('refresh').click()");
+ assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('samples'))"),false,'Deleted folders must not return after reload');
+ console.log('PASS LifeIDE browser: recursive folder deletion, cancel safety, and persistence');
+
+
 
 
 
