@@ -1568,3 +1568,16 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
   .people-directory .person-cell { min-width: 0; }
   .people-directory .person-cell > div { min-width: 0; }
 }
+
+/* LifeIDE: embedded full two-pane editor inside the admin Dev navigation. */
+.admin-lifeide{display:flex;flex-direction:column;gap:12px;min-width:0;width:100%}
+.admin-lifeide__header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.admin-lifeide__header h1{margin:0;font-size:1.35rem}
+.admin-lifeide__header p{margin:4px 0 0}
+.admin-lifeide__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.admin-lifeide__frame{display:block;width:100%;height:max(600px,calc(100dvh - 230px));min-height:520px;border:1px solid var(--ink-200,#e2e8f0);border-radius:10px;background:#fff}
+@media(max-width:700px){
+ .admin-lifeide__frame{height:calc(100dvh - 230px);min-height:420px;border-radius:6px}
+ .admin-lifeide__header h1{font-size:1.15rem}
+ .admin-lifeide__actions{width:100%}
+}
