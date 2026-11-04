@@ -86,7 +86,7 @@ async function githubTreeIndex(){
    try{
     if(!raw||sourcePath(raw)==='')return [];
    }catch{return [];}
-   return [{path:raw,type:x.type==='tree'?'folder':'file'}];
+   return [{path:raw,type:x.type==='tree'?'folder':'file',size:x.type==='blob'?x.size||0:0}];
   });
   const data={paths,sha:result.sha,source:'github',branch:'main'};
   treeIndexCache={expires:Date.now()+60000,data,pending:null};
