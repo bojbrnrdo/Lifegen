@@ -79,9 +79,13 @@ $('editor').addEventListener('click',updateLines);
 $('editor').addEventListener('keyup',updateLines);
 $('editor').addEventListener('scroll',()=>{$('lineNumbers').scrollTop=$('editor').scrollTop;});
 $('editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const el=e.target,start=el.selectionStart,end=el.selectionEnd;el.setRangeText('  ',start,end,'end');el.dispatchEvent(new Event('input'));}});
-$('explorerSearch').addEventListener('input',()=>renderTree());
-$('sortName').addEventListener('click',()=>{sort='name';$('sortName').classList.add('active');$('sortDate').classList.remove('active');renderTree();});
-$('sortDate').addEventListener('click',()=>{sort='date';$('sortDate').classList.add('active');$('sortName').classList.remove('active');renderTree();});
+function filterRepoTree(){
+ const term=$('explorerSearch').value.trim().toLowerCase();
+ for(const el of $('tree').querySelectorAll('.node'))el.hidden=Boolean(term&&!el.title.toLowerCase().includes(term));
+}
+$('explorerSearch').addEventListener('input',()=>{if(repoMode)filterRepoTree();else renderTree();});
+$('sortName').addEventListener('click',()=>{sort='name';$('sortName').classList.add('active');$('sortDate').classList.remove('active');if(!repoMode)renderTree();});
+$('sortDate').addEventListener('click',()=>{sort='date';$('sortDate').classList.add('active');$('sortName').classList.remove('active');if(!repoMode)renderTree();});
 $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collapsed'));
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
@@ -104,7 +108,7 @@ async function treeFolder(){
   for(const entry of result.items){
    const rel=prefix?prefix+'/'+entry.name:entry.name;
    const el=document.createElement('button');el.type='button';el.className='node';
-   el.style.paddingLeft=(8+depth*15)+'px';
+   el.style.paddingLeft=(8+depth*15)+'px';el.title=rel;el.setAttribute('aria-label',entry.type+' '+rel);
    const a=document.createElement('span');a.className='arrow';a.textContent=entry.type==='folder'?(repoExpanded.has(rel)?'▾':'▸'):' ';
    const n=document.createElement('span');n.className='name';n.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
    el.append(a,n);tree.append(el);
@@ -116,6 +120,7 @@ async function treeFolder(){
   }
  }
  await appendFolder('',0);
+ filterRepoTree();
 }
 async function createRepoEntry(type,name){
  if(githubMode)throw Error('GitHub files are read-only. Switch to Local Workspace to create files.');
