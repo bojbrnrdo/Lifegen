@@ -58,3 +58,9 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .explorer-entry>.entry-delete{flex:none;min-width:30px;min-height:32px;margin:0 2px;padding:3px 5px;font-size:18px;line-height:1;color:#9d3030;background:transparent;border:1px solid transparent}
 .explorer-entry>.entry-delete:hover,.explorer-entry>.entry-delete:focus-visible{background:#fde8e8;border-color:#eac4c4}
 @media(max-width:680px){.explorer-entry>.entry-delete{min-width:32px;min-height:36px}}
+
+/* Explicit creation destination for browser-local files and folders. */
+.workspace-root{flex:none;display:block;margin:8px 7px 3px;width:calc(100% - 14px);min-height:34px;text-align:left;padding:6px 10px;background:transparent;color:var(--life-dark);border:1px solid var(--life-border);font-size:12px;font-weight:650}
+.workspace-root[aria-pressed="true"]{background:#d4ecd9;border-color:#9acaa3}
+.workspace-root[hidden]{display:none}
+@media(max-width:680px){.workspace-root{font-size:11px;min-height:36px;padding:6px}}
