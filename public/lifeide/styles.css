@@ -130,3 +130,9 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .github-workflow-fields input{font:inherit;background:#fff;color:#173a24;border:1px solid #b9d3bf;border-radius:5px;padding:7px 9px;min-height:33px;width:100%}
 .github-workflow-fields button{font-size:12px;min-height:33px;padding:6px 10px}
 #githubWorkflowStatus{font-weight:600;overflow-wrap:anywhere}
+
+/* Repository Explorer: expand folders in place without re-rendering other rows. */
+.repo-tree-entry{min-width:0;width:100%}
+.repo-children{min-width:0}
+.repo-children[hidden]{display:none}
+.repo-tree-entry>.node[aria-busy="true"]{cursor:progress}
