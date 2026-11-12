@@ -417,6 +417,13 @@ try {
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Old-version draft must remain recoverable after source changes');
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Stale draft must display upstream-change warning');
+ await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).base"),'old-github-sha','Ctrl+S must preserve stale draft provenance');
+ assert.equal(await evaluate("document.getElementById('status').textContent.includes('GitHub source has changed')"),true,'Save must retain stale draft warning');
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Reopening after save must retain upstream-change warning');
+
 
  console.log('PASS LifeIDE simplified editor: editable on open; Save and Ctrl+S preserve safe GitHub drafts');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
