@@ -84,12 +84,15 @@ try {
  let chromeErrors='';
  chrome.stderr.on('data',chunk=>{chromeErrors=(chromeErrors+chunk.toString()).slice(-4000);});
  let port;
- for(let i=0;i<100;i++){
+ // CI runners can take longer than 10 seconds to bring up a fresh Chrome profile.
+ // Preserve the exit-code check and fail with diagnostics after a bounded 30s.
+ const chromeStartupDeadline=Date.now()+30_000;
+ while(Date.now()<chromeStartupDeadline){
   if(chrome.exitCode!==null)throw Error('Chrome exited before starting (code '+chrome.exitCode+'): '+chromeErrors);
   try{const info=(await readFile(path.join(profile,'DevToolsActivePort'),'utf8')).split('\n');port=Number(info[0]);if(port)break;}catch{}
   await new Promise(r=>setTimeout(r,100));
  }
- assert.ok(port,'Chrome DevTools did not start: '+chromeErrors);
+ assert.ok(port,'Chrome DevTools did not start within 30s (exit='+chrome.exitCode+', path='+chromePath+'): '+chromeErrors);
  const pages=await(await fetch('http://127.0.0.1:'+port+'/json')).json();
  ws=new WebSocket(pages.find(p=>p.type==='page').webSocketDebuggerUrl);
  await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
