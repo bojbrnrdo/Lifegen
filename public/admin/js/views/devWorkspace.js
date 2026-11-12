@@ -44,14 +44,14 @@ export async function renderDevGit({main}){
     <p class="small muted" role="status" id="gitPrStatus"></p>
    </div></section></div>`;
  const el=id=>main.querySelector('#'+id);
- let branch='develop',revision=0;
+ let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0;
  const note=message=>{el('gitMessage').textContent=message;};
  const check=async()=>{
-  const seq=revision,which=branch;
+  const seq=revision,which=branch,request=++statusRequest;
   const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
   try{
    const result=await api('branch-status?branch='+encodeURIComponent(which));
-   if(seq!==revision)return false;
+   if(seq!==revision||request!==statusRequest)return false;
    host.replaceChildren();
    const text=document.createElement('p');text.textContent=result.branch+' vs develop — '+result.ahead+' ahead, '+result.behind+' behind';host.append(text);
    const status=document.createElement('p');status.className='small muted';status.textContent=result.files.length+' changed files'+(result.truncated?' (first 100 shown)':'');host.append(status);
@@ -63,14 +63,14 @@ export async function renderDevGit({main}){
    }
    el('gitSync').textContent=result.behind?'Behind develop':result.ahead?'Ahead of develop':'Up to date with develop';
    return true;
-  }catch(e){if(seq===revision){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
+  }catch(e){if(seq===revision&&request===statusRequest){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
  };
  const loadHistory=async()=>{
-  const seq=revision,which=branch;
+  const seq=revision,which=branch,request=++historyRequest;
   el('gitHistoryMessage').textContent='Loading '+which+' history…';el('gitHistory').replaceChildren();
   try{
    const result=await api('history?branch='+encodeURIComponent(which));
-   if(seq!==revision)return false;
+   if(seq!==revision||request!==historyRequest)return false;
    el('gitHistoryMessage').textContent=result.commits.length+' recent commits on '+which;
    for(const c of result.commits){
     const row=document.createElement('div');row.className='devgit__commit';
@@ -85,13 +85,13 @@ export async function renderDevGit({main}){
     buttons.append(diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
    }
    return true;
-  }catch(e){if(seq===revision)el('gitHistoryMessage').textContent=e.message;return false;}
+  }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
   branch=value;revision++;el('gitBranchLabel').textContent=value;
   return Promise.all([check(),loadHistory()]);
  };
- el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
+ el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
  el('gitCheck').onclick=check;el('gitReloadHistory').onclick=loadHistory;
  el('gitBranchSelect').onchange=e=>choose(e.target.value);
  el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};
