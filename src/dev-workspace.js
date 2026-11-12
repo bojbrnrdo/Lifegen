@@ -244,6 +244,30 @@ export function registerDevWorkspace(app){
    url:c.html_url
   }))});
  }));
+ // Inspect only commits present in the selected branch's recent history.
+ // This is read-only and avoids accepting arbitrary repository SHA queries.
+ app.get('/api/admin/dev/commit-detail',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||''),sha=String(req.query.sha||'');
+  if(!allowedBranch(branch)||!/^[a-f0-9]{40}$/.test(sha))return deny(res);
+  const recent=await request(apiRoot+'/commits?sha='+encodeURIComponent(branch)+'&per_page=25');
+  if(!recent.some(item=>item.sha===sha))return res.status(404).json({error:'Commit is not in the most recent 25 commits on this branch.'});
+  const commit=await request(apiRoot+'/commits/'+sha);
+  const files=(commit.files||[]).filter(item=>allowedPath(item.filename));
+  let remaining=90000;
+  res.set('Cache-Control','no-store').json({
+   branch,sha,subject:String(commit.commit?.message||'').split('\\n')[0].slice(0,200),
+   truncated:files.length>30||(commit.files||[]).length>=300,
+   files:files.slice(0,30).map(item=>{
+    const patch=typeof item.patch==='string'?item.patch:'';
+    const snippet=patch.slice(0,Math.min(16000,remaining));
+    remaining-=snippet.length;
+    return {path:item.filename,status:item.status,additions:item.additions||0,
+     deletions:item.deletions||0,patch:snippet,unavailable:!patch,
+     truncated:snippet.length<patch.length};
+   })
+  });
+ }));
  app.get('/api/admin/dev/pull-requests',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
   const branch=String(req.query.branch||'').trim();
   if(branch&&!editableBranch(branch))return deny(res);
