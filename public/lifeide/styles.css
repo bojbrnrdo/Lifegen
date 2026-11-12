@@ -136,3 +136,26 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .repo-children{min-width:0}
 .repo-children[hidden]{display:none}
 .repo-tree-entry>.node[aria-busy="true"]{cursor:progress}
+
+/* TransferBuilder reference: explorer | editor | project tools, with draggable dividers.
+   LIFEGEN retains its own palette and existing safe repository workflows. */
+.ide-panel-resizer{width:5px;flex:0 0 5px;cursor:col-resize;background:#dce7dc;border-left:1px solid #bed3bf;border-right:1px solid #bed3bf;touch-action:none}
+.ide-panel-resizer:hover,.ide-panel-resizer.is-dragging{background:var(--life-gold)}
+.ide-panel-resizer:focus-visible{outline:2px solid var(--life-mid);outline-offset:-2px}
+.project-tools{width:300px;min-width:220px;max-width:40vw;flex:none;display:flex;flex-direction:column;overflow:hidden;background:#fbfdf9;border-left:1px solid var(--life-border);color:var(--life-dark)}
+.project-tools__header{height:48px;min-height:48px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--life-border);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.project-tools__header button{width:29px;height:29px;padding:3px}
+.project-tools__body{overflow-y:auto;min-height:0;padding:4px 10px 20px}
+.project-tools__section{border-bottom:1px solid var(--life-border);padding:13px 2px}
+.project-tools__section h3{font-size:13px;margin:0 0 9px}
+.project-tools__section p{font-size:12px;margin:5px 0 12px;overflow-wrap:anywhere}
+.project-tools__subtle{color:#5e7964;line-height:1.5}
+.project-tools__section button,.project-tools__link{display:block;width:100%;text-align:left;padding:9px 10px;margin:7px 0;background:#fff;border:1px solid var(--life-border);border-radius:6px;font-size:12px;font-weight:600;color:var(--life-dark);text-decoration:none}
+.project-tools__section button:hover:not(:disabled),.project-tools__link:hover{background:var(--life-pale)}
+.project-tools.is-collapsed{width:43px!important;min-width:43px;max-width:43px}
+.project-tools.is-collapsed .project-tools__body,.project-tools.is-collapsed .project-tools__header strong{display:none}
+.project-tools.is-collapsed .project-tools__header{justify-content:center;padding:0}
+.project-tools.is-collapsed .project-tools__header button{transform:rotate(180deg)}
+.workspace.is-resizing{user-select:none;cursor:col-resize}
+@media(max-width:1100px){.project-tools{width:235px;min-width:185px}.sidebar{width:210px;min-width:165px}}
+@media(max-width:800px){.project-tools{display:none}.ide-panel-resizer{display:none}}

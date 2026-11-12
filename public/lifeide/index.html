@@ -21,6 +21,7 @@
       <div id="tree" class="filetree" aria-label="Files and folders"></div>
       <div class="sidebar-footer" id="storageInfo">Files are saved in this browser only.</div>
     </aside>
+    <div class="ide-panel-resizer" id="explorerResizer" role="separator" aria-label="Resize file explorer" aria-orientation="vertical" tabindex="0"></div>
     <main class="main">
       <div class="editor-toolbar">
         <span class="editor-heading">Editor</span><div class="file-title" id="fileTitle">No file selected</div>
@@ -38,6 +39,35 @@
 # Create or select a file to begin.</textarea></div>
       <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
     </main>
+    <div class="ide-panel-resizer" id="toolsResizer" role="separator" aria-label="Resize project tools" aria-orientation="vertical" tabindex="0"></div>
+    <aside class="project-tools" id="projectTools" aria-label="LifeIDE project tools">
+      <div class="project-tools__header"><strong>Project Tools</strong><button id="toggleProjectTools" type="button" aria-expanded="true" aria-controls="projectToolsBody" title="Collapse project tools">›</button></div>
+      <div class="project-tools__body" id="projectToolsBody">
+        <section class="project-tools__section" aria-label="Active file">
+          <h3>Active File</h3>
+          <p id="toolsActiveFile">No file selected</p>
+          <p class="project-tools__subtle" id="toolsWorkspaceMode">Local workspace</p>
+          <button id="toolsCopyFile" type="button" disabled>Copy File Path</button>
+        </section>
+        <section class="project-tools__section" aria-label="Version control tools">
+          <h3>Version Control</h3>
+          <p class="project-tools__subtle">Review branches, Git status, commits and pull requests.</p>
+          <a href="/admin#/dev/git" target="_parent" class="project-tools__link">Open Git Version Control</a>
+          <button type="button" id="toolsShowGitChanges">Review Local Git Changes</button>
+        </section>
+        <section class="project-tools__section" aria-label="Packaging tools">
+          <h3>Packaging</h3>
+          <p class="project-tools__subtle">Build validated ZIP artifacts from development branches.</p>
+          <a href="/admin#/dev/packaging" target="_parent" class="project-tools__link">Open Packaging</a>
+        </section>
+        <section class="project-tools__section" aria-label="Editing shortcuts">
+          <h3>Editor Actions</h3>
+          <button type="button" id="toolsScrollTop">Scroll to Top</button>
+          <button type="button" id="toolsScrollBottom">Scroll to Bottom</button>
+          <p class="project-tools__subtle">Ctrl+S saves the active file. GitHub source drafts remain local until committed through an authorized development branch.</p>
+        </section>
+      </div>
+    </aside>
   </div>
 </div>
 <div id="dialog" class="modal" hidden><form id="dialogForm" class="dialog"><h2 id="dialogTitle">New File</h2><label for="dialogInput" id="dialogLabel">Name</label><input id="dialogInput" maxlength="120" required autocomplete="off"><p class="error" id="dialogError" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary" id="confirm">Create</button></div></form></div>

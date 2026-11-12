@@ -105,6 +105,16 @@ try {
  }
  assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE event listeners must be initialized before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
+ // TransferBuilder-inspired IDE layout: explorer, editor and project tools.
+ assert.equal(await evaluate("Boolean(document.getElementById('projectTools'))"),true,'Project tools panel is present');
+ assert.equal(await evaluate("Boolean(document.getElementById('explorerResizer')&&document.getElementById('toolsResizer'))"),true,'Both IDE panel resizers are present');
+ assert.equal(await evaluate("Boolean(document.querySelector('#projectTools a[href=\"/admin#/dev/git\"]'))"),true,'Git workflow is linked');
+ assert.equal(await evaluate("Boolean(document.querySelector('#projectTools a[href=\"/admin#/dev/packaging\"]'))"),true,'Packaging workflow is linked');
+ await evaluate("document.getElementById('toggleProjectTools').click()");
+ assert.equal(await evaluate("document.getElementById('projectTools').classList.contains('is-collapsed')"),true,'Project tools can collapse');
+ await evaluate("document.getElementById('toggleProjectTools').click()");
+ assert.equal(await evaluate("document.getElementById('projectTools').classList.contains('is-collapsed')"),false,'Project tools can reopen');
+
  await evaluate("document.getElementById('newFile').click()");
  assert.equal(await evaluate("!document.getElementById('dialog').hidden"),true);
  await evaluate("document.getElementById('dialogInput').value='browser-smoke.js';document.getElementById('dialogForm').requestSubmit()");
@@ -227,16 +237,16 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
- // Reference-style IDE: dark two-pane layout with working Explorer search and no AI panel.
+ // TransferBuilder-style IDE: three panels with working Explorer search and LIFEGEN's light palette.
  assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(255, 255, 255)','Main editor must retain the LIFEGEN light theme');
- assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),2,'Workspace should use Explorer and editor panes only');
+ assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),3,'Workspace should have Explorer, editor and project tools');
  assert.equal(await evaluate("!document.querySelector('[id*=aiAgent], .ai-agent, .agent-panel')"),true,'No AI panel should be displayed');
  await evaluate("document.getElementById('explorerSearch').value='root-note';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('root-note.txt'))"),true,'Search should find matching files');
  assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('README.md'))"),false,'Search should hide nonmatching files');
  await evaluate("document.getElementById('explorerSearch').value='';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.equal(await evaluate("[...document.querySelectorAll('#tree .node')].some(b=>b.textContent.includes('README.md'))"),true,'Clearing search should restore all files');
- console.log('PASS LifeIDE browser: dark two-pane layout and Explorer search');
+ console.log('PASS LifeIDE browser: three-panel layout and Explorer search');
 
 
  // Rebuilding the Explorer after opening a file must not strand keyboard focus.
