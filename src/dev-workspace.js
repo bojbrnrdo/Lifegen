@@ -302,6 +302,24 @@ export function registerDevWorkspace(app){
    url:run.html_url,created_at:run.created_at
   }))});
  }));
+ // Read-only artifact metadata for a recent packaging workflow run.
+ // Restrict IDs to those listed by our specific packaging workflow.
+ app.get('/api/admin/dev/package-artifacts',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
+  const id=String(req.query.run_id||'');
+  if(!/^[1-9][0-9]{0,17}$/.test(id))return res.status(400).json({error:'Choose a valid package run.'});
+  const listing=await request(apiRoot+'/actions/workflows/lifegen-package.yml/runs?per_page=15');
+  const run=(listing.workflow_runs||[]).find(item=>String(item.id)===id);
+  if(!run)return res.status(404).json({error:'This package run is no longer in the recent history. View it on GitHub.'});
+  const result=await request(apiRoot+'/actions/runs/'+id+'/artifacts?per_page=30');
+  res.set('Cache-Control','no-store').json({
+   run_id:run.id,branch:run.head_branch,status:run.status,conclusion:run.conclusion,
+   url:run.html_url,artifacts:(result.artifacts||[]).slice(0,30).map(item=>({
+    name:String(item.name||'').slice(0,150),size_in_bytes:item.size_in_bytes||0,
+    expired:Boolean(item.expired),expires_at:item.expires_at||'',
+    created_at:item.created_at||''
+   }))
+  });
+ }));
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
   if(process.env.VERCEL_ENV==='production')return res.status(403).json({error:'Package workflow dispatch is limited to isolated previews.'});
   const branch=String(req.body?.branch||'develop');
