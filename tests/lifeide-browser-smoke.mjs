@@ -361,6 +361,13 @@ try {
  assert.equal(await evaluate("document.getElementById('editor').disabled"),false,'Selected file must remain editable after delayed Git status');
  assert.equal(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"),0,'Late Git review must not display stale selection');
  await evaluate("window.fetch=window.__statusFetch");
+ // A failed, superseded Git request must not replace the current file status.
+ await evaluate("window.__failStatusFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/git/status')?new Promise((resolve,reject)=>setTimeout(()=>reject(new Error('Synthetic Git outage')),350)):window.__failStatusFetch(url,opts)");
+ await evaluate("document.getElementById('gitChanges').click();document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await new Promise(r=>setTimeout(r,600));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md','Failed stale Git status must not replace the editor');
+ assert.equal(await evaluate("document.getElementById('status').textContent.includes('Synthetic Git outage')"),false,'Failed stale Git status must not overwrite newer file status');
+ await evaluate("window.fetch=window.__failStatusFetch");
 
  await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-repository.js')).click()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
