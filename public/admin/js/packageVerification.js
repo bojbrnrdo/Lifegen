@@ -55,10 +55,28 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
   if(cursor+46>offset+length||u32(cursor)!==0x02014b50)
    throw Error('Invalid ZIP file directory.');
   const flags=u16(cursor+8),method=u16(cursor+10),size=u32(cursor+24);
+  const compressed=u32(cursor+20),versionNeeded=u16(cursor+6);
   const nameLength=u16(cursor+28),extra=u16(cursor+30),comment=u16(cursor+32);
   const extAttr=u32(cursor+38),localOffset=u32(cursor+42);
   const next=cursor+46+nameLength+extra+comment;
   if(next>offset+length||localOffset+30>offset||u32(localOffset)!==0x04034b50)throw Error('Invalid ZIP entry bounds.');
+  const localFlags=u16(localOffset+6),localMethod=u16(localOffset+8);
+  const localNameLength=u16(localOffset+26),localExtraLength=u16(localOffset+28);
+  const dataStart=localOffset+30+localNameLength+localExtraLength;
+  if(versionNeeded>45||flags!==localFlags||method!==localMethod||
+     localNameLength!==nameLength||dataStart+compressed>offset||
+     compressed===0&&size!==0||method===0&&compressed!==size||
+     size>0&&compressed>0&&size/compressed>200||
+     u32(cursor+24)===0xffffffff||compressed===0xffffffff)
+   throw Error('ZIP local header, compression ratio or file bounds are invalid.');
+  // The two ZIP headers must describe the same file path; otherwise tools
+  // may extract a different file from the one the review interface displays.
+  for(let j=0;j<nameLength;j++){
+   if(zipBytes[localOffset+30+j]!==zipBytes[cursor+46+j])
+    throw Error('ZIP local filename differs from the central directory.');
+  }
+  if(!(flags===0||flags===8||flags===0x800||flags===0x808))
+   throw Error('ZIP flags contain unsupported features.');
   let name;
   try{name=decoder.decode(zipBytes.subarray(cursor+46,cursor+46+nameLength));}
   catch{throw Error('Invalid ZIP filename encoding.');}
