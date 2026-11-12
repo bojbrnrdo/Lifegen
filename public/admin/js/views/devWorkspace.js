@@ -34,6 +34,9 @@ export async function renderDevGit({main}){
    <div class="card__body"><p class="small muted">Compare remote branch changes against develop.</p>
     <div class="devgit__status" id="gitStatus" role="status">Click Check Status to inspect the selected branch.</div>
    </div></section>
+  <section class="card devgit__section" id="gitDiffPanel" hidden><div class="card__header"><h2 id="gitDiffTitle">File Changes</h2><button class="btn btn--sm" type="button" id="gitCloseDiff">Close</button></div>
+   <div class="card__body"><p id="gitDiffMessage" role="status" class="small muted"></p><pre id="gitDiffContent" class="devgit__patch" tabindex="0" aria-label="File differences"></pre></div>
+  </section>
   <section class="card devgit__section"><div class="card__header"><h2>Commit History</h2><button class="btn btn--sm" id="gitReloadHistory" ${connected?'':'disabled'}>Refresh</button></div>
    <div class="card__body"><p class="small muted" id="gitHistoryMessage">Loading commit history…</p><div class="devgit__history" id="gitHistory"></div></div>
   </section>
@@ -45,7 +48,7 @@ export async function renderDevGit({main}){
     <p class="small muted" role="status" id="gitPrStatus"></p>
    </div></section></div>`;
  const el=id=>main.querySelector('#'+id);
- let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0;
+ let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0,diffRequest=0;
  const note=message=>{el('gitMessage').textContent=message;};
  const openBranchFile=(selected,file)=>{
   if(!connected||!file||file.startsWith('/')||file.includes('\\\\')||
@@ -54,6 +57,24 @@ export async function renderDevGit({main}){
   }
   window.location.hash='#/dev/ide?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file);
  };
+ const showFileDiff=async(selected,file)=>{
+  const request=++diffRequest,seq=revision;
+  el('gitDiffPanel').hidden=false;
+  el('gitDiffTitle').textContent='File Changes · '+file;
+  el('gitDiffContent').textContent='';
+  el('gitDiffMessage').textContent='Loading changes from '+selected+' against develop…';
+  try{
+   const result=await api('file-diff?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file));
+   if(request!==diffRequest||seq!==revision||selected!==branch)return;
+   el('gitDiffMessage').textContent=result.status+' · +'+result.additions+' / -'+result.deletions+
+    (result.truncated?' · patch truncated':'');
+   el('gitDiffContent').textContent=result.unavailable?'Inline patch unavailable for this file. Open the file in LifeIDE or review it on GitHub.':result.patch;
+  }catch(error){
+   if(request!==diffRequest||seq!==revision||selected!==branch)return;
+   el('gitDiffMessage').textContent='Unable to load changes: '+error.message;
+  }
+ };
+ el('gitCloseDiff').onclick=()=>{++diffRequest;el('gitDiffPanel').hidden=true;};
  const check=async()=>{
   const seq=revision,which=branch,request=++statusRequest;
   const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
@@ -68,6 +89,9 @@ export async function renderDevGit({main}){
     const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
     const counts=document.createElement('span');counts.className='small muted';counts.textContent='+'+file.additions+' / -'+file.deletions;
     row.append(name,counts);
+    const view=document.createElement('button');view.type='button';view.className='btn btn--sm devgit__view-diff';
+    view.textContent='View Diff';view.setAttribute('aria-label','View changes for '+file.path+' on '+which);
+    view.onclick=()=>showFileDiff(which,file.path);row.append(view);
     if(file.status!=='removed'){
      const open=document.createElement('button');open.type='button';open.className='btn btn--sm devgit__open-file';
      open.textContent='Open';open.setAttribute('aria-label','Open '+file.path+' from '+which);
@@ -103,7 +127,7 @@ export async function renderDevGit({main}){
   }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
-  branch=value;revision++;el('gitBranchLabel').textContent=value;
+  branch=value;revision++;diffRequest++;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
   return Promise.all([check(),loadHistory()]);
  };
  el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
