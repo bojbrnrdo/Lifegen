@@ -49,7 +49,7 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
   throw Error('Multi-disk or ZIP64 archives are not supported.');
  if(count<1||count>3000||offset+length>end)
   throw Error('ZIP has an invalid or excessive entry count.');
- const decoder=new TextDecoder('utf-8',{fatal:true}),files=[],seen=new Set();
+ const decoder=new TextDecoder('utf-8',{fatal:true}),files=[],seen=new Set(),entryRanges=[];
  let cursor=offset,totalUncompressed=0;
  for(let n=0;n<count;n++){
   if(cursor+46>offset+length||u32(cursor)!==0x02014b50)
@@ -69,6 +69,22 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
      size>0&&compressed>0&&size/compressed>200||
      u32(cursor+24)===0xffffffff||compressed===0xffffffff)
    throw Error('ZIP local header, compression ratio or file bounds are invalid.');
+  const crc=u32(cursor+16),dataEnd=dataStart+compressed;
+  if(flags&8){
+   // Streaming ZIP producers, including git archive, can put CRC and lengths
+   // into a trailing descriptor rather than the local file header.
+   const signature=dataEnd+4<=offset&&u32(dataEnd)===0x08074b50;
+   const descriptor=dataEnd+(signature?4:0);
+   if(descriptor+12>offset||u32(descriptor)!==crc||
+      u32(descriptor+4)!==compressed||u32(descriptor+8)!==size)
+    throw Error('ZIP data descriptor does not agree with the central directory.');
+   entryRanges.push([localOffset,descriptor+12]);
+  }else{
+   if(u32(localOffset+14)!==crc||u32(localOffset+18)!==compressed||
+      u32(localOffset+22)!==size)
+    throw Error('ZIP local CRC or file sizes differ from the central directory.');
+   entryRanges.push([localOffset,dataEnd]);
+  }
   // The two ZIP headers must describe the same file path; otherwise tools
   // may extract a different file from the one the review interface displays.
   for(let j=0;j<nameLength;j++){
@@ -97,6 +113,13 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
   cursor=next;
  }
  if(cursor!==offset+length)throw Error('ZIP central directory length mismatch.');
+ // Reject overlapping local file data ranges. File inventory views should
+ // never accept one local archive member nested within another.
+ entryRanges.sort((a,b)=>a[0]-b[0]);
+ for(let i=1;i<entryRanges.length;i++)
+  if(entryRanges[i][0]<entryRanges[i-1][1])
+   throw Error('ZIP local file entries overlap.');
+
  if(selectedPaths.length){
   const expected=new Set(selectedPaths);
   if(files.length!==expected.size||files.some(file=>!expected.has(file.path)))

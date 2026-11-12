@@ -95,3 +95,35 @@ test('ZIP inspector rejects central directory file sizes beyond archive data',()
  view.setUint32(directory+24,500,true);
  assert.throws(()=>inspectPackageZip(invalid),/file bounds/);
 });
+
+function makeDescriptorZip({signed=true,corrupt=false}={}){
+ const path='src/example.js',name=Buffer.from(path);
+ const local=Buffer.alloc(30+name.length);local.writeUInt32LE(0x04034b50,0);
+ local.writeUInt16LE(20,4);local.writeUInt16LE(8,6);local.writeUInt16LE(name.length,26);name.copy(local,30);
+ const descriptor=Buffer.alloc(signed?16:12);
+ const crcAt=signed?4:0;
+ if(signed)descriptor.writeUInt32LE(0x08074b50,0);
+ descriptor.writeUInt32LE(corrupt?23:0,crcAt);
+ const central=Buffer.alloc(46+name.length);central.writeUInt32LE(0x02014b50,0);
+ central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);central.writeUInt16LE(8,8);
+ central.writeUInt16LE(name.length,28);name.copy(central,46);
+ const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(1,8);
+ end.writeUInt16LE(1,10);end.writeUInt32LE(central.length,12);
+ end.writeUInt32LE(local.length+descriptor.length,16);
+ return new Uint8Array(Buffer.concat([local,descriptor,central,end]));
+}
+
+test('ZIP inspector accepts signed and unsigned streaming descriptors',()=>{
+ for(const signed of [true,false]){
+  const result=inspectPackageZip(makeDescriptorZip({signed}),['src/example.js']);
+  assert.equal(result.files.length,1);
+ }
+});
+
+test('ZIP inspector rejects forged streaming descriptors and incorrect local CRC',()=>{
+ assert.throws(()=>inspectPackageZip(makeDescriptorZip({corrupt:true})),/descriptor/);
+ const bad=makeStoredZip();
+ const view=new DataView(bad.buffer);
+ view.setUint32(14,12345,true);
+ assert.throws(()=>inspectPackageZip(bad),/CRC/);
+});
