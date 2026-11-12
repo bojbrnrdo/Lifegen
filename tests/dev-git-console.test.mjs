@@ -122,3 +122,16 @@ test('Git commit inspector fetches only recent branch commits and displays safe 
  assert.match(client,/commitDetailRequest\+\+/);
  assert.match(styles,/\.devgit__commit-file/);
 });
+
+
+test('Package export includes verified SHA-256 checksum and provenance manifest',()=>{
+ const workflow=readFileSync(new URL('../.github/workflows/lifegen-package.yml',import.meta.url),'utf8');
+ assert.match(workflow,/name: Write package manifest and checksum/);
+ assert.match(workflow,/hashlib\.sha256\(archive\.read_bytes\(\)\)/);
+ assert.match(workflow,/dist\/SHA256SUMS\.txt/);
+ assert.match(workflow,/dist\/PACKAGE-MANIFEST\.json/);
+ assert.match(workflow,/sha256sum -c SHA256SUMS\.txt/);
+ assert.match(workflow,/source_commit/);
+ assert.match(workflow,/selected_paths/);
+ assert.match(client,/Matching checksums verify integrity, not deployment safety/);
+});
