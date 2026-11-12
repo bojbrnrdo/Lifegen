@@ -61,3 +61,23 @@ test('Git console opens selected branch and file without requiring write permiss
  assert.match(client,/if\(query\.path\)return renderDevIDEGitHub\(\{main,query\}\)/);
  assert.match(client,/file\.split\('\/'\)\.some/);
 });
+
+
+test('TransferBuilder-style packaging stages verified changed files and keeps full export',()=>{
+ const workflow=readFileSync(new URL('../.github/workflows/lifegen-package.yml',import.meta.url),'utf8');
+ assert.match(client,/id="findPackageFiles"/);
+ assert.match(client,/id="packageSelectedOnly"/);
+ assert.match(client,/\.package-file:checked/);
+ assert.match(client,/api\('branch-status\?branch='/);
+ assert.match(client,/onlySelected\?\{paths\}:\{\}/);
+ assert.match(client,/stagedBranch!==branch/);
+ assert.match(server,/Select 1–40 unique, permitted source files/);
+ assert.match(server,/path=>!eligible\.has\(path\)/);
+ assert.match(server,/item\.status!=='removed'/);
+ assert.match(server,/inputs:\{paths:paths\?paths\.join/);
+ assert.match(workflow,/PACKAGE_PATHS: \$\{\{ inputs\.paths \}\}/);
+ assert.match(workflow,/path not in tracked/);
+ assert.match(workflow,/git', 'archive', '--format=zip'/);
+ assert.match(workflow,/npm run build/);
+ assert.match(workflow,/npm test/);
+});
