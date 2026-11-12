@@ -504,5 +504,7 @@ document.addEventListener('keydown',e=>{
  saveActiveFile();
 },true);
 renderTree();emptyEditor();
+// Signal that controls and event listeners are ready for interaction.
+document.documentElement.dataset.lifeideReady='true';
 if(new URLSearchParams(location.search).get('source')==='github')connectGithubSource().catch(error=>{$('status').textContent='GitHub connection failed: '+error.message;});
 })();
