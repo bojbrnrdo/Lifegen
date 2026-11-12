@@ -73,9 +73,46 @@ jobs:
           ], check=True)
           print('Packaged', len(paths) if paths else 'all', 'tracked source files')
           PY
+      - name: Write package manifest and checksum
+        env:
+          PACKAGE_PATHS: ${{ inputs.paths }}
+          PACKAGE_BRANCH: ${{ github.ref_name }}
+          PACKAGE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          archive = Path('dist/LIFEGEN-source.zip')
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          Path('dist/SHA256SUMS.txt').write_text(
+              f'{digest}  LIFEGEN-source.zip\\n', encoding='utf-8'
+          )
+          selected = os.environ.get('PACKAGE_PATHS', '').splitlines()
+          manifest = {
+              'format': 'lifegen-source-v1',
+              'source_branch': os.environ['PACKAGE_BRANCH'],
+              'source_commit': os.environ['PACKAGE_COMMIT'],
+              'mode': 'selected-files' if selected else 'full-source',
+              'selected_paths': selected,
+              'archive_file': archive.name,
+              'sha256': digest,
+          }
+          Path('dist/PACKAGE-MANIFEST.json').write_text(
+              json.dumps(manifest, indent=2) + '\\n', encoding='utf-8'
+          )
+          print('SHA256:', digest)
+          PY
+          cd dist
+          sha256sum -c SHA256SUMS.txt
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: lifegen-source-${{ github.ref_name }}
-          path: dist/LIFEGEN-source.zip
+          path: |
+            dist/LIFEGEN-source.zip
+            dist/SHA256SUMS.txt
+            dist/PACKAGE-MANIFEST.json
           retention-days: 7
