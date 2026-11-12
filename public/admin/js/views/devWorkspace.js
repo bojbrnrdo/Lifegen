@@ -38,7 +38,12 @@ export async function renderDevGit({main}){
    <div class="card__body"><p id="gitDiffMessage" role="status" class="small muted"></p><pre id="gitDiffContent" class="devgit__patch" tabindex="0" aria-label="File differences"></pre></div>
   </section>
   <section class="card devgit__section"><div class="card__header"><h2>Commit History</h2><button class="btn btn--sm" id="gitReloadHistory" ${connected?'':'disabled'}>Refresh</button></div>
-   <div class="card__body"><p class="small muted" id="gitHistoryMessage">Loading commit history…</p><div class="devgit__history" id="gitHistory"></div></div>
+   <div class="card__body"><p class="small muted" id="gitHistoryMessage">Loading commit history…</p><div class="devgit__history" id="gitHistory"></div>
+    <section id="gitCommitDetail" hidden aria-label="Selected commit changes">
+     <div class="row row--between"><strong id="gitCommitDetailTitle">Commit details</strong><button class="btn btn--sm" type="button" id="gitCloseCommitDetail">Close</button></div>
+     <p id="gitCommitDetailStatus" class="small muted" role="status"></p><div class="stack" id="gitCommitFiles"></div>
+    </section>
+   </div>
   </section>
   <section class="card devgit__section" id="gitPrPanel" hidden><div class="card__header"><h2>Create Draft Pull Request</h2></div>
    <div class="card__body stack"><p class="small muted">Review before merging feature/fix branches into develop. No automatic deployment.</p>
@@ -48,7 +53,7 @@ export async function renderDevGit({main}){
     <p class="small muted" role="status" id="gitPrStatus"></p>
    </div></section></div>`;
  const el=id=>main.querySelector('#'+id);
- let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0,diffRequest=0;
+ let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0,diffRequest=0,commitDetailRequest=0;
  const note=message=>{el('gitMessage').textContent=message;};
  const openBranchFile=(selected,file)=>{
   if(!connected||!file||file.startsWith('/')||file.includes('\\\\')||
@@ -104,6 +109,33 @@ export async function renderDevGit({main}){
    return true;
   }catch(e){if(seq===revision&&request===statusRequest){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
  };
+ const inspectCommit=async(selected,sha)=>{
+  const request=++commitDetailRequest,seq=revision;
+  el('gitCommitDetail').hidden=false;
+  el('gitCommitDetailTitle').textContent='Commit '+sha.slice(0,12);
+  el('gitCommitFiles').replaceChildren();
+  el('gitCommitDetailStatus').textContent='Loading commit changes…';
+  try{
+   const result=await api('commit-detail?branch='+encodeURIComponent(selected)+'&sha='+encodeURIComponent(sha));
+   if(request!==commitDetailRequest||seq!==revision||selected!==branch)return;
+   el('gitCommitDetailTitle').textContent=result.subject||'Commit '+sha.slice(0,12);
+   el('gitCommitDetailStatus').textContent=result.files.length+' reviewable files'+(result.truncated?' · additional files not shown':'');
+   for(const file of result.files){
+    const details=document.createElement('details');details.className='devgit__commit-file';
+    const summary=document.createElement('summary');summary.textContent=file.status+' · '+file.path+' (+'+file.additions+' / -'+file.deletions+')';
+    details.append(summary);
+    if(file.status!=='removed'){
+     const open=document.createElement('button');open.type='button';open.className='btn btn--sm';
+     open.textContent='Open in LifeIDE';open.onclick=()=>openBranchFile(selected,file.path);
+     details.append(open);
+    }
+    const patch=document.createElement('pre');patch.className='devgit__patch';
+    patch.textContent=file.unavailable?'Inline patch unavailable for this file. Review it on GitHub.':file.patch+(file.truncated?'\n… patch truncated':'');
+    details.append(patch);el('gitCommitFiles').append(details);
+   }
+  }catch(error){if(request===commitDetailRequest&&seq===revision&&selected===branch)el('gitCommitDetailStatus').textContent='Unable to inspect commit: '+error.message;}
+ };
+ el('gitCloseCommitDetail').onclick=()=>{++commitDetailRequest;el('gitCommitDetail').hidden=true;};
  const loadHistory=async()=>{
   const seq=revision,which=branch,request=++historyRequest;
   el('gitHistoryMessage').textContent='Loading '+which+' history…';el('gitHistory').replaceChildren();
@@ -119,15 +151,18 @@ export async function renderDevGit({main}){
     const author=document.createElement('small');author.className='muted';author.textContent=c.author+' · '+(c.date?new Date(c.date).toLocaleString():'');
     desc.append(hash,title,author);
     const buttons=document.createElement('div');buttons.className='devgit__commit-buttons';
-    const diff=document.createElement('a');diff.className='btn btn--sm';diff.textContent='Diff';diff.href=c.url;diff.target='_blank';diff.rel='noopener noreferrer';
+    const diff=document.createElement('a');diff.className='btn btn--sm';diff.textContent='GitHub';diff.href=c.url;diff.target='_blank';diff.rel='noopener noreferrer';
+    const inspect=document.createElement('button');inspect.type='button';inspect.className='btn btn--sm devgit__inspect-commit';
+    inspect.textContent='Inspect';inspect.setAttribute('aria-label','Inspect commit '+c.sha.slice(0,12));
+    inspect.onclick=()=>inspectCommit(which,c.sha);
     const revert=document.createElement('button');revert.className='btn btn--sm';revert.textContent='Revert';revert.disabled=true;revert.title='Reverts require a reviewed fix branch; direct revert is not yet supported.';
-    buttons.append(diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
+    buttons.append(inspect,diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
    }
    return true;
   }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
-  branch=value;revision++;diffRequest++;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
+  branch=value;revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
   return Promise.all([check(),loadHistory()]);
  };
  el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
