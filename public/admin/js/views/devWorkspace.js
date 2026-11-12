@@ -21,6 +21,7 @@ export async function renderDevGit({main}){
    <p><b>Current Branch:</b> <strong id="gitBranchLabel">develop</strong></p>
    <div class="devgit__buttons">
     <button class="btn" id="gitPull" ${connected?'':'disabled'}>↻ Refresh Remote</button>
+    <button class="btn" id="gitOpenBranchFile" ${connected?'':'disabled'}>Open Branch File</button>
     <button class="btn" id="gitPush" ${writable?'':'disabled'}>Open IDE to Commit</button>
     <button class="btn" id="gitCreateBranch" ${writable?'':'disabled'}>Create Branch</button>
     <label>Change Branch <select class="input" id="gitBranchSelect" ${connected?'':'disabled'}><option>develop</option></select></label>
@@ -94,6 +95,16 @@ export async function renderDevGit({main}){
  el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
  el('gitCheck').onclick=check;el('gitReloadHistory').onclick=loadHistory;
  el('gitBranchSelect').onchange=e=>choose(e.target.value);
+ el('gitOpenBranchFile').onclick=()=>{
+  if(!connected)return;
+  const selected=branch;
+  const path=window.prompt('Open file from '+selected+' (repository-relative path)', 'README.md');
+  if(path===null)return;
+  const file=path.trim();
+  if(!file||file.startsWith('/')||file.includes('\\\\')||file.split('/').some(part=>!part||part==='.'||part==='..')){note('Enter a valid repository-relative file path.');return;}
+  note('Opening '+file+' from '+selected+' in LifeIDE…');
+  window.location.hash='#/dev/ide?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file);
+ };
  el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};
  el('gitCreateBranch').onclick=async()=>{
   if(!writable)return;
