@@ -106,3 +106,19 @@ test('Git file diff is read-only, path restricted, and rendered as text',()=>{
  assert.match(client,/diffRequest\+\+/);
  assert.match(styles,/\.devgit__patch/);
 });
+
+
+test('Git commit inspector fetches only recent branch commits and displays safe read-only patches',()=>{
+ assert.match(server,/app\.get\('\/api\/admin\/dev\/commit-detail',requireStaff,ensureAdmin/);
+ assert.match(server,/!allowedBranch\(branch\)\|\|!\/\^\[a-f0-9\]\{40\}\$\//);
+ assert.match(server,/recent\.some\(item=>item\.sha===sha\)/);
+ assert.match(server,/filter\(item=>allowedPath\(item\.filename\)\)/);
+ assert.match(server,/patch\.slice\(0,Math\.min\(16000,remaining\)\)/);
+ assert.match(client,/id="gitCommitDetail"/);
+ assert.match(client,/commit-detail\?branch=/);
+ assert.match(client,/devgit__inspect-commit/);
+ assert.match(client,/inspect\.onclick=\(\)=>inspectCommit\(which,c\.sha\)/);
+ assert.match(client,/patch\.textContent=file\.unavailable/);
+ assert.match(client,/commitDetailRequest\+\+/);
+ assert.match(styles,/\.devgit__commit-file/);
+});
