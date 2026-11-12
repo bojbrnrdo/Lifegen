@@ -537,6 +537,57 @@ document.addEventListener('keydown',e=>{
  e.preventDefault();
  saveActiveFile();
 },true);
+// TransferBuilder-style third panel: contextual tools without replacing the editor.
+const projectTools=$('projectTools'),workspace=$('explorerResizer').parentElement;
+const toolsTitle=$('toolsActiveFile'),toolsMode=$('toolsWorkspaceMode');
+function updateProjectTools(){
+ const active=$('fileTitle').textContent;
+ toolsTitle.textContent=active;
+ toolsMode.textContent=$('modeLabel').textContent;
+ $('toolsCopyFile').disabled=!current;
+}
+new MutationObserver(updateProjectTools).observe($('fileTitle'),{childList:true,characterData:true,subtree:true});
+new MutationObserver(updateProjectTools).observe($('modeLabel'),{childList:true,characterData:true,subtree:true});
+$('toolsShowGitChanges').addEventListener('click',()=>$('gitChanges').click());
+$('toolsCopyFile').addEventListener('click',async()=>{
+ if(!current)return;
+ try{await navigator.clipboard.writeText(repoMode?current:($('fileTitle').textContent||''));}
+ catch{$('status').textContent='Copy unavailable in this browser. Select the file path displayed in Project Tools.';}
+});
+$('toolsScrollTop').addEventListener('click',()=>{$('editor').scrollTop=0;});
+$('toolsScrollBottom').addEventListener('click',()=>{$('editor').scrollTop=$('editor').scrollHeight;});
+$('toggleProjectTools').addEventListener('click',()=>{
+ const collapsed=projectTools.classList.toggle('is-collapsed');
+ $('toggleProjectTools').setAttribute('aria-expanded',String(!collapsed));
+ $('toolsResizer').hidden=collapsed;
+});
+function setupIdeDivider(id,target,min,max){
+ const grip=$(id),panel=$(target);
+ let startX=0,startWidth=0,active=false;
+ function adjust(delta){
+  // Never let the code editor disappear when either sidebar grows.
+  const editorMinimum=300,other=target==='sidebar'?projectTools.offsetWidth:$('sidebar').offsetWidth;
+  const limit=Math.min(max,workspace.clientWidth-other-editorMinimum-16);
+  const next=Math.max(min,Math.min(limit,startWidth+delta));
+  if(Number.isFinite(next)&&limit>=min)panel.style.width=next+'px';
+ }
+ grip.addEventListener('pointerdown',e=>{
+  if(e.button!==0||grip.hidden)return;
+  active=true;startX=e.clientX;startWidth=panel.getBoundingClientRect().width;
+  grip.setPointerCapture(e.pointerId);grip.classList.add('is-dragging');workspace.classList.add('is-resizing');
+ });
+ grip.addEventListener('pointermove',e=>{if(active)adjust(target==='sidebar'?e.clientX-startX:startX-e.clientX);});
+ const stop=()=>{active=false;grip.classList.remove('is-dragging');workspace.classList.remove('is-resizing');};
+ grip.addEventListener('pointerup',stop);grip.addEventListener('pointercancel',stop);
+ grip.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+  e.preventDefault();startWidth=panel.getBoundingClientRect().width;
+  adjust((e.key==='ArrowRight'?1:-1)*(target==='sidebar'?20:-20));
+ });
+}
+setupIdeDivider('explorerResizer','sidebar',160,460);
+setupIdeDivider('toolsResizer','projectTools',180,460);
+updateProjectTools();
 renderTree();emptyEditor();
 // Signal that controls and event listeners are ready for interaction.
 document.documentElement.dataset.lifeideReady='true';
