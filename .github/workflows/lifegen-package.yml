@@ -88,7 +88,7 @@ jobs:
           archive = Path('dist/LIFEGEN-source.zip')
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           Path('dist/SHA256SUMS.txt').write_text(
-              f'{digest}  LIFEGEN-source.zip\\n', encoding='utf-8'
+              f'{digest}  LIFEGEN-source.zip\n', encoding='utf-8'
           )
           selected = os.environ.get('PACKAGE_PATHS', '').splitlines()
           manifest = {
@@ -101,7 +101,7 @@ jobs:
               'sha256': digest,
           }
           Path('dist/PACKAGE-MANIFEST.json').write_text(
-              json.dumps(manifest, indent=2) + '\\n', encoding='utf-8'
+              json.dumps(manifest, indent=2) + '\n', encoding='utf-8'
           )
           print('SHA256:', digest)
           PY
