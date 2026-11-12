@@ -468,9 +468,10 @@ $('gitChanges').addEventListener('click',async()=>{
  try{
   if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
   // The Git review panel replaces the editor; late file reads must not reopen it.
-  ++githubOpenSequence;
+  const reviewSequence=++githubOpenSequence;
   repoDirty=false;current=null;repoFiles.clear();emptyEditor();
   const result=await repoApi('/git/status');
+  if(reviewSequence!==githubOpenSequence||!repoMode||githubMode)return;
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
   const view=$('tabs');view.replaceChildren();selectedGit.clear();$('commit').disabled=true;
   if(!entries.length){$('status').textContent='Git working tree is clean';return;}
@@ -478,14 +479,16 @@ $('gitChanges').addEventListener('click',async()=>{
    const check=document.createElement('input');check.type='checkbox';check.title='Include '+entry.path+' in commit';check.setAttribute('aria-label','Stage '+entry.path);check.onchange=()=>{check.checked?selectedGit.add(entry.path):selectedGit.delete(entry.path);$('commit').disabled=selectedGit.size===0;};view.append(check);
    const b=document.createElement('button');b.className='tab';b.type='button';b.textContent=entry.status+' '+entry.path;
    b.onclick=async()=>{try{
+    const diffSequence=++githubOpenSequence;
     const response=await repoApi('/git/diff?path='+encodeURIComponent(entry.path));
+    if(diffSequence!==githubOpenSequence||!repoMode||githubMode)return;
     $('editor').value=response.diff||'No unstaged diff for this file (it may be staged or untracked).';
     $('editor').disabled=true;$('fileTitle').textContent='Diff: '+entry.path;current=null;updateLines();
-   }catch(e){$('status').textContent=e.message;}};
+   }catch(e){if(!repoMode||githubMode)return;$('status').textContent=e.message;}};
    view.append(b);
   }
   $('status').textContent=entries.length+' changed file(s) in Git. Select files to commit.';
- }catch(e){$('status').textContent=e.message;}
+ }catch(e){if(!repoMode||githubMode)return;$('status').textContent=e.message;}
 });
 $('commit').addEventListener('click',async()=>{
  if(commitBusy||!repoMode||githubMode||!selectedGit.size)return;
