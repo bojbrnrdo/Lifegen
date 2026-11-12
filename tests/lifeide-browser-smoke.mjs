@@ -314,6 +314,15 @@ try {
  assert.equal(await evaluate("Boolean([...document.querySelectorAll('#tree .node')].find(b=>b.title==='README.md'))"),true);
 
 
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'No file selected');
+ // Delayed file response must not repopulate an editor after explicit refresh.
+ await evaluate("window.__normalFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/file?path=README.md')?new Promise(resolve=>setTimeout(()=>resolve(window.__normalFetch(url,opts)),350)):window.__normalFetch(url,opts)");
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click();document.getElementById('refresh').click()");
+ await new Promise(r=>setTimeout(r,550));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'No file selected','Refresh must invalidate delayed file responses');
+ assert.equal(await evaluate("document.getElementById('editor').disabled"),true,'Editor stays empty after refresh');
+ await evaluate("window.fetch=window.__normalFetch");
+
 
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='browser-repository.js';document.getElementById('dialogForm').requestSubmit()");
