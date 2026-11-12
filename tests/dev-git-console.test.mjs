@@ -18,7 +18,7 @@ test('Git console history, branch list and comparison are admin-only and read-on
 
 test('Git controls show remote status, branches, commit history and safe workflow actions',()=>{
  assert.match(client,/Git Version Control/);
- for(const id of ['gitPull','gitPush','gitCreateBranch','gitBranchSelect','gitCreatePr','gitCheck','gitStatus','gitHistory','gitPrPanel'])
+ for(const id of ['gitPull','gitOpenBranchFile','gitPush','gitCreateBranch','gitBranchSelect','gitCreatePr','gitCheck','gitStatus','gitHistory','gitPrPanel'])
   assert.ok(client.includes('id="'+id+'"'),id);
  assert.match(client,/api\('branches'\)/);
  assert.match(client,/api\('branch-status\?branch='/);
@@ -49,4 +49,15 @@ test('Concurrent same-branch refreshes cannot publish stale status, history or c
  assert.match(client,/request!==historyRequest/);
  assert.match(client,/request=\+\+refreshRequest/);
  assert.match(client,/request!==refreshRequest/);
+});
+
+
+test('Git console opens selected branch and file without requiring write permissions',()=>{
+ assert.match(client,/id="gitOpenBranchFile"/);
+ assert.match(client,/gitOpenBranchFile'\)\.onclick/);
+ assert.match(client,/const selected=branch/);
+ assert.match(client,/if\(!connected\)return/);
+ assert.match(client,/\/dev\/ide\?branch='\+encodeURIComponent\(selected\)\+'&path='\+encodeURIComponent\(file\)/);
+ assert.match(client,/if\(query\.path\)return renderDevIDEGitHub\(\{main,query\}\)/);
+ assert.match(client,/file\.split\('\/'\)\.some/);
 });
