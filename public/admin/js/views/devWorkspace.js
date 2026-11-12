@@ -1,5 +1,6 @@
 import {esc} from '../ui.js';
 import {devRequest} from '../api.js';
+import {verifyPackageFiles} from '../packageVerification.js';
 
 const api=devRequest;
 const heading=(title,subtitle)=>`<div class="page-header"><div><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p></div></div>`;
@@ -317,6 +318,19 @@ export async function renderDevPackaging({main}){
  <p class="small muted" id="packageRunsStatus" role="status"></p>
  <p class="small muted">Successful runs provide LIFEGEN-source.zip, SHA256SUMS.txt and PACKAGE-MANIFEST.json together in the GitHub artifact. The manifest records the source branch, commit and selected paths. After extracting the artifact, verify the ZIP with sha256sum -c SHA256SUMS.txt on a system with sha256sum installed. Matching checksums verify integrity, not deployment safety.</p>
  <div id="packageRunsList" class="stack"></div>
+ <section class="card" aria-label="Verify downloaded package">
+  <div class="card__header"><h2>Import · Verify Package</h2></div>
+  <div class="card__body stack">
+   <p class="small muted">Choose the three extracted package files. Verification happens locally in your browser; files are not uploaded or deployed.</p>
+   <label>LIFEGEN-source.zip <input id="verifyPackageZip" type="file" accept=".zip,application/zip"></label>
+   <label>SHA256SUMS.txt <input id="verifyPackageChecksum" type="file" accept=".txt,text/plain"></label>
+   <label>PACKAGE-MANIFEST.json <input id="verifyPackageManifest" type="file" accept=".json,application/json"></label>
+   <button id="verifyPackage" type="button" class="btn">Verify Package Integrity</button>
+   <p id="verifyPackageStatus" class="small muted" role="status">No package verified.</p>
+   <div id="verifyPackageDetails" class="stack"></div>
+   <p class="small muted">Integrity verification does not establish that package contents are safe to deploy. Import/deployment is disabled until separate reviewed safeguards are implemented.</p>
+  </div>
+ </section>
  <section id="packageArtifactsPanel" hidden aria-label="Package build artifacts">
   <div class="row row--between"><strong id="packageArtifactsTitle">Package artifacts</strong><button id="closePackageArtifacts" type="button" class="btn btn--sm">Close</button></div>
   <p id="packageArtifactsStatus" class="small muted" role="status"></p>
@@ -325,6 +339,29 @@ export async function renderDevPackaging({main}){
  </div></div>`;
  const el=id=>main.querySelector('#'+id);
  const branchInput=el('devBranch'),stage=el('packageStage'),stageStatus=el('packageStageStatus'),selectedOnly=el('packageSelectedOnly');
+ let verificationRequest=0;
+ for(const id of ['verifyPackageZip','verifyPackageChecksum','verifyPackageManifest']){
+  el(id).addEventListener('change',()=>{verificationRequest++;el('verifyPackageStatus').textContent='Package selection changed. Verify again.';el('verifyPackageDetails').replaceChildren();});
+ }
+ el('verifyPackage').onclick=async()=>{
+  const seq=++verificationRequest,btn=el('verifyPackage'),message=el('verifyPackageStatus'),details=el('verifyPackageDetails');
+  const zip=el('verifyPackageZip').files?.[0],sum=el('verifyPackageChecksum').files?.[0],manifest=el('verifyPackageManifest').files?.[0];
+  details.replaceChildren();
+  if(!zip||!sum||!manifest){message.textContent='Choose all three package files first.';return;}
+  if(zip.name!=='LIFEGEN-source.zip'||sum.name!=='SHA256SUMS.txt'||manifest.name!=='PACKAGE-MANIFEST.json'){message.textContent='Choose the expected LIFEGEN export filenames.';return;}
+  if(zip.size>50*1024*1024||sum.size>4096||manifest.size>65536){message.textContent='Package files exceed verification size limits.';return;}
+  btn.disabled=true;message.textContent='Checking the ZIP checksum and source manifest locally…';
+  try{
+   const result=await verifyPackageFiles(new Uint8Array(await zip.arrayBuffer()),await sum.text(),await manifest.text());
+   if(seq!==verificationRequest)return;
+   message.textContent='SHA-256 verified. This package has not been deployed.';
+   for(const [label,value] of [['Source branch',result.branch],['Source commit',result.commit],['Export type',result.mode],['Selected files',String(result.fileCount)],['SHA-256',result.sha256]]){
+    const line=document.createElement('p');line.textContent=label+': '+value;details.append(line);
+   }
+  }catch(error){if(seq===verificationRequest)message.textContent='Verification failed: '+error.message;}
+  finally{if(seq===verificationRequest)btn.disabled=false;}
+ };
+
  let stagedBranch='',stageSequence=0,packagePending=false;
  const selected=()=>[...stage.querySelectorAll('.package-file:checked')].map(cb=>cb.value);
  const updateStage=()=>{
