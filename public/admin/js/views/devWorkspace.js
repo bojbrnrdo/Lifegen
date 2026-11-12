@@ -250,7 +250,7 @@ export async function renderDevPackaging({main}){
  const el=id=>main.querySelector('#'+id);
  const branchInput=el('devBranch'),stage=el('packageStage'),stageStatus=el('packageStageStatus'),selectedOnly=el('packageSelectedOnly');
  let stagedBranch='',stageSequence=0,packagePending=false;
- const selected=()=>[...stage.querySelectorAll('input[type=checkbox]:checked')].map(cb=>cb.value);
+ const selected=()=>[...stage.querySelectorAll('.package-file:checked')].map(cb=>cb.value);
  const updateStage=()=>{
   const count=stage.querySelectorAll('input[type=checkbox]').length;
   const valid=stagedBranch===branchInput.value.trim()&&count>0;
@@ -277,7 +277,7 @@ export async function renderDevPackaging({main}){
    const list=document.createElement('div');list.className='stack';stage.append(list);
    files.forEach((file,index)=>{
     const label=document.createElement('label');label.className='row';
-    const check=document.createElement('input');check.type='checkbox';check.value=file.path;check.checked=index<40;
+    const check=document.createElement('input');check.type='checkbox';check.className='package-file';check.value=file.path;check.checked=index<40;
     const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
     label.append(check,name);list.append(label);
     check.addEventListener('change',()=>{
