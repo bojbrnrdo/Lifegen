@@ -292,10 +292,10 @@ try {
  // Simulate a slow first file response followed by a fast second selection.
  // The older response must not overwrite the last selected file or its highlight.
  await evaluate("window.__fileFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/file?path=README.md')?new Promise(resolve=>setTimeout(()=>resolve(window.__fileFetch(url,opts)),350)):window.__fileFetch(url,opts)");
- await evaluate("document.querySelector('#tree .node[title=\\\"README.md\\\"]').click();document.querySelector('#tree .node[title=\\\"src/components/Example.js\\\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click();document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  await new Promise(r=>setTimeout(r,650));
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'src/components/Example.js','Slow earlier request must not replace last opened file');
- assert.equal(await evaluate("document.querySelector('#tree .node[title=\\\"src/components/Example.js\\\"]').classList.contains('selected')"),true,'Last opened file retains selected highlight');
+ assert.equal(await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').classList.contains('selected')"),true,'Last opened file retains selected highlight');
  await evaluate("window.fetch=window.__fileFetch");
  console.log('PASS LifeIDE repository browser: inline nested folder expansion, collapse, stable tree and editor');
  // Explicit refresh resets the creation destination to repository root.
