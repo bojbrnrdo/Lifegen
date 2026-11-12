@@ -51,7 +51,7 @@ export async function renderDevGit({main}){
   const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
   try{
    const result=await api('branch-status?branch='+encodeURIComponent(which));
-   if(seq!==revision)return;
+   if(seq!==revision)return false;
    host.replaceChildren();
    const text=document.createElement('p');text.textContent=result.branch+' vs develop — '+result.ahead+' ahead, '+result.behind+' behind';host.append(text);
    const status=document.createElement('p');status.className='small muted';status.textContent=result.files.length+' changed files'+(result.truncated?' (first 100 shown)':'');host.append(status);
@@ -62,14 +62,15 @@ export async function renderDevGit({main}){
     row.append(name,counts);host.append(row);
    }
    el('gitSync').textContent=result.behind?'Behind develop':result.ahead?'Ahead of develop':'Up to date with develop';
-  }catch(e){if(seq===revision)host.textContent=e.message;}
+   return true;
+  }catch(e){if(seq===revision){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
  };
  const loadHistory=async()=>{
   const seq=revision,which=branch;
   el('gitHistoryMessage').textContent='Loading '+which+' history…';el('gitHistory').replaceChildren();
   try{
    const result=await api('history?branch='+encodeURIComponent(which));
-   if(seq!==revision)return;
+   if(seq!==revision)return false;
    el('gitHistoryMessage').textContent=result.commits.length+' recent commits on '+which;
    for(const c of result.commits){
     const row=document.createElement('div');row.className='devgit__commit';
@@ -83,13 +84,14 @@ export async function renderDevGit({main}){
     const revert=document.createElement('button');revert.className='btn btn--sm';revert.textContent='Revert';revert.disabled=true;revert.title='Reverts require a reviewed fix branch; direct revert is not yet supported.';
     buttons.append(diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
    }
-  }catch(e){if(seq===revision)el('gitHistoryMessage').textContent=e.message;}
+   return true;
+  }catch(e){if(seq===revision)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
   branch=value;revision++;el('gitBranchLabel').textContent=value;
-  await Promise.all([check(),loadHistory()]);
+  return Promise.all([check(),loadHistory()]);
  };
- el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');await choose(branch);note('Branch status and history refreshed. No local files were changed.');};
+ el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
  el('gitCheck').onclick=check;el('gitReloadHistory').onclick=loadHistory;
  el('gitBranchSelect').onchange=e=>choose(e.target.value);
  el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};

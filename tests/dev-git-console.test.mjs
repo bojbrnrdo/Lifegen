@@ -31,3 +31,12 @@ test('Git controls show remote status, branches, commit history and safe workflo
  assert.match(client,/Neither button performs a Git pull or push/);
  assert.match(styles,/\.devgit__history/);
 });
+
+
+test('Refresh Remote distinguishes failed requests from successful refreshes',()=>{
+ assert.match(client,/return Promise\.all\(\[check\(\),loadHistory\(\)\]\)/);
+ assert.match(client,/results\.every\(Boolean\)/);
+ assert.match(client,/Remote refresh incomplete/);
+ assert.match(client,/Status unavailable/);
+ assert.match(client,/return false/);
+});
