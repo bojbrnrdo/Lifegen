@@ -58,7 +58,7 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
   const nameLength=u16(cursor+28),extra=u16(cursor+30),comment=u16(cursor+32);
   const extAttr=u32(cursor+38),localOffset=u32(cursor+42);
   const next=cursor+46+nameLength+extra+comment;
-  if(next>offset+length||localOffset>=offset)throw Error('Invalid ZIP entry bounds.');
+  if(next>offset+length||localOffset+30>offset||u32(localOffset)!==0x04034b50)throw Error('Invalid ZIP entry bounds.');
   let name;
   try{name=decoder.decode(zipBytes.subarray(cursor+46,cursor+46+nameLength));}
   catch{throw Error('Invalid ZIP filename encoding.');}
