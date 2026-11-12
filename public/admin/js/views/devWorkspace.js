@@ -252,7 +252,7 @@ export async function renderDevPackaging({main}){
  let stagedBranch='',stageSequence=0,packagePending=false;
  const selected=()=>[...stage.querySelectorAll('.package-file:checked')].map(cb=>cb.value);
  const updateStage=()=>{
-  const count=stage.querySelectorAll('input[type=checkbox]').length;
+  const count=stage.querySelectorAll('.package-file').length;
   const valid=stagedBranch===branchInput.value.trim()&&count>0;
   selectedOnly.disabled=!valid;
   if(!valid)selectedOnly.checked=false;
