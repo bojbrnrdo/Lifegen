@@ -504,5 +504,7 @@ document.addEventListener('keydown',e=>{
  saveActiveFile();
 },true);
 renderTree();emptyEditor();
+// Browser acceptance tests must not click controls before listeners are wired.
+document.documentElement.dataset.lifeideReady='true';
 if(new URLSearchParams(location.search).get('source')==='github')connectGithubSource().catch(error=>{$('status').textContent='GitHub connection failed: '+error.message;});
 })();
