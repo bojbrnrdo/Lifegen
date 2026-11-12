@@ -389,10 +389,14 @@ async function openRepoFile(rel){
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  githubEditing=githubMode;githubEditControls(true);
  $('editor').disabled=false;$('editor').value=file.content;
+ let recoveredDraft=false,staleDraft=false;
  if(githubMode){
   try{
    const saved=JSON.parse(localStorage.getItem(draftKey(rel))||'null');
-   if(saved&&typeof saved.content==='string'&&saved.content!==file.content&&saved.base===file.version){
+   if(saved&&typeof saved.content==='string'&&saved.content!==file.content){
+    // Preserve drafts even when main moved forward. A stale draft must never
+    // appear to be the latest GitHub source or silently replace it.
+    recoveredDraft=true;staleDraft=saved.base!==file.version;
     githubEditing=true;$('editor').disabled=false;$('editor').value=saved.content;
     githubEditControls(true);
    }
@@ -400,7 +404,10 @@ async function openRepoFile(rel){
  }
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
- $('status').textContent=githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
+ $('status').textContent=staleDraft
+  ?'Recovered an older browser draft. GitHub source has changed; compare with the latest file before committing. Ctrl+S saves only this browser copy.'
+  :recoveredDraft?'Recovered saved browser draft · Ctrl+S updates this browser copy, not GitHub'
+  :githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
 }
 async function connectGithubSource(){
  if(repoMode||githubMode)return;
