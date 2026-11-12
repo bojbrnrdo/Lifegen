@@ -70,3 +70,28 @@ test('ZIP inventory rejects ZIP entry encryption and unsupported archive methods
  dv.setUint16(offset+10,99,true);
  assert.throws(()=>inspectPackageZip(method),/unsupported/);
 });
+
+test('ZIP inspector rejects mismatched filenames in local file header',()=>{
+ const invalid=makeStoredZip('src/example.js');
+ invalid[30]='x'.charCodeAt(0);
+ assert.throws(()=>inspectPackageZip(invalid),/local filename differs/);
+});
+
+test('ZIP inspector rejects incompatible local header flags and methods',()=>{
+ const flags=makeStoredZip();
+ new DataView(flags.buffer).setUint16(6,1,true);
+ assert.throws(()=>inspectPackageZip(flags),/local header/);
+ const method=makeStoredZip();
+ new DataView(method.buffer).setUint16(8,8,true);
+ assert.throws(()=>inspectPackageZip(method),/local header/);
+});
+
+test('ZIP inspector rejects central directory file sizes beyond archive data',()=>{
+ const invalid=makeStoredZip();
+ const nameSize=Buffer.byteLength('src/example.js');
+ const directory=invalid.byteLength-22-46-nameSize;
+ const view=new DataView(invalid.buffer);
+ view.setUint32(directory+20,500,true);
+ view.setUint32(directory+24,500,true);
+ assert.throws(()=>inspectPackageZip(invalid),/file bounds/);
+});
