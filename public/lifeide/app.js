@@ -351,7 +351,8 @@ async function treeFolder(){
    }else{
     el.addEventListener('click',async()=>{
      try{
-      await openRepoFile(rel);
+      const opened=await openRepoFile(rel);
+      if(!opened)return;
       tree.querySelectorAll('.node.selected').forEach(n=>n.classList.remove('selected'));
       el.classList.add('selected');
      }catch(error){$('status').textContent=error.message;}
@@ -377,14 +378,15 @@ async function createRepoEntry(type,name){
  $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
- if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before changing files.';return;}
- if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return;
+ if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before changing files.';return false;}
+ if(repoMode&&repoDirty&&!confirm('Discard unsaved changes to the current repository file?'))return false;
+ // Invalidate all prior file-opening requests, including local repository mode.
  const sequence=++githubOpenSequence;
  if(githubMode){
   $('status').textContent=githubFileCache.has(rel)?'Opening cached file…':'Opening '+rel+'…';
  }
  const file=githubMode?await githubFile(rel):await repoApi('/file?path='+encodeURIComponent(rel));
- if(githubMode&&sequence!==githubOpenSequence)return;
+ if(sequence!==githubOpenSequence)return false;
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  githubEditing=githubMode;githubEditControls(true);
@@ -401,8 +403,9 @@ async function openRepoFile(rel){
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
  $('status').textContent=githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
+ return true;
 }
-async function connectGithubSource(){
+async function connectGithubSource(){{
  if(repoMode||githubMode)return;
  const response=await fetch('/api/auth/status',{credentials:'same-origin'});
  const auth=await response.json().catch(()=>({}));
