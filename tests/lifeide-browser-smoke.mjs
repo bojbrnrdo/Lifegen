@@ -105,7 +105,13 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
  await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
- assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1);
+ // The dialog submit and editor opening may settle on separate browser tasks.
+ // Wait for the tab as we already do for the file title, instead of racing it.
+ for(let i=0;i<50;i++){
+  if(await evaluate("document.querySelectorAll('.tab-open').length===1"))break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1,'New file tab should become visible after creation');
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
