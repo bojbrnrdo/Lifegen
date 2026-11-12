@@ -326,6 +326,14 @@ try {
  // Disk writes can finish before the save handler clears its in-flight flag.
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('status').textContent==='Saved to local repository'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('status').textContent"),'Saved to local repository','Wait for repository save to settle before Git review');
+ // Reviewing Git changes must invalidate an earlier, still-loading source file.
+ await evaluate("window.__reviewFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/file?path=README.md')?new Promise(resolve=>setTimeout(()=>resolve(window.__reviewFetch(url,opts)),350)):window.__reviewFetch(url,opts)");
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click();document.getElementById('gitChanges').click()");
+ await new Promise(r=>setTimeout(r,550));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'No file selected','Pending file read must not replace Git review editor');
+ assert.equal(await evaluate("document.getElementById('editor').disabled"),true,'Git review must keep editor disabled after pending open');
+ await evaluate("window.fetch=window.__reviewFetch");
+
  await evaluate("document.getElementById('gitChanges').click()");
  for(let i=0;i<50;i++){if(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"))break;await new Promise(r=>setTimeout(r,100));}
  const gitReview=await evaluate("({checkboxes:document.querySelectorAll('#tabs input[type=checkbox]').length,status:document.getElementById('status').textContent})");
