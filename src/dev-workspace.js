@@ -256,7 +256,7 @@ export function registerDevWorkspace(app){
   const files=(commit.files||[]).filter(item=>allowedPath(item.filename));
   let remaining=90000;
   res.set('Cache-Control','no-store').json({
-   branch,sha,subject:String(commit.commit?.message||'').split('\\n')[0].slice(0,200),
+   branch,sha,subject:String(commit.commit?.message||'').split('\n')[0].slice(0,200),
    truncated:files.length>30||(commit.files||[]).length>=300,
    files:files.slice(0,30).map(item=>{
     const patch=typeof item.patch==='string'?item.patch:'';
