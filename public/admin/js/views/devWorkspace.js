@@ -1,6 +1,6 @@
 import {esc} from '../ui.js';
 import {devRequest} from '../api.js';
-import {verifyPackageFiles} from '../packageVerification.js';
+import {verifyPackageFiles,inspectPackageZip} from '../packageVerification.js';
 
 const api=devRequest;
 const heading=(title,subtitle)=>`<div class="page-header"><div><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p></div></div>`;
@@ -328,7 +328,7 @@ export async function renderDevPackaging({main}){
    <button id="verifyPackage" type="button" class="btn">Verify Package Integrity</button>
    <p id="verifyPackageStatus" class="small muted" role="status">No package verified.</p>
    <div id="verifyPackageDetails" class="stack"></div>
-   <p class="small muted">Integrity verification does not establish that package contents are safe to deploy. Import/deployment is disabled until separate reviewed safeguards are implemented.</p>
+   <p class="small muted">Integrity verification and ZIP inventory checks do not establish that package contents are safe to deploy. Import/deployment is disabled until separate reviewed safeguards are implemented.</p>
   </div>
  </section>
  <section id="packageArtifactsPanel" hidden aria-label="Package build artifacts">
@@ -352,11 +352,24 @@ export async function renderDevPackaging({main}){
   if(zip.size>50*1024*1024||sum.size>4096||manifest.size>65536){message.textContent='Package files exceed verification size limits.';return;}
   btn.disabled=true;message.textContent='Checking the ZIP checksum and source manifest locally…';
   try{
-   const result=await verifyPackageFiles(new Uint8Array(await zip.arrayBuffer()),await sum.text(),await manifest.text());
+   const zipBytes=new Uint8Array(await zip.arrayBuffer());
+   const manifestText=await manifest.text();
+   const result=await verifyPackageFiles(zipBytes,await sum.text(),manifestText);
+   const metadata=JSON.parse(manifestText);
+   const inventory=inspectPackageZip(zipBytes,metadata.selected_paths);
    if(seq!==verificationRequest)return;
-   message.textContent='SHA-256 verified. This package has not been deployed.';
+   message.textContent='SHA-256 verified and ZIP inventory inspected. This package has not been deployed.';
    for(const [label,value] of [['Source branch',result.branch],['Source commit',result.commit],['Export type',result.mode],['Selected files',String(result.fileCount)],['SHA-256',result.sha256]]){
     const line=document.createElement('p');line.textContent=label+': '+value;details.append(line);
+   }
+   const title=document.createElement('strong');title.textContent='ZIP contents · '+inventory.files.length+' files';details.append(title);
+   const list=document.createElement('ul');list.className='stack';
+   for(const file of inventory.files.slice(0,100)){
+    const item=document.createElement('li');item.textContent=file.path+' · '+(file.size/1024).toFixed(1)+' KiB';list.append(item);
+   }
+   details.append(list);
+   if(inventory.files.length>100){
+    const more=document.createElement('p');more.className='small muted';more.textContent='Showing first 100 of '+inventory.files.length+' files.';details.append(more);
    }
   }catch(error){if(seq===verificationRequest)message.textContent='Verification failed: '+error.message;}
   finally{if(seq===verificationRequest)btn.disabled=false;}
