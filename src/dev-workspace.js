@@ -215,6 +215,24 @@ export function registerDevWorkspace(app){
    }))
   });
  }));
+ // Read-only file patch from the same branch comparison shown in Git status.
+ // Never fetch arbitrary URLs or expose unapproved/sensitive file paths.
+ app.get('/api/admin/dev/file-diff',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||''),file=String(req.query.path||'');
+  if(!allowedBranch(branch)||!allowedPath(file))return deny(res);
+  const comparison=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+  if((comparison.files||[]).length>=100)return res.status(409).json({error:'Comparison is too large to verify this file. Review it on GitHub.'});
+  const entry=(comparison.files||[]).find(item=>item.filename===file);
+  if(!entry)return res.status(404).json({error:'This file is not changed on the selected branch.'});
+  const patch=typeof entry.patch==='string'?entry.patch:'';
+  res.set('Cache-Control','no-store').json({
+   branch,base:'develop',path:file,status:entry.status,
+   additions:entry.additions||0,deletions:entry.deletions||0,
+   patch:patch.slice(0,120000),truncated:patch.length>120000,
+   unavailable:!patch
+  });
+ }));
  app.get('/api/admin/dev/history',requireStaff,ensureAdmin,wrap(async(req,res)=>{
   if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
   const branch=String(req.query.branch||'develop');
