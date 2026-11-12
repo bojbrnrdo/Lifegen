@@ -317,6 +317,11 @@ export async function renderDevPackaging({main}){
  <p class="small muted" id="packageRunsStatus" role="status"></p>
  <p class="small muted">Successful runs provide LIFEGEN-source.zip, SHA256SUMS.txt and PACKAGE-MANIFEST.json together in the GitHub artifact. The manifest records the source branch, commit and selected paths. After extracting the artifact, verify the ZIP with sha256sum -c SHA256SUMS.txt on a system with sha256sum installed. Matching checksums verify integrity, not deployment safety.</p>
  <div id="packageRunsList" class="stack"></div>
+ <section id="packageArtifactsPanel" hidden aria-label="Package build artifacts">
+  <div class="row row--between"><strong id="packageArtifactsTitle">Package artifacts</strong><button id="closePackageArtifacts" type="button" class="btn btn--sm">Close</button></div>
+  <p id="packageArtifactsStatus" class="small muted" role="status"></p>
+  <div id="packageArtifactsList" class="stack"></div>
+ </section>
  </div></div>`;
  const el=id=>main.querySelector('#'+id);
  const branchInput=el('devBranch'),stage=el('packageStage'),stageStatus=el('packageStageStatus'),selectedOnly=el('packageSelectedOnly');
@@ -365,10 +370,47 @@ export async function renderDevPackaging({main}){
    updateStage();
   }catch(error){if(seq===stageSequence){stageStatus.textContent='Cannot stage files: '+error.message;stagedBranch='';selectedOnly.disabled=true;}}
  };
- const refreshRuns=async()=>{const status=el('packageRunsStatus'),list=el('packageRunsList');status.textContent='Loading package runs…';list.replaceChildren();
-  try{const result=await api('package-runs');status.textContent=result.runs.length+' recent package runs';
-   result.runs.forEach(run=>{const row=document.createElement('div');row.className='row row--between';const a=document.createElement('a');a.href=run.url;a.target='_blank';a.rel='noopener noreferrer';const resultLabel=run.conclusion||run.status||'Unknown';a.textContent=(run.branch||'Unknown branch')+' · '+resultLabel+(run.conclusion==='success'?' · Open artifacts ↗':' · View run ↗');const when=document.createElement('span');when.className='small muted';when.textContent=run.created_at?new Date(run.created_at).toLocaleString():'';row.append(a,when);list.append(row);});
-  }catch(error){status.textContent=error.message;}
+ let artifactRequest=0;
+ const inspectArtifacts=async(run)=>{
+  const request=++artifactRequest,panel=el('packageArtifactsPanel');
+  panel.hidden=false;el('packageArtifactsTitle').textContent='Artifacts · '+(run.branch||'Unknown branch');
+  el('packageArtifactsList').replaceChildren();el('packageArtifactsStatus').textContent='Loading artifact details…';
+  try{
+   const result=await api('package-artifacts?run_id='+encodeURIComponent(run.id));
+   if(request!==artifactRequest)return;
+   if(!result.artifacts.length){
+    el('packageArtifactsStatus').textContent='No artifacts available for this run. The build may be unfinished, failed, or its artifacts expired.';
+    return;
+   }
+   el('packageArtifactsStatus').textContent=result.artifacts.length+' artifacts · '+(result.conclusion||result.status||'Unknown');
+   for(const artifact of result.artifacts){
+    const item=document.createElement('div');item.className='row row--between';
+    const label=document.createElement('span');label.textContent=artifact.name+' · '+(artifact.size_in_bytes/1048576).toFixed(2)+' MB'+(artifact.expired?' · Expired':'');
+    const detail=document.createElement('small');detail.className='muted';detail.textContent=artifact.expires_at?'Expires '+new Date(artifact.expires_at).toLocaleString():'Expiration unavailable';
+    item.append(label,detail);el('packageArtifactsList').append(item);
+   }
+   const link=document.createElement('a');link.className='btn btn--sm';link.href=result.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='View or download artifacts on GitHub';el('packageArtifactsList').append(link);
+  }catch(error){if(request===artifactRequest)el('packageArtifactsStatus').textContent='Cannot inspect artifacts: '+error.message;}
+ };
+ el('closePackageArtifacts').onclick=()=>{artifactRequest++;el('packageArtifactsPanel').hidden=true;};
+ let runsRequest=0;
+ const refreshRuns=async()=>{
+  const request=++runsRequest,status=el('packageRunsStatus'),list=el('packageRunsList');
+  status.textContent='Loading package runs…';list.replaceChildren();
+  try{
+   const result=await api('package-runs');if(request!==runsRequest)return;
+   status.textContent=result.runs.length+' recent package runs';
+   result.runs.forEach(run=>{
+    const row=document.createElement('div');row.className='row row--between';
+    const a=document.createElement('a');a.href=run.url;a.target='_blank';a.rel='noopener noreferrer';
+    const resultLabel=run.conclusion||run.status||'Unknown';
+    a.textContent=(run.branch||'Unknown branch')+' · '+resultLabel+' · GitHub';
+    const inspect=document.createElement('button');inspect.type='button';inspect.className='btn btn--sm';
+    inspect.textContent='Inspect Artifacts';inspect.onclick=()=>inspectArtifacts(run);
+    const when=document.createElement('span');when.className='small muted';when.textContent=run.created_at?new Date(run.created_at).toLocaleString():'';
+    row.append(a,inspect,when);list.append(row);
+   });
+  }catch(error){if(request===runsRequest)status.textContent=error.message;}
  };
  el('refreshPackageRuns').onclick=refreshRuns;
  if(data.connected)refreshRuns();

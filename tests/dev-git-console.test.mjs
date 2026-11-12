@@ -135,3 +135,17 @@ test('Package export includes verified SHA-256 checksum and provenance manifest'
  assert.match(workflow,/selected_paths/);
  assert.match(client,/Matching checksums verify integrity, not deployment safety/);
 });
+
+
+test('Recent package artifacts are inspectable without revealing GitHub credentials',()=>{
+ assert.match(server,/app\.get\('\/api\/admin\/dev\/package-artifacts',requireStaff,ensureAdmin,ensureEnabled/);
+ assert.match(server,/\/actions\/workflows\/lifegen-package\.yml\/runs\?per_page=15/);
+ assert.match(server,/String\(item\.id\)===id/);
+ assert.match(server,/\/actions\/runs\/'\+id\+'\/artifacts\?per_page=30/);
+ assert.match(server,/expired:Boolean\(item\.expired\)/);
+ assert.match(client,/id="packageArtifactsPanel"/);
+ assert.match(client,/package-artifacts\?run_id=/);
+ assert.match(client,/inspect\.onclick=\(\)=>inspectArtifacts\(run\)/);
+ assert.match(client,/artifactRequest\+\+/);
+ assert.match(client,/View or download artifacts on GitHub/);
+});
