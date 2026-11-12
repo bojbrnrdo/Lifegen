@@ -400,7 +400,14 @@ async function openRepoFile(rel){
  if(githubMode){
   $('status').textContent=githubFileCache.has(rel)?'Opening cached file…':'Opening '+rel+'…';
  }
- const file=githubMode?await githubFile(rel):await repoApi('/file?path='+encodeURIComponent(rel));
+ let file;
+ try{file=githubMode?await githubFile(rel):await repoApi('/file?path='+encodeURIComponent(rel));}
+ catch(error){
+  // A rejected file read can arrive after the user selected another file.
+  // Ignore the outdated failure; preserve errors for the active selection.
+  if(sequence!==githubOpenSequence)return false;
+  throw error;
+ }
  if(sequence!==githubOpenSequence)return false;
  selectedGit.clear();$('commit').disabled=true;
  repoFiles.set(rel,file);current=rel;repoDirty=false;
