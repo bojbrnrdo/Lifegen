@@ -317,6 +317,16 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'src/components/Example.js','Stale failed file read must preserve latest selection');
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('Synthetic stale file failure')"),false,'Stale file error must not override latest status');
  await evaluate("window.fetch=window.__failedFileFetch");
+ // In contrast, a failure for the currently selected file must stay visible.
+ await evaluate("window.__activeFileFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/file?path=README.md')?Promise.reject(new Error('Synthetic active file failure')):window.__activeFileFetch(url,opts)");
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ for(let i=0;i<30;i++){
+  if(await evaluate("document.getElementById('status').textContent.includes('Synthetic active file failure')"))break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert.equal(await evaluate("document.getElementById('status').textContent.includes('Synthetic active file failure')"),true,'The active file request must report errors');
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'src/components/Example.js','Failed file read must retain the last successfully loaded editor');
+ await evaluate("window.fetch=window.__activeFileFetch");
  console.log('PASS LifeIDE repository browser: inline nested folder expansion, collapse, stable tree and editor');
  // Explicit refresh resets the creation destination to repository root.
  await evaluate("document.getElementById('refresh').click()");
