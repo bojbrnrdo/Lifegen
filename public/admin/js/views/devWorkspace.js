@@ -20,13 +20,13 @@ export async function renderDevGit({main}){
    <p><b>Sync Status:</b> <span id="gitSync">${connected?'Connected':'Disconnected'}</span></p>
    <p><b>Current Branch:</b> <strong id="gitBranchLabel">develop</strong></p>
    <div class="devgit__buttons">
-    <button class="btn" id="gitPull" ${connected?'':'disabled'}>↓ Pull from Remote</button>
-    <button class="btn" id="gitPush" ${writable?'':'disabled'}>↑ Push to Remote</button>
+    <button class="btn" id="gitPull" ${connected?'':'disabled'}>↻ Refresh Remote</button>
+    <button class="btn" id="gitPush" ${writable?'':'disabled'}>Open IDE to Commit</button>
     <button class="btn" id="gitCreateBranch" ${writable?'':'disabled'}>Create Branch</button>
     <label>Change Branch <select class="input" id="gitBranchSelect" ${connected?'':'disabled'}><option>develop</option></select></label>
     <button class="btn" id="gitCreatePr" ${writable?'':'disabled'}>Create Pull Request</button>
    </div>
-   <p class="small muted">Pull refreshes GitHub branch data; no persistent local Git checkout exists on Vercel. Push opens the existing protected LifeIDE commit workflow. ${writable?'Feature/fix branch writes are enabled.':'Remote writes are disabled.'} Main is protected.</p>
+   <p class="small muted">Refresh retrieves GitHub branch data; no persistent local Git checkout exists on Vercel. Open IDE to Commit uses the separate protected LifeIDE workflow. Neither button performs a Git pull or push. ${writable?'Feature/fix branch writes are enabled.':'Remote writes are disabled.'} Main is protected.</p>
    <p id="gitMessage" role="status" class="small muted"></p>
   </div></section>
   <section class="card devgit__section"><div class="card__header"><h2>Branch Status</h2><button class="btn btn--sm" id="gitCheck" ${connected?'':'disabled'}>✓ Check Status</button></div>
@@ -89,10 +89,10 @@ export async function renderDevGit({main}){
   branch=value;revision++;el('gitBranchLabel').textContent=value;
   await Promise.all([check(),loadHistory()]);
  };
- el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');await choose(branch);note('Remote data refreshed. No local files were changed.');};
+ el('gitPull').onclick=async()=>{note('Refreshing remote GitHub data…');await choose(branch);note('Branch status and history refreshed. No local files were changed.');};
  el('gitCheck').onclick=check;el('gitReloadHistory').onclick=loadHistory;
  el('gitBranchSelect').onchange=e=>choose(e.target.value);
- el('gitPush').onclick=()=>{if(!writable)return;note('Open LifeIDE to commit to a feature/fix branch. No direct push occurs on this page.');window.location.hash='#/dev/ide';};
+ el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};
  el('gitCreateBranch').onclick=async()=>{
   if(!writable)return;
   const proposed=window.prompt('Create development branch from develop (feature/name or fix/name)','feature/my-change');
