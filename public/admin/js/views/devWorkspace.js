@@ -47,6 +47,13 @@ export async function renderDevGit({main}){
  const el=id=>main.querySelector('#'+id);
  let branch='develop',revision=0,statusRequest=0,historyRequest=0,refreshRequest=0;
  const note=message=>{el('gitMessage').textContent=message;};
+ const openBranchFile=(selected,file)=>{
+  if(!connected||!file||file.startsWith('/')||file.includes('\\\\')||
+     file.split('/').some(part=>!part||part==='.'||part==='..')){
+   note('Enter a valid repository-relative file path.');return;
+  }
+  window.location.hash='#/dev/ide?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file);
+ };
  const check=async()=>{
   const seq=revision,which=branch,request=++statusRequest;
   const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
@@ -60,7 +67,14 @@ export async function renderDevGit({main}){
     const row=document.createElement('div');row.className='devgit__file';
     const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
     const counts=document.createElement('span');counts.className='small muted';counts.textContent='+'+file.additions+' / -'+file.deletions;
-    row.append(name,counts);host.append(row);
+    row.append(name,counts);
+    if(file.status!=='removed'){
+     const open=document.createElement('button');open.type='button';open.className='btn btn--sm devgit__open-file';
+     open.textContent='Open';open.setAttribute('aria-label','Open '+file.path+' from '+which);
+     open.onclick=()=>openBranchFile(which,file.path);
+     row.append(open);
+    }
+    host.append(row);
    }
    el('gitSync').textContent=result.behind?'Behind develop':result.ahead?'Ahead of develop':'Up to date with develop';
    return true;
@@ -101,9 +115,7 @@ export async function renderDevGit({main}){
   const path=window.prompt('Open file from '+selected+' (repository-relative path)', 'README.md');
   if(path===null)return;
   const file=path.trim();
-  if(!file||file.startsWith('/')||file.includes('\\\\')||file.split('/').some(part=>!part||part==='.'||part==='..')){note('Enter a valid repository-relative file path.');return;}
-  note('Opening '+file+' from '+selected+' in LifeIDE…');
-  window.location.hash='#/dev/ide?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file);
+  openBranchFile(selected,file);
  };
  el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};
  el('gitCreateBranch').onclick=async()=>{

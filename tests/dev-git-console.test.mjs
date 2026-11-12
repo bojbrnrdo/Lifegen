@@ -81,3 +81,12 @@ test('TransferBuilder-style packaging stages verified changed files and keeps fu
  assert.match(workflow,/npm run build/);
  assert.match(workflow,/npm test/);
 });
+
+test('Git branch comparison can open changed files but not deleted files',()=>{
+ assert.match(client,/const openBranchFile=\(selected,file\)=>/);
+ assert.match(client,/if\(file\.status!=='removed'\)/);
+ assert.match(client,/open\.onclick=\(\)=>openBranchFile\(which,file\.path\)/);
+ assert.match(client,/open\.setAttribute\('aria-label','Open '/);
+ assert.match(client,/window\.location\.hash='#\/dev\/ide\?branch='/);
+ assert.match(client,/openBranchFile\(selected,file\)/);
+});
