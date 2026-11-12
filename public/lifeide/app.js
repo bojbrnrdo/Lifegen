@@ -95,6 +95,16 @@ $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy)
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
 const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
+// Keep the original GitHub SHA when a browser draft survives a remote update.
+// Repeated Ctrl+S must not falsely claim that old work is based on new main.
+function persistGithubDraft(path,content){
+ const key=draftKey(path),version=repoFiles.get(path)?.version;
+ let old=null;
+ try{old=JSON.parse(localStorage.getItem(key)||'null');}catch{}
+ const base=typeof old?.base==='string'&&old.base?old.base:version;
+ localStorage.setItem(key,JSON.stringify({content,base,updated:Date.now()}));
+ return {stale:Boolean(base&&version&&base!==version)};
+}
 function githubEditControls(open=false){
  // Keep the legacy workflows available without crowding the source editor.
  $('editGithub').hidden=true;
@@ -126,16 +136,21 @@ $('editGithub').addEventListener('click',()=>{
 $('saveGithubDraft').addEventListener('click',()=>{
  if(!githubMode||!githubEditing||!current)return;
  try{
-  localStorage.setItem(draftKey(current),JSON.stringify({content:$('editor').value,base:repoFiles.get(current)?.version,updated:Date.now()}));
-  repoDirty=false;$('status').textContent='Draft saved in this browser. Not committed to GitHub.';
+  const draft=persistGithubDraft(current,$('editor').value);
+  repoDirty=false;$('status').textContent=draft.stale
+   ?'Older draft saved in this browser. GitHub source has changed; compare before committing. Not committed to GitHub.'
+   :'Draft saved in this browser. Not committed to GitHub.';
  }catch(error){$('status').textContent='Unable to save draft: '+error.message;}
 });
 $('publishGithub').addEventListener('click',async()=>{
  if(!githubMode||!githubEditing||!current)return;
  const file=current,content=$('editor').value;
- if(!confirm('Continue editing '+file+' on GitHub? Your draft will be copied. Paste it into GitHub and commit to a NEW branch, not main.'))return;
+ let savedBase=null;
+ try{savedBase=JSON.parse(localStorage.getItem(draftKey(file))||'null')?.base;}catch{}
+ const stale=Boolean(savedBase&&savedBase!==repoFiles.get(file)?.version);
+ if(!confirm((stale?'This draft predates the latest GitHub file. Compare and reconcile changes before committing.\\n\\n':'')+'Continue editing '+file+' on GitHub? Your draft will be copied. Paste it into GitHub and commit to a NEW branch, not main.'))return;
  try{
-  localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));
+  persistGithubDraft(file,content);
   const url='https://github.com/bojbrnrdo/Lifegen/edit/main/'+file.split('/').map(encodeURIComponent).join('/');
   window.open(url,'_blank','noopener,noreferrer');
   try{
@@ -391,10 +406,14 @@ async function openRepoFile(rel){
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  githubEditing=githubMode;githubEditControls(true);
  $('editor').disabled=false;$('editor').value=file.content;
+ let recoveredDraft=false,staleDraft=false;
  if(githubMode){
   try{
    const saved=JSON.parse(localStorage.getItem(draftKey(rel))||'null');
-   if(saved&&typeof saved.content==='string'&&saved.content!==file.content&&saved.base===file.version){
+   if(saved&&typeof saved.content==='string'&&saved.content!==file.content){
+    // Preserve drafts even when main moved forward. A stale draft must never
+    // appear to be the latest GitHub source or silently replace it.
+    recoveredDraft=true;staleDraft=saved.base!==file.version;
     githubEditing=true;$('editor').disabled=false;$('editor').value=saved.content;
     githubEditControls(true);
    }
@@ -402,7 +421,10 @@ async function openRepoFile(rel){
  }
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
- $('status').textContent=githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
+ $('status').textContent=staleDraft
+  ?'Recovered an older browser draft. GitHub source has changed; compare with the latest file before committing. Ctrl+S saves only this browser copy.'
+  :recoveredDraft?'Recovered saved browser draft · Ctrl+S updates this browser copy, not GitHub'
+  :githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
  return true;
 }
 async function connectGithubSource(){
