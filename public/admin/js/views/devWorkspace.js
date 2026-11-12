@@ -130,7 +130,7 @@ export async function renderDevGit({main}){
      details.append(open);
     }
     const patch=document.createElement('pre');patch.className='devgit__patch';
-    patch.textContent=file.unavailable?'Inline patch unavailable for this file. Review it on GitHub.':file.patch+(file.truncated?'\\n… patch truncated':'');
+    patch.textContent=file.unavailable?'Inline patch unavailable for this file. Review it on GitHub.':file.patch+(file.truncated?'\n… patch truncated':'');
     details.append(patch);el('gitCommitFiles').append(details);
    }
   }catch(error){if(request===commitDetailRequest&&seq===revision&&selected===branch)el('gitCommitDetailStatus').textContent='Unable to inspect commit: '+error.message;}
