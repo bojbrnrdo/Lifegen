@@ -283,7 +283,7 @@ export function registerDevWorkspace(app){
   try{
    await request(apiRoot+'/actions/workflows/lifegen-package.yml/dispatches',{
     method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({ref:branch,inputs:{paths:paths?paths.join('\\n'):''}})
+    body:JSON.stringify({ref:branch,inputs:{paths:paths?paths.join('\n'):''}})
    });
   }catch(error){packageRequests.delete(branch);throw error;}
   res.status(202).json({ok:true,message:'Packaging workflow requested. Check GitHub Actions for the result.'});
