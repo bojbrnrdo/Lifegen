@@ -405,7 +405,7 @@ async function openRepoFile(rel){
  $('status').textContent=githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
  return true;
 }
-async function connectGithubSource(){{
+async function connectGithubSource(){
  if(repoMode||githubMode)return;
  const response=await fetch('/api/auth/status',{credentials:'same-origin'});
  const auth=await response.json().catch(()=>({}));
