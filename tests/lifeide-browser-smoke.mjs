@@ -96,7 +96,11 @@ try {
  let id=0;const pending=new Map();
  ws.onmessage=e=>{const message=JSON.parse(e.data);if(message.id&&pending.has(message.id)){pending.get(message.id)(message);pending.delete(message.id);}};
  const evaluate=async expression=>{const n=++id;const result=new Promise(resolve=>pending.set(n,resolve));ws.send(JSON.stringify({id:n,method:'Runtime.evaluate',params:{expression,returnByValue:true,awaitPromise:true}}));const data=await result;if(data.result?.exceptionDetails)throw Error(JSON.stringify(data.result.exceptionDetails));return data.result?.result?.value;};
- for(let i=0;i<50;i++){if(await evaluate("Boolean(document.getElementById('newFile'))"))break;await new Promise(r=>setTimeout(r,100));}
+ for(let i=0;i<100;i++){
+  if(await evaluate("document.documentElement.dataset.lifeideReady==='true'"))break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE listeners must initialize before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
  await evaluate("document.getElementById('newFile').click()");
  assert.equal(await evaluate("!document.getElementById('dialog').hidden"),true);
