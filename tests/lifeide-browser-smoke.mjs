@@ -333,8 +333,8 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'No file selected','Pending file read must not replace Git review editor');
  assert.equal(await evaluate("document.getElementById('editor').disabled"),true,'Git review must keep editor disabled after pending open');
  await evaluate("window.fetch=window.__reviewFetch");
-
- await evaluate("document.getElementById('gitChanges').click()");
+ // Reuse the Git review already opened above; another click would start a
+ // competing status request and could reset the selected commit checkboxes.
  for(let i=0;i<50;i++){if(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"))break;await new Promise(r=>setTimeout(r,100));}
  const gitReview=await evaluate("({checkboxes:document.querySelectorAll('#tabs input[type=checkbox]').length,status:document.getElementById('status').textContent})");
  assert.ok(gitReview.checkboxes,'Git status should show a selectable change: '+gitReview.status);
