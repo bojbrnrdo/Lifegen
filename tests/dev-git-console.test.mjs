@@ -26,6 +26,8 @@ test('Git controls show remote status, branches, commit history and safe workflo
  assert.match(client,/api\('pull-request',\{method:'POST'/);
  assert.match(client,/if\(!writable\)return/);
  assert.match(client,/revert\.disabled=true/);
- assert.match(client,/No direct push occurs on this page/);
+ assert.match(client,/Refresh Remote/);
+ assert.match(client,/Open IDE to Commit/);
+ assert.match(client,/Neither button performs a Git pull or push/);
  assert.match(styles,/\.devgit__history/);
 });
