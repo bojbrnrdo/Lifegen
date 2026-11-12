@@ -90,3 +90,19 @@ test('Git branch comparison can open changed files but not deleted files',()=>{
  assert.match(client,/window\.location\.hash='#\/dev\/ide\?branch='/);
  assert.match(client,/openBranchFile\(selected,file\)/);
 });
+
+test('Git file diff is read-only, path restricted, and rendered as text',()=>{
+ assert.match(server,/app\.get\('\/api\/admin\/dev\/file-diff',requireStaff,ensureAdmin/);
+ assert.match(server,/!allowedBranch\(branch\)\|\|!allowedPath\(file\)/);
+ assert.match(server,/item\.filename===file/);
+ assert.match(server,/patch\.slice\(0,120000\)/);
+ assert.match(server,/Cache-Control','no-store'/);
+ assert.match(client,/id="gitDiffPanel"/);
+ assert.match(client,/id="gitDiffContent"/);
+ assert.match(client,/file-diff\?branch=/);
+ assert.match(client,/devgit__view-diff/);
+ assert.match(client,/el\('gitDiffContent'\)\.textContent=result\.unavailable/);
+ assert.match(client,/request!==diffRequest\|\|seq!==revision/);
+ assert.match(client,/diffRequest\+\+/);
+ assert.match(styles,/\.devgit__patch/);
+});

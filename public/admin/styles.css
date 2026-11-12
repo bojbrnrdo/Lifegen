@@ -1621,3 +1621,8 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
  .devgit__commit{align-items:flex-start}
  .devgit__commit-buttons{flex-direction:column}
 }
+
+/* Read-only Git comparison, matching the developer console's file review. */
+.devgit__patch{max-height:420px;min-height:100px;overflow:auto;padding:14px;border:1px solid var(--ink-200,#d9e3dc);border-radius:8px;background:#f7faf8;color:#1b3124;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre;tab-size:4}
+.devgit__file{gap:8px;flex-wrap:wrap}
+.devgit__file .devgit__view-diff,.devgit__file .devgit__open-file{flex:none}
