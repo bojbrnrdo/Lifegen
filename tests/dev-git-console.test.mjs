@@ -40,3 +40,13 @@ test('Refresh Remote distinguishes failed requests from successful refreshes',()
  assert.match(client,/Status unavailable/);
  assert.match(client,/return false/);
 });
+
+
+test('Concurrent same-branch refreshes cannot publish stale status, history or completion messages',()=>{
+ assert.match(client,/request=\+\+statusRequest/);
+ assert.match(client,/request!==statusRequest/);
+ assert.match(client,/request=\+\+historyRequest/);
+ assert.match(client,/request!==historyRequest/);
+ assert.match(client,/request=\+\+refreshRequest/);
+ assert.match(client,/request!==refreshRequest/);
+});
