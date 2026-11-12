@@ -467,6 +467,8 @@ $('gitChanges').addEventListener('click',async()=>{
  if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before reviewing Git changes.';return;}
  try{
   if(repoDirty&&!confirm('Discard unsaved changes to review Git status?'))return;
+  // The Git review panel replaces the editor; late file reads must not reopen it.
+  ++githubOpenSequence;
   repoDirty=false;current=null;repoFiles.clear();emptyEditor();
   const result=await repoApi('/git/status');
   const entries=result.entries.filter(x=>!x.path.includes('.env')&&!x.path.startsWith('.git'));
