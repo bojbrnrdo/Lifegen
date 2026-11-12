@@ -353,6 +353,15 @@ try {
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
+ // A slow Git status response must not replace a file selected after review began.
+ await evaluate("window.__statusFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/git/status')?new Promise(resolve=>setTimeout(()=>resolve(window.__statusFetch(url,opts)),350)):window.__statusFetch(url,opts)");
+ await evaluate("document.getElementById('gitChanges').click();document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await new Promise(r=>setTimeout(r,600));
+ assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'README.md','Late Git status must not replace selected file');
+ assert.equal(await evaluate("document.getElementById('editor').disabled"),false,'Selected file must remain editable after delayed Git status');
+ assert.equal(await evaluate("document.querySelectorAll('#tabs input[type=checkbox]').length"),0,'Late Git review must not display stale selection');
+ await evaluate("window.fetch=window.__statusFetch");
+
  await evaluate("[...document.querySelectorAll('#tree .node')].find(b=>b.textContent.includes('browser-repository.js')).click()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-repository.js'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-repository.js');
