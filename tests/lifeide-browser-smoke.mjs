@@ -413,8 +413,8 @@ try {
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Saved draft restores automatically when source file reopens');
  // Simulate upstream main changing after a browser draft was saved.
  await evaluate("(()=>{const key='lifegen.lifeide.github-draft.v1:src/components/Example.js';const draft=JSON.parse(localStorage.getItem(key));draft.base='old-github-sha';localStorage.setItem(key,JSON.stringify(draft));})()");
- await evaluate("document.querySelector('#tree .node[title=\\\"README.md\\\"]').click()");
- await evaluate("document.querySelector('#tree .node[title=\\\"src/components/Example.js\\\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Old-version draft must remain recoverable after source changes');
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Stale draft must display upstream-change warning');
 
