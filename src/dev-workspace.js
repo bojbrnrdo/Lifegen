@@ -264,13 +264,26 @@ export function registerDevWorkspace(app){
   if(process.env.VERCEL_ENV==='production')return res.status(403).json({error:'Package workflow dispatch is limited to isolated previews.'});
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
+  const paths=req.body?.paths;
+  if(paths!==undefined&&(!Array.isArray(paths)||paths.length<1||paths.length>40||
+     new Set(paths).size!==paths.length||
+     paths.some(path=>!allowedPath(path)||path.length>200)))
+   return res.status(400).json({error:'Select 1–40 unique, permitted source files for a staged package.'});
+  if(paths){
+   // Only package actual changed files on the chosen remote branch; never trust
+   // the browser-provided list without verifying the GitHub comparison.
+   const diff=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+   if((diff.files||[]).length>=100)return res.status(409).json({error:'Too many changed files to verify a staged package. Use the full-source package.'});
+   const eligible=new Set((diff.files||[]).filter(item=>item.status!=='removed'&&allowedPath(item.filename)).map(item=>item.filename));
+   if(paths.some(path=>!eligible.has(path)))return res.status(409).json({error:'The selected files are not all current changed source files. Refresh staging before packaging.'});
+  }
   const now=Date.now(),last=packageRequests.get(branch)||0;
   if(now-last<60000)return res.status(429).json({error:'A package build was recently requested for this branch. Wait one minute before retrying.'});
   packageRequests.set(branch,now);
   try{
    await request(apiRoot+'/actions/workflows/lifegen-package.yml/dispatches',{
     method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({ref:branch})
+    body:JSON.stringify({ref:branch,inputs:{paths:paths?paths.join('\n'):''}})
    });
   }catch(error){packageRequests.delete(branch);throw error;}
   res.status(202).json({ok:true,message:'Packaging workflow requested. Check GitHub Actions for the result.'});

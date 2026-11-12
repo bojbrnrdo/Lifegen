@@ -231,33 +231,87 @@ async function renderDevIDEGitHub({main,query={}}){
 export async function renderDevPackaging({main}){
  main.innerHTML=heading('Packaging','Build and package a development branch')+'<div class="card"><div class="card__body">Loading…</div></div>';
  const data=await api('status');
- main.innerHTML=heading('Packaging','Run the hosted CI build and download validated artifacts from GitHub Actions')+offline(data)+
+ main.innerHTML=heading('Packaging','Review changed files and export validated ZIP archives through GitHub Actions')+offline(data)+
  `<div class="card"><div class="card__body stack">
  <div class="field">${field}</div>
+ <div class="row"><button type="button" class="btn" id="findPackageFiles" ${data.connected?'':'disabled'}>Find Changed Files</button>
+ <label><input type="checkbox" id="packageSelectedOnly" disabled> Export selected files only</label></div>
+ <p class="small muted">Compare a feature/fix branch with develop to stage its changed files. A full-source package remains available without staging.</p>
+ <p id="packageStageStatus" role="status" class="small muted">Choose a branch and find changed files to stage.</p>
+ <div id="packageStage" class="stack" aria-label="Files available for packaging"></div>
  <button type="button" class="btn btn--primary" id="runPackage" ${data.writesEnabled?'':'disabled'}>Start packaging</button>
  <p id="packageStatus" class="small muted" role="status">Packaging runs in GitHub Actions, not on the production web server.</p>
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/actions/workflows/lifegen-package.yml" target="_blank" rel="noopener noreferrer">View runs and download ZIP ↗</a>
  <div class="row row--between"><strong>Recent package builds</strong><button type="button" class="btn btn--sm" id="refreshPackageRuns" ${data.connected?'':'disabled'}>Refresh</button></div>
  <p class="small muted" id="packageRunsStatus" role="status"></p>
- <p class="small muted">Successful runs contain downloadable artifacts on their GitHub run page. Verify SHA256SUMS.txt against LIFEGEN-source.zip before using a package when the integrity files are available.</p>
+ <p class="small muted">Successful runs contain downloadable ZIP artifacts on GitHub. Review the workflow's validation result before using any package.</p>
  <div id="packageRunsList" class="stack"></div>
  </div></div>`;
- const refreshRuns=async()=>{const status=main.querySelector('#packageRunsStatus'),list=main.querySelector('#packageRunsList');status.textContent='Loading package runs…';list.replaceChildren();
+ const el=id=>main.querySelector('#'+id);
+ const branchInput=el('devBranch'),stage=el('packageStage'),stageStatus=el('packageStageStatus'),selectedOnly=el('packageSelectedOnly');
+ let stagedBranch='',stageSequence=0,packagePending=false;
+ const selected=()=>[...stage.querySelectorAll('.package-file:checked')].map(cb=>cb.value);
+ const updateStage=()=>{
+  const count=stage.querySelectorAll('.package-file').length;
+  const valid=stagedBranch===branchInput.value.trim()&&count>0;
+  selectedOnly.disabled=!valid;
+  if(!valid)selectedOnly.checked=false;
+  if(valid)stageStatus.textContent=selected().length+' of '+count+' changed files selected for export (maximum 40).';
+ };
+ branchInput.addEventListener('input',()=>{stageSequence++;stagedBranch='';stage.replaceChildren();selectedOnly.checked=false;selectedOnly.disabled=true;stageStatus.textContent='Branch changed. Find Changed Files again before exporting selected files.';});
+ el('findPackageFiles').onclick=async()=>{
+  const branch=branchInput.value.trim(),seq=++stageSequence;
+  stagedBranch='';stage.replaceChildren();selectedOnly.checked=false;selectedOnly.disabled=true;
+  stageStatus.textContent='Comparing '+branch+' with develop…';
+  try{
+   if(!/^(develop|(?:feature|fix)\/[A-Za-z0-9._-]{1,90})$/.test(branch))throw Error('Use develop, feature/name or fix/name.');
+   const result=await api('branch-status?branch='+encodeURIComponent(branch));
+   if(seq!==stageSequence||branch!==branchInput.value.trim())return;
+   if(result.truncated)throw Error('More than 100 changed files. Staged exports cannot be safely verified; use a full-source package.');
+   const files=result.files.filter(file=>file.status!=='removed');
+   if(!files.length){stageStatus.textContent='No changed source files found. You can still export the full source.';return;}
+   stagedBranch=branch;
+   const all=document.createElement('label');all.className='row';
+   const toggle=document.createElement('input');toggle.type='checkbox';toggle.setAttribute('aria-label','Select all changed files');
+   all.append(toggle,document.createTextNode('Select all ('+Math.min(files.length,40)+' maximum)'));stage.append(all);
+   const list=document.createElement('div');list.className='stack';stage.append(list);
+   files.forEach((file,index)=>{
+    const label=document.createElement('label');label.className='row';
+    const check=document.createElement('input');check.type='checkbox';check.className='package-file';check.value=file.path;check.checked=index<40;
+    const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
+    label.append(check,name);list.append(label);
+    check.addEventListener('change',()=>{
+     if(selected().length>40){check.checked=false;stageStatus.textContent='Select at most 40 files.';return;}
+     toggle.checked=selected().length===files.length;updateStage();
+    });
+   });
+   toggle.checked=files.length<=40;
+   toggle.addEventListener('change',()=>{
+    const checks=[...list.querySelectorAll('input[type=checkbox]')];
+    checks.forEach((cb,index)=>{cb.checked=toggle.checked&&index<40;});
+    updateStage();
+   });
+   updateStage();
+  }catch(error){if(seq===stageSequence){stageStatus.textContent='Cannot stage files: '+error.message;stagedBranch='';selectedOnly.disabled=true;}}
+ };
+ const refreshRuns=async()=>{const status=el('packageRunsStatus'),list=el('packageRunsList');status.textContent='Loading package runs…';list.replaceChildren();
   try{const result=await api('package-runs');status.textContent=result.runs.length+' recent package runs';
    result.runs.forEach(run=>{const row=document.createElement('div');row.className='row row--between';const a=document.createElement('a');a.href=run.url;a.target='_blank';a.rel='noopener noreferrer';const resultLabel=run.conclusion||run.status||'Unknown';a.textContent=(run.branch||'Unknown branch')+' · '+resultLabel+(run.conclusion==='success'?' · Open artifacts ↗':' · View run ↗');const when=document.createElement('span');when.className='small muted';when.textContent=run.created_at?new Date(run.created_at).toLocaleString():'';row.append(a,when);list.append(row);});
   }catch(error){status.textContent=error.message;}
  };
- main.querySelector('#refreshPackageRuns').onclick=refreshRuns;
+ el('refreshPackageRuns').onclick=refreshRuns;
  if(data.connected)refreshRuns();
- let packagePending=false;
- main.querySelector('#runPackage').onclick=async()=>{
+ el('runPackage').onclick=async()=>{
   if(packagePending)return;
-  const button=main.querySelector('#runPackage'),status=main.querySelector('#packageStatus');
-  const branch=main.querySelector('#devBranch').value.trim();
-  if(!confirm('Start a package build for '+branch+'?'))return;
+  const button=el('runPackage'),status=el('packageStatus');
+  const branch=branchInput.value.trim(),onlySelected=selectedOnly.checked;
+  if(onlySelected&&(stagedBranch!==branch||selectedOnly.disabled)){status.textContent='Find changed files again before exporting selected files.';return;}
+  const paths=onlySelected?selected():undefined;
+  if(onlySelected&&(!paths.length||paths.length>40)){status.textContent='Select between 1 and 40 changed files.';return;}
+  if(!confirm('Start '+(onlySelected?'selected-file ('+paths.length+' files)':'full-source')+' package build for '+branch+'?'))return;
   packagePending=true;button.disabled=true;status.textContent='Requesting package build for '+branch+'…';
   try{
-   const result=await api('package',{method:'POST',body:{branch}});
+   const result=await api('package',{method:'POST',body:{branch,...(onlySelected?{paths}:{})}});
    status.textContent=result.message+' The run may take a moment to appear.';
    await refreshRuns();
   }catch(e){status.textContent=e.message;}
