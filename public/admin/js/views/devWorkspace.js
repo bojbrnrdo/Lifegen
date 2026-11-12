@@ -315,7 +315,7 @@ export async function renderDevPackaging({main}){
  <a class="btn" href="https://github.com/bojbrnrdo/Lifegen/actions/workflows/lifegen-package.yml" target="_blank" rel="noopener noreferrer">View runs and download ZIP ↗</a>
  <div class="row row--between"><strong>Recent package builds</strong><button type="button" class="btn btn--sm" id="refreshPackageRuns" ${data.connected?'':'disabled'}>Refresh</button></div>
  <p class="small muted" id="packageRunsStatus" role="status"></p>
- <p class="small muted">Successful runs contain downloadable ZIP artifacts on GitHub. Review the workflow's validation result before using any package.</p>
+ <p class="small muted">Successful runs provide LIFEGEN-source.zip, SHA256SUMS.txt and PACKAGE-MANIFEST.json together in the GitHub artifact. The manifest records the source branch, commit and selected paths. After extracting the artifact, verify the ZIP with sha256sum -c SHA256SUMS.txt on a system with sha256sum installed. Matching checksums verify integrity, not deployment safety.</p>
  <div id="packageRunsList" class="stack"></div>
  </div></div>`;
  const el=id=>main.querySelector('#'+id);
