@@ -105,6 +105,16 @@ try {
  }
  assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE event listeners must be initialized before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
+ // TransferBuilder-inspired IDE layout: explorer, editor and project tools.
+ assert.equal(await evaluate("Boolean(document.getElementById('projectTools'))"),true,'Project tools panel is present');
+ assert.equal(await evaluate("Boolean(document.getElementById('explorerResizer')&&document.getElementById('toolsResizer'))"),true,'Both IDE panel resizers are present');
+ assert.equal(await evaluate("Boolean(document.querySelector('#projectTools a[href=\"/admin#/dev/git\"]'))"),true,'Git workflow is linked');
+ assert.equal(await evaluate("Boolean(document.querySelector('#projectTools a[href=\"/admin#/dev/packaging\"]'))"),true,'Packaging workflow is linked');
+ await evaluate("document.getElementById('toggleProjectTools').click()");
+ assert.equal(await evaluate("document.getElementById('projectTools').classList.contains('is-collapsed')"),true,'Project tools can collapse');
+ await evaluate("document.getElementById('toggleProjectTools').click()");
+ assert.equal(await evaluate("document.getElementById('projectTools').classList.contains('is-collapsed')"),false,'Project tools can reopen');
+
  await evaluate("document.getElementById('newFile').click()");
  assert.equal(await evaluate("!document.getElementById('dialog').hidden"),true);
  await evaluate("document.getElementById('dialogInput').value='browser-smoke.js';document.getElementById('dialogForm').requestSubmit()");
