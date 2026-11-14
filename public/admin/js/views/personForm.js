@@ -35,8 +35,7 @@ export function personFormHtml(p = {}, { compact = false, defaults = {} } = {}) 
 
   return html`
     <div class="form-section">
-      <h3>Required</h3>
-      <p class="desc">Use the person’s name and status. Contact details are optional.</p>
+      <div class="people-form__heading"><span class="people-form__step">01</span><div><h3>Basic information</h3><p class="desc">Start with a name and status. Everything else can be completed later.</p></div></div>
       <div class="form-grid">
         ${field('first_name', 'First name', { required: true, autocomplete: 'given-name' })}
         ${field('last_name', 'Last name', { required: !p?.full_name, autocomplete: 'family-name' })}
@@ -45,9 +44,9 @@ export function personFormHtml(p = {}, { compact = false, defaults = {} } = {}) 
           <select id="f_status" name="status">${Object.entries(STATUS_LABELS).filter(([k]) => (!['visitor_3','visitor_2','visitor_1','no_returns'].includes(k) || p?.status === k) && (k !== 'inactive' || p?.status === 'inactive')).map(([k, l]) => html`<option value="${k}" ${(v('status') || 'first_timer') === k ? 'selected' : ''}>${l}</option>`)}</select></div>
       </div>
     </div>
-    <div class="form-section">
-      <h3>Optional</h3>
-      <p class="desc">Can be filled in now or completed later from the profile.</p>
+    <details class="form-section people-form__optional" ${p?.id ? 'open' : ''}>
+      <summary class="people-form__optional-summary"><span class="people-form__step">02</span><span><strong>Additional details</strong><small>Photo, contact information, consent and background · optional</small></span><span class="people-form__expand">Expand / collapse</span></summary>
+      <div class="people-form__optional-content">
       <div class="photo-picker mb-2">
         <span class="avatar avatar--lg" id="photoPreview">${p?.photo ? raw(`<img src="${p.photo}" alt="" />`) : (p?.first_name ? initials(p) : raw(icon('user', 28).value))}</span>
         <div>
@@ -84,7 +83,8 @@ export function personFormHtml(p = {}, { compact = false, defaults = {} } = {}) 
         ${field('date_first_attended', 'Date first attended', { type: 'date', help: 'Set automatically on the first recorded Sunday if left blank.' })}
         ${field('notes', 'Notes', { type: 'textarea', span: true })}`}
       </div>
-    </div>
+      </div>
+    </details>
 `;
 }
 
