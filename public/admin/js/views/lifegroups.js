@@ -689,7 +689,8 @@ export async function renderLifegroup({ main }, id) {
             <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No cell leaders yet.${manage ? raw(' Use <b>Add member</b> to add up to 12 cell leaders.') : ''}</p></div>`}
         </div>
       </div>` : html`<div class="card lifegroup-detail__members">
-        <div class="card__header"><h2>${icon('people',18)} Members</h2><span class="hint">${g.member_count} / 12</span></div>
+        <div class="card__header lifegroup-detail__members-head"><div><h2>${icon('people',18)} Members</h2><p class="small muted">Find a member or open their profile to see more details.</p></div><span class="hint">${g.member_count} / 12</span></div>
+        ${g.members.length>5?html`<div class="lifegroup-detail__member-search"><label for="cellMemberSearch" class="sr-only">Find a Cell member</label>${icon('search',16)} <input type="search" id="cellMemberSearch" placeholder="Find a member…" autocomplete="off" /><span id="cellMemberCount" class="small muted">${g.members.length} members</span></div>`:''}
         <div class="card__body card__body--flush" id="membersCard">
           ${g.members.length ? html`<div class="lifegroup-detail__people">${g.members.map(m=>html`
             <div class="lifegroup-detail__person">
@@ -707,7 +708,7 @@ export async function renderLifegroup({ main }, id) {
             </div>`)}</div>` : html`<div class="lifegroup-detail__empty">${icon('people',25)}<p>No members yet.</p>${manage ? raw('<p class="small muted">Select Add member to get started.</p>') : ''}</div>`}
         </div>
       </div>`}
-      <details class="card lifegroup-detail__info">
+      <details class="card lifegroup-detail__info" id="leadershipSection">
         <summary class="card__header">${icon('link',18)} <h2>Network & leadership</h2>${icon('chevR',16)}</summary>
         <div class="card__body"><dl class="dl">
           <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a>${g.leader_contact ? html` <span class="small muted">· ${g.leader_contact}</span>` : ''}</dd>` : g.leader_name ? html`<dd>${g.leader_name} <span class="small muted">(not registered)</span></dd>` : raw('<dd class="none">—</dd>')}</div>
@@ -717,11 +718,25 @@ export async function renderLifegroup({ main }, id) {
       </details>
     </div>
     <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>Attendance &amp; progress</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
-    ${g.former.length ? html`<details class="card mt-2"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
+    ${g.former.length ? html`<details class="card mt-2" id="formerMembersSection"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
       <div class="card__body"><ul class="small" style="margin:0 0 0 18px;columns:2;column-gap:24px">${g.former.map((f) => html`<li><a href="#/people/${f.id}">${fullName(f)}</a> <span class="muted">· ${fmtDate(f.joined_at, { short: true })} → ${fmtDate(f.left_at, { short: true })}</span></li>`)}</ul></div></details>` : ''}
     ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}
   </section>`;
 
+  const memberSearch=main.querySelector('#cellMemberSearch');
+  if(memberSearch){
+    const rows=[...main.querySelectorAll('.lifegroup-detail__people .lifegroup-detail__person')];
+    const count=main.querySelector('#cellMemberCount');
+    memberSearch.addEventListener('input',()=>{
+      const term=memberSearch.value.trim().toLocaleLowerCase();
+      let shown=0;
+      rows.forEach(row=>{
+        const matched=row.querySelector('.lifegroup-detail__person-info strong')?.textContent?.toLocaleLowerCase().includes(term);
+        row.hidden=!matched;if(matched)shown++;
+      });
+      count.textContent=shown+' of '+rows.length+' members';
+    });
+  }
   const progressDisclosure=main.querySelector('#progressDisclosure');
   progressDisclosure.addEventListener('toggle',()=>{
     if(!progressDisclosure.open||progressDisclosure.dataset.loaded)return;

@@ -64,3 +64,14 @@ test('Existing schedule, venue and notes are preserved by server-side update sem
   assert.match(networkPage, /renderNetworkCalendar\(/);
   assert.doesNotMatch(networkPage, /\$\{n\.notes \? html/);
 });
+
+test('Cell profile keeps members primary and offers a compact search for larger Cells',()=>{
+ assert.match(groupPage,/id="membersCard"/);
+ assert.match(groupPage,/id="cellMemberSearch"/);
+ assert.match(groupPage,/g\.members\.length>5/);
+ assert.match(groupPage,/memberSearch\.addEventListener\('input'/);
+ assert.match(groupPage,/row\.hidden=!matched/);
+ assert.doesNotMatch(groupPage,/lifegroup-detail__nav/);
+ assert.match(groupPage,/id="progressDisclosure"/);
+ assert.match(groupPage,/<h2>Network & leadership<\/h2>/);
+});

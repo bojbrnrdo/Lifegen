@@ -1705,3 +1705,12 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__cell-list li span{font-size:.78rem;color:var(--muted)}
 .lifegroups-page__cell-list .btn{flex-shrink:0}
 @media(max-width:650px){.lifegroups-page__viewhint{width:100%;margin-left:0;padding:4px 10px}.lifegroups-page__cell-list li{align-items:flex-start}}
+
+/* Focused Cell member management: compact search, no extra navigation bar. */
+.lifegroup-detail__members-head{align-items:center}
+.lifegroup-detail__members-head p{margin:4px 0 0}
+.lifegroup-detail__member-search{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--ink-100,#e8eee9)}
+.lifegroup-detail__member-search input{flex:1;min-width:0;width:100%;border:1px solid var(--ink-200,#dce5df);border-radius:9px;padding:9px 12px}
+.lifegroup-detail__member-search span{white-space:nowrap}
+.lifegroup-detail__person[hidden]{display:none!important}
+@media(max-width:600px){.lifegroup-detail__member-search{padding:12px}.lifegroup-detail__member-search span{font-size:.7rem}}
