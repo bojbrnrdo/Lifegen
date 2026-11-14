@@ -1661,3 +1661,8 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .people-directory__contact{font-size:.83rem;overflow-wrap:anywhere}
 .people-directory__view{white-space:nowrap}
 @media(max-width:740px){.people-directory__intro{padding:18px;align-items:flex-start}.people-directory__controls{padding:0 18px 16px;flex-direction:column}.people-directory__sort{justify-content:space-between}.people-directory__sort select{flex:1}.people-directory__tabs{padding:0 10px}.people-directory__summary{padding:12px 18px}.people-directory__hint{display:none}.people-directory__result strong{font-size:1.25rem}.people-directory__intro h2{font-size:1.05rem}}
+
+.people-profile__tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.people-profile__tab{display:inline-flex;align-items:center;padding:9px 14px;border:1px solid var(--ink-200,#dce5e0);border-radius:9px;background:var(--surface,#fff);color:var(--text,#25352c);font-size:.85rem;font-weight:600;text-decoration:none}
+.people-profile__tab:hover,.people-profile__tab:focus-visible{border-color:var(--green-500,#448c68);color:var(--green-700,#286d48)}
+#personDetails,#personAttendance{scroll-margin-top:90px}
