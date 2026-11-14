@@ -77,3 +77,16 @@ test('leadership, attendance and history remain available as expandable sections
  assert.match(detail, /api\.setTier/);
  assert.match(detail, /bindMemberActions/);
 });
+
+test('Lifegroups directory offers an accessible alternate view without removing the map',()=>{
+ const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
+ for(const id of ['showGroupMap','showGroupDirectory','lifegroupsDirectory','treeCanvas','treeQ','treeStatus'])
+  assert.ok(page.includes('id="'+id+'"'),id);
+ assert.match(page,/aria-label="Lifegroups view"/);
+ assert.match(page,/aria-pressed/);
+ assert.match(page,/const renderDirectory=/);
+ assert.match(page,/renderDirectory\(\)/);
+ assert.match(page,/href="#\/lifegroups\/\$\{g.id\}"/);
+ assert.match(page,/switchView\('directory'\)/);
+ assert.match(css,/\.lifegroups-page__directory-grid/);
+});

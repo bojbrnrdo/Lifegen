@@ -1682,3 +1682,26 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .people-form__optional-content{padding:20px 24px}
 .people-form__optional-summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-4px;border-radius:8px}
 @media(max-width:640px){.people-form__optional-summary{padding:16px;gap:10px}.people-form__optional-content{padding:16px}.people-form__expand{display:none}}
+
+/* LifeGroups directory: a simple alternative to the interactive network map. */
+.lifegroups-page__viewbar{display:flex;align-items:center;gap:6px;margin:16px 0 12px;padding:5px;border:1px solid var(--ink-200,#dae5df);background:var(--surface,#fff);border-radius:12px;flex-wrap:wrap}
+.lifegroups-page__view{border:0;border-radius:8px;background:transparent;padding:10px 16px;color:var(--muted);font-size:.85rem;font-weight:650;cursor:pointer}
+.lifegroups-page__view.is-active{background:var(--ink-100,#e9f3ed);color:var(--green-700,#276d49)}
+.lifegroups-page__view:focus-visible{outline:2px solid var(--green-500,#3f9062);outline-offset:2px}
+.lifegroups-page__viewhint{margin-left:auto;color:var(--muted);font-size:.77rem;padding:0 10px}
+.lifegroups-page__directory[hidden],#treeCanvas[hidden]{display:none!important}
+.lifegroups-page__directory-head{margin:18px 0 14px}
+.lifegroups-page__directory-head h2{font-size:1.16rem;margin:0 0 4px}
+.lifegroups-page__directory-head p{margin:0}
+.lifegroups-page__directory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.lifegroups-page__network-card{min-width:0;height:100%}
+.lifegroups-page__network-title{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.lifegroups-page__network-title h3{margin:3px 0 5px;overflow-wrap:anywhere}
+.lifegroups-page__network-title p{margin:0}
+.lifegroups-page__network-count{font-size:.82rem;font-weight:650;margin:16px 0 10px;color:var(--muted)}
+.lifegroups-page__cell-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__cell-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__cell-list li>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+.lifegroups-page__cell-list li span{font-size:.78rem;color:var(--muted)}
+.lifegroups-page__cell-list .btn{flex-shrink:0}
+@media(max-width:650px){.lifegroups-page__viewhint{width:100%;margin-left:0;padding:4px 10px}.lifegroups-page__cell-list li{align-items:flex-start}}
