@@ -299,3 +299,47 @@ body.vip-fs-open{overflow:hidden}
 @media (max-width:640px){.to-top{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:44px;height:44px}.to-top svg{width:17px;height:17px}}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.to-top,.to-top.show,.to-top.show:hover,.to-top.show:active{transition:opacity .2s;transform:none}}
 
+
+/* Dropdown Menu */
+.nav-links .dropdown { position: relative; }
+.nav-links .dropdown-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--card);
+  min-width: 160px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 0;
+  list-style: none;
+  z-index: 101;
+}
+.nav-links .dropdown:hover .dropdown-content {
+  display: flex;
+  flex-direction: column;
+}
+.nav .nav-links .dropdown-content a {
+  padding: 8px 16px;
+  color: var(--ink-2) !important;
+  text-shadow: none !important;
+  display: block;
+}
+.nav .nav-links .dropdown-content a::after {
+  display: none;
+}
+.nav .nav-links .dropdown-content a:hover {
+  background: var(--paper-2);
+  color: var(--ink) !important;
+}
+.nav-links .dropdown .dropbtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-links .dropdown .dropbtn span {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-left: 2px;
+}
