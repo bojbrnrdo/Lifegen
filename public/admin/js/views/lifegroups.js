@@ -661,6 +661,12 @@ export async function renderLifegroup({ main }, id) {
       ${manage ? html`<div class="page-actions"><button class="btn btn--primary" id="addMember">${icon('plus')} Add member</button><button class="btn" id="editGroup" title="Edit Cell Leader">${icon('edit')} Edit</button>${!g.leads_network && g.is_active ? html`<button class="btn" id="removeCellLeader">${icon('trash',16)} Remove</button>` : ''}</div>` : ''}
     </div>
 
+    <nav class="lifegroup-detail__nav" aria-label="Cell profile sections">
+      <button type="button" class="lifegroup-detail__nav-link is-active" data-cell-section="membersCard">Members <span>${g.member_count}</span></button>
+      <button type="button" class="lifegroup-detail__nav-link" data-cell-section="leadershipSection">Leadership</button>
+      <button type="button" class="lifegroup-detail__nav-link" data-cell-section="progressDisclosure">Attendance &amp; progress</button>
+      ${g.former.length?html`<button type="button" class="lifegroup-detail__nav-link" data-cell-section="formerMembersSection">Former members <span>${g.former.length}</span></button>`:''}
+    </nav>
     <div class="lifegroup-detail__stats">
       ${g.leads_network ? html`
         <div class="lifegroup-detail__stat">${icon('user',18)} <div><small>Cell Leaders</small><strong>${g.member_count}<span> / ${g.max_members}</span></strong></div></div>
@@ -707,7 +713,7 @@ export async function renderLifegroup({ main }, id) {
             </div>`)}</div>` : html`<div class="lifegroup-detail__empty">${icon('people',25)}<p>No members yet.</p>${manage ? raw('<p class="small muted">Select Add member to get started.</p>') : ''}</div>`}
         </div>
       </div>`}
-      <details class="card lifegroup-detail__info">
+      <details class="card lifegroup-detail__info" id="leadershipSection">
         <summary class="card__header">${icon('link',18)} <h2>Network & leadership</h2>${icon('chevR',16)}</summary>
         <div class="card__body"><dl class="dl">
           <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a>${g.leader_contact ? html` <span class="small muted">· ${g.leader_contact}</span>` : ''}</dd>` : g.leader_name ? html`<dd>${g.leader_name} <span class="small muted">(not registered)</span></dd>` : raw('<dd class="none">—</dd>')}</div>
@@ -717,11 +723,19 @@ export async function renderLifegroup({ main }, id) {
       </details>
     </div>
     <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>Attendance &amp; progress</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
-    ${g.former.length ? html`<details class="card mt-2"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
+    ${g.former.length ? html`<details class="card mt-2" id="formerMembersSection"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
       <div class="card__body"><ul class="small" style="margin:0 0 0 18px;columns:2;column-gap:24px">${g.former.map((f) => html`<li><a href="#/people/${f.id}">${fullName(f)}</a> <span class="muted">· ${fmtDate(f.joined_at, { short: true })} → ${fmtDate(f.left_at, { short: true })}</span></li>`)}</ul></div></details>` : ''}
     ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}
   </section>`;
 
+  main.querySelectorAll('[data-cell-section]').forEach(button=>button.addEventListener('click',()=>{
+    const sectionId=button.dataset.cellSection;
+    const target=main.querySelector('#'+sectionId);
+    if(!target)return;
+    if(target.tagName==='DETAILS')target.open=true;
+    main.querySelectorAll('[data-cell-section]').forEach(item=>item.classList.toggle('is-active',item===button));
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+  }));
   const progressDisclosure=main.querySelector('#progressDisclosure');
   progressDisclosure.addEventListener('toggle',()=>{
     if(!progressDisclosure.open||progressDisclosure.dataset.loaded)return;
