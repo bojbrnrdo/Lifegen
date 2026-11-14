@@ -1666,3 +1666,19 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .people-profile__tab{display:inline-flex;align-items:center;padding:9px 14px;border:1px solid var(--ink-200,#dce5e0);border-radius:9px;background:var(--surface,#fff);color:var(--text,#25352c);font-size:.85rem;font-weight:600;text-decoration:none}
 .people-profile__tab:hover,.people-profile__tab:focus-visible{border-color:var(--green-500,#448c68);color:var(--green-700,#286d48)}
 #personDetails,#personAttendance{scroll-margin-top:90px}
+
+/* Progressive person registration: essential fields first, details on demand. */
+.people-form__heading{display:flex;align-items:flex-start;gap:13px}
+.people-form__heading h3{margin:0 0 5px}
+.people-form__step{display:inline-grid;place-items:center;flex:none;width:34px;height:34px;border-radius:11px;background:var(--ink-100,#edf5ee);color:var(--green-700,#226a41);font-size:.75rem;font-weight:800}
+.people-form__optional{padding:0!important;overflow:visible}
+.people-form__optional-summary{list-style:none;display:flex;align-items:center;gap:13px;cursor:pointer;padding:22px 24px}
+.people-form__optional-summary::-webkit-details-marker{display:none}
+.people-form__optional-summary>span:nth-child(2){flex:1;min-width:0}
+.people-form__optional-summary strong{display:block;font-size:1rem}
+.people-form__optional-summary small{display:block;margin-top:3px;font-size:.8rem;color:var(--muted)}
+.people-form__expand{font-size:.75rem;color:var(--muted);font-weight:600}
+.people-form__optional[open] .people-form__optional-summary{border-bottom:1px solid var(--ink-100,#e8eee8)}
+.people-form__optional-content{padding:20px 24px}
+.people-form__optional-summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-4px;border-radius:8px}
+@media(max-width:640px){.people-form__optional-summary{padding:16px;gap:10px}.people-form__optional-content{padding:16px}.people-form__expand{display:none}}
