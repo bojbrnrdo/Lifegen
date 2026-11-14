@@ -39,8 +39,12 @@ export async function renderPerson({ main }, id) {
     </div>
 
 
+    <nav class="people-profile__tabs" aria-label="Profile sections">
+      <button type="button" data-profile-section="personDetails" class="people-profile__tab">Personal details</button>
+      <button type="button" data-profile-section="personAttendance" class="people-profile__tab">Attendance history</button>
+    </nav>
     <div class="grid grid--2">
-      <div class="card">
+      <div class="card" id="personDetails">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
           ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`, true)}
@@ -59,7 +63,7 @@ export async function renderPerson({ main }, id) {
         </dl></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="personAttendance">
         <div class="card__header"><h2>Attendance history</h2><span class="hint">${present.length} Sunday${present.length === 1 ? '' : 's'} present</span></div>
         <div class="card__body card__body--flush">
           ${p.history.length ? html`<ul class="timeline" style="padding:4px 20px">
@@ -81,6 +85,8 @@ export async function renderPerson({ main }, id) {
         <button class="btn btn--ghost small" id="archiveBtn" style="color:var(--muted)" title="Hide from lists; keep history">Archive</button>
       </span>
     </div>` : ''}`;
+
+  main.querySelectorAll('[data-profile-section]').forEach(button=>button.addEventListener('click',()=>main.querySelector('#'+button.dataset.profileSection)?.scrollIntoView({behavior:'smooth',block:'start'})));
 
   main.querySelector('#archiveBtn')?.addEventListener('click', async (e) => {
     const ok = await confirmDialog({
