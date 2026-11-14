@@ -11,21 +11,25 @@
     "version": "2.3.11",
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
+  "/lifegen/circular-carousel.js": {
+    "version": "1.0.1",
+    "sha256": "b18b37b4dd3c46bbad5a9a1f9a55c8d263f109abe556b97feba86e555bb62e5d"
+  },
   "/lifegen/styles.css": {
-    "version": "2.4.24",
-    "sha256": "1a4f021ea6d17df137a96d078421054ee15ebeca2200a2522e92dd85364970ea"
+    "version": "2.4.25",
+    "sha256": "46b9080d91bb149356c8bd60b441d8d892cfea9fe2d1aa31214a7f873f4c59d9"
   },
   "/lifegen/videos.js": {
-    "version": "2.4.11",
-    "sha256": "d3b37066fbedaf93ff8dca88f1a37c46ea79d8f8984205e36c5576e8101298bb"
+    "version": "2.4.12",
+    "sha256": "8773d27afa5cc048852ae5b15398971f4a37d92369a75e903c12750082f8ef3f"
   },
   "/lifegen/youth-welfare-registration.css": {
     "version": "2.4.25",
     "sha256": "0999d4d8433164ecd9c8133ed578bcb096f7105e27a0ac8b152b40dc684304c9"
   },
   "/vendor/lucide-subset.min.js": {
-    "version": "2.3.1",
-    "sha256": "b222472fc3b3da350fe8e4440de861d549a1a899d8fa8244b890c6f5eac65f28"
+    "version": "2.3.2",
+    "sha256": "3c1d3fdbed57fd02fa245e8559e6a8341c0d0cc20899c6b055a60907d9cf7382"
   },
   "/vip-announce/app.js": {
     "version": "2.5.7",

@@ -21,7 +21,7 @@ const USED = [
   'calendar-plus', 'check', 'chevron-left', 'chevron-right', 'clock', 'clock-3',
   'copy', 'heart', 'heart-handshake', 'image', 'info', 'leaf', 'lock', 'map-pin',
   'menu', 'message-circle', 'message-circle-heart', 'mouse-pointer-click',
-  'pen-line', 'play', 'refresh-cw', 'send', 'share-2', 'shield-check', 'sparkles',
+  'pen-line', 'play', 'refresh-cw', 'rotate-3d', 'send', 'share-2', 'shield-check', 'sparkles',
   'trophy', 'x',
 ];
 
