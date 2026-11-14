@@ -1706,12 +1706,11 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__cell-list .btn{flex-shrink:0}
 @media(max-width:650px){.lifegroups-page__viewhint{width:100%;margin-left:0;padding:4px 10px}.lifegroups-page__cell-list li{align-items:flex-start}}
 
-/* Cell profile shortcuts: clear member, leadership and attendance navigation. */
-.lifegroup-detail__nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:7px;margin:18px 0;border:1px solid var(--ink-200,#dce5e0);border-radius:13px;background:var(--surface,#fff)}
-.lifegroup-detail__nav-link{display:inline-flex;align-items:center;gap:7px;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:11px 14px;font-size:.84rem;font-weight:650;cursor:pointer}
-.lifegroup-detail__nav-link span{font-size:.73rem;border-radius:6px;padding:2px 6px;background:var(--ink-100,#edf2ee)}
-.lifegroup-detail__nav-link:hover{background:var(--ink-50,#f6f9f6)}
-.lifegroup-detail__nav-link.is-active{background:var(--ink-100,#e8f3ec);color:var(--green-700,#286c48)}
-.lifegroup-detail__nav-link:focus-visible{outline:2px solid var(--green-500,#438e61);outline-offset:2px}
-#membersCard,#leadershipSection,#progressDisclosure,#formerMembersSection{scroll-margin-top:90px}
-@media(max-width:640px){.lifegroup-detail__nav{gap:3px}.lifegroup-detail__nav-link{padding:10px;font-size:.8rem}}
+/* Focused Cell member management: compact search, no extra navigation bar. */
+.lifegroup-detail__members-head{align-items:center}
+.lifegroup-detail__members-head p{margin:4px 0 0}
+.lifegroup-detail__member-search{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--ink-100,#e8eee9)}
+.lifegroup-detail__member-search input{flex:1;min-width:0;width:100%;border:1px solid var(--ink-200,#dce5df);border-radius:9px;padding:9px 12px}
+.lifegroup-detail__member-search span{white-space:nowrap}
+.lifegroup-detail__person[hidden]{display:none!important}
+@media(max-width:600px){.lifegroup-detail__member-search{padding:12px}.lifegroup-detail__member-search span{font-size:.7rem}}
