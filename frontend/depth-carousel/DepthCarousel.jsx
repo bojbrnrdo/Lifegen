@@ -1,10 +1,17 @@
 // DepthCarousel — react-bits, JS-CSS variant.
 // Vendored from the @react-bits/DepthCarousel-JS-CSS shadcn registry item.
-// Deviations from upstream (both required to fit the LIFEGEN page, keep in
-// sync when updating): 'use client' and the CSS import are stripped (the CSS
-// lives in public/lifegen/styles.css), the wheel handler only captures
-// horizontal scrolling so the page still scrolls vertically over the
-// carousel, and card images load lazily like the rest of the site gallery.
+// Deviations from upstream (all required to fit the LIFEGEN page, keep in
+// sync when updating):
+//   - 'use client' and the CSS import are stripped (the CSS lives in
+//     public/lifegen/styles.css).
+//   - The wheel handler only captures horizontal scrolling so the page still
+//     scrolls vertically over the carousel.
+//   - Card images load lazily like the rest of the site gallery.
+//   - Performance adaptations so a 48-card rail stays smooth: the layout loop
+//     caches each card's last written styles and skips identical writes,
+//     cards outside the visible window are frozen with visibility:hidden
+//     instead of being restyled every frame, and pointer/wheel input is
+//     coalesced to one layout per animation frame.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 
@@ -61,8 +68,11 @@ const DepthCarousel = ({
 
   const dragRef = useRef(null);
   const wheelTimerRef = useRef(null);
+  const wheelRafRef = useRef(0);
+  const wheelPendingRef = useRef(0);
   const autoTimerRef = useRef(null);
   const reducedRef = useRef(false);
+  const cardCache = useRef([]);
 
   const [active, setActive] = useState(0);
 
@@ -93,6 +103,7 @@ const DepthCarousel = ({
     for (let i = 0; i < n; i++) {
       const el = cardRefs.current[i];
       if (!el) continue;
+      const cache = cardCache.current[i] || (cardCache.current[i] = {});
 
       let d = i - pos;
       if (cfg.loop && n > 1) {
@@ -103,6 +114,10 @@ const DepthCarousel = ({
       const back = Math.max(0, d);
       const az = Math.abs(d);
       const shown = az <= cfg.visibleCards + 0.5;
+
+      // Cards parked outside the visible window are already frozen with
+      // visibility:hidden — leave them untouched until they return.
+      if (!shown && cache.vis === 'hidden') continue;
 
       const tz = -cfg.depth * d;
       const tx = dir * cfg.spread * d;
@@ -115,14 +130,33 @@ const DepthCarousel = ({
       const blurPx = cfg.blur > 0 ? Math.min(cfg.blur, (back / Math.max(1, cfg.visibleCards)) * cfg.blur) : 0;
       const zi = Math.round(2000 - d * 20);
 
-      el.style.transform = `translate(-50%, -50%) scale(${sc}) translateX(${tx.toFixed(2)}px) translateZ(${tz.toFixed(2)}px) rotateY(${ry.toFixed(3)}deg)`;
-      el.style.opacity = opacity.toFixed(3);
-      el.style.filter = `brightness(${brightness.toFixed(3)}) blur(${blurPx.toFixed(2)}px)`;
-      el.style.zIndex = String(zi);
-      el.style.pointerEvents = shown && opacity > 0.05 ? 'auto' : 'none';
+      // Quantize the continuously-animated values, then only touch the DOM
+      // when a quantized value actually changes: identical frames cost
+      // nothing, and blur/brightness repaint far less often.
+      const t = `translate(-50%, -50%) scale(${sc}) translateX(${tx.toFixed(2)}px) translateZ(${tz.toFixed(2)}px) rotateY(${ry.toFixed(3)}deg)`;
+      const oq = Math.round(opacity * 250) / 250;
+      const o = oq.toFixed(3);
+      const b = (Math.round(brightness * 100) / 100).toFixed(2);
+      const bl = (Math.round(blurPx * 4) / 4).toFixed(2);
+
+      if (cache.t !== t) { el.style.transform = t; cache.t = t; }
+      if (cache.o !== o) { el.style.opacity = o; cache.o = o; }
+      if (cache.b !== b || cache.bl !== bl) {
+        el.style.filter = `brightness(${b}) blur(${bl}px)`;
+        cache.b = b;
+        cache.bl = bl;
+      }
+      if (cache.zi !== zi) { el.style.zIndex = String(zi); cache.zi = zi; }
+      const vis = shown ? '' : 'hidden';
+      if (cache.vis !== vis) { el.style.visibility = vis; cache.vis = vis; }
+      const pe = shown && oq > 0.05 ? 'auto' : 'none';
+      if (cache.pe !== pe) { el.style.pointerEvents = pe; cache.pe = pe; }
 
       const ov = overlayRefs.current[i];
-      if (ov) ov.style.opacity = clamp(back * cfg.falloff * 1.25, 0, 0.86).toFixed(3);
+      if (ov) {
+        const oo = (Math.round(clamp(back * cfg.falloff * 1.25, 0, 0.86) * 100) / 100).toFixed(2);
+        if (cache.oo !== oo) { ov.style.opacity = oo; cache.oo = oo; }
+      }
     }
   }, []);
 
@@ -205,11 +239,18 @@ const DepthCarousel = ({
       if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
       e.preventDefault();
       tweenRef.current?.kill();
+      // Coalesce wheel bursts into one layout per frame.
       const raw = e.deltaX;
-      const delta = e.deltaMode === 1 ? raw * 24 : raw;
-      const step = clamp(delta / (cfg.cardWidth * 0.9), -0.6, 0.6);
-      posRef.current += step;
-      layout(posRef.current);
+      wheelPendingRef.current += e.deltaMode === 1 ? raw * 24 : raw;
+      if (!wheelRafRef.current) {
+        wheelRafRef.current = requestAnimationFrame(() => {
+          wheelRafRef.current = 0;
+          const step = clamp(wheelPendingRef.current / (cfgRef.current.cardWidth * 0.9), -0.6, 0.6);
+          wheelPendingRef.current = 0;
+          posRef.current += step;
+          layout(posRef.current);
+        });
+      }
       if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
       wheelTimerRef.current = setTimeout(() => setFocus(Math.round(posRef.current), true), 130);
     };
@@ -217,6 +258,9 @@ const DepthCarousel = ({
     return () => {
       el.removeEventListener('wheel', onWheel);
       if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+      if (wheelRafRef.current) cancelAnimationFrame(wheelRafRef.current);
+      wheelRafRef.current = 0;
+      wheelPendingRef.current = 0;
     };
   }, [layout, setFocus]);
 
@@ -227,47 +271,69 @@ const DepthCarousel = ({
     dragRef.current = {
       x: e.clientX,
       startPos: posRef.current,
+      latestX: e.clientX,
       lastX: e.clientX,
       lastT: performance.now(),
       v: 0,
       moved: false,
+      raf: 0,
       id: e.pointerId
     };
   }, []);
+
+  const applyDragFrame = useCallback(
+    drag => {
+      const cfg = cfgRef.current;
+      const stepPx = Math.max(cfg.cardWidth * 0.55 * scaleRef.current, 40);
+      const now = performance.now();
+      const dt = Math.max(now - drag.lastT, 1);
+      drag.v = (drag.latestX - drag.lastX) / dt;
+      drag.lastX = drag.latestX;
+      drag.lastT = now;
+      posRef.current = drag.startPos - (drag.latestX - drag.x) / stepPx;
+      layout(posRef.current);
+    },
+    [layout]
+  );
 
   const onPointerMove = useCallback(
     e => {
       const drag = dragRef.current;
       if (!drag) return;
-      const cfg = cfgRef.current;
-      const stepPx = Math.max(cfg.cardWidth * 0.55 * scaleRef.current, 40);
-      const dx = e.clientX - drag.x;
-      if (!drag.moved && Math.abs(dx) > 4) {
+      drag.latestX = e.clientX;
+      if (!drag.moved) {
+        if (Math.abs(e.clientX - drag.x) <= 4) return;
         drag.moved = true;
-        rootRef.current?.setPointerCapture(drag.id);
+        try {
+          rootRef.current?.setPointerCapture(drag.id);
+        } catch {}
       }
-      if (!drag.moved) return;
-      const now = performance.now();
-      const dt = Math.max(now - drag.lastT, 1);
-      drag.v = (e.clientX - drag.lastX) / dt;
-      drag.lastX = e.clientX;
-      drag.lastT = now;
-      posRef.current = drag.startPos - dx / stepPx;
-      layout(posRef.current);
+      // Coalesce fast pointer streams into one layout per animation frame.
+      if (!drag.raf) {
+        drag.raf = requestAnimationFrame(() => {
+          drag.raf = 0;
+          if (dragRef.current === drag) applyDragFrame(drag);
+        });
+      }
     },
-    [layout]
+    [applyDragFrame]
   );
 
   const onPointerEnd = useCallback(() => {
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
+    if (drag.raf) {
+      cancelAnimationFrame(drag.raf);
+      drag.raf = 0;
+    }
     if (!drag.moved) return;
+    applyDragFrame(drag);
     const cfg = cfgRef.current;
     const stepPx = Math.max(cfg.cardWidth * 0.55 * scaleRef.current, 40);
     const projected = posRef.current - (drag.v * 180) / stepPx;
     setFocus(Math.round(projected), true);
-  }, [setFocus]);
+  }, [applyDragFrame, setFocus]);
 
   const onKeyDown = useCallback(
     e => {
@@ -343,7 +409,10 @@ const DepthCarousel = ({
     () => () => {
       tweenRef.current?.kill();
       if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+      if (wheelRafRef.current) cancelAnimationFrame(wheelRafRef.current);
       if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+      const drag = dragRef.current;
+      if (drag?.raf) cancelAnimationFrame(drag.raf);
     },
     []
   );
