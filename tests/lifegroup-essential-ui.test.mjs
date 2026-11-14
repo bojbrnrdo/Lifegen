@@ -64,3 +64,13 @@ test('Existing schedule, venue and notes are preserved by server-side update sem
   assert.match(networkPage, /renderNetworkCalendar\(/);
   assert.doesNotMatch(networkPage, /\$\{n\.notes \? html/);
 });
+
+test('Cell profile shortcuts reveal leadership and progress sections without changing routes',()=>{
+ for(const section of ['membersCard','leadershipSection','progressDisclosure','formerMembersSection'])
+  assert.ok(groupPage.includes('data-cell-section="'+section+'"'),section);
+ assert.match(groupPage,/aria-label="Cell profile sections"/);
+ assert.match(groupPage,/target\.tagName==='DETAILS'\)target\.open=true/);
+ assert.match(groupPage,/target\.scrollIntoView/);
+ assert.match(groupPage,/id="leadershipSection"/);
+ assert.match(groupPage,/id="formerMembersSection"/);
+});
