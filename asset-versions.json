@@ -11,13 +11,13 @@
     "version": "2.3.11",
     "sha256": "69d6f3def99fe236f1f7a975f4fdac94cec8889cefa0d42721a899d5af642b6b"
   },
-  "/lifegen/circular-carousel.js": {
-    "version": "1.0.1",
-    "sha256": "b18b37b4dd3c46bbad5a9a1f9a55c8d263f109abe556b97feba86e555bb62e5d"
+  "/lifegen/depth-carousel.js": {
+    "version": "1.0.0",
+    "sha256": "70c1044bcf25bc8486ec2a952548c0620415ada7ed1d2479cd4734bf3fa47add"
   },
   "/lifegen/styles.css": {
-    "version": "2.4.25",
-    "sha256": "46b9080d91bb149356c8bd60b441d8d892cfea9fe2d1aa31214a7f873f4c59d9"
+    "version": "2.4.26",
+    "sha256": "a320e23ec1ed70e6b1d98164c0edde579a17cf4c835a9b0e50f657f665f4a61a"
   },
   "/lifegen/videos.js": {
     "version": "2.4.12",
