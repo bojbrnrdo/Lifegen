@@ -319,10 +319,16 @@ export async function renderLifegroups({main, query}) {
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
+ <div class="lifegroups-page__viewbar" role="group" aria-label="Lifegroups view">
+  <button type="button" class="lifegroups-page__view is-active" id="showGroupMap" aria-pressed="true">Network map</button>
+  <button type="button" class="lifegroups-page__view" id="showGroupDirectory" aria-pressed="false">Directory</button>
+  <span class="lifegroups-page__viewhint">Switch views without losing your search or filters.</span>
+ </div>
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
+ <div id="lifegroupsDirectory" class="lifegroups-page__directory" hidden aria-label="Networks and Cell Leaders"></div>
  <div class="lifegroups-page__extras">
  <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>All People</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
@@ -335,7 +341,48 @@ export async function renderLifegroups({main, query}) {
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
  main.querySelector('#treeStatus').value=filters.status;
- const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
+ const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');
+ const directory=main.querySelector('#lifegroupsDirectory');
+ const mapButton=main.querySelector('#showGroupMap'),directoryButton=main.querySelector('#showGroupDirectory');
+ let view='map',cache=null,sequence=0;
+ const switchView=next=>{
+  view=next==='directory'?'directory':'map';
+  canvas.hidden=view!=='map';directory.hidden=view!=='directory';
+  mapButton.classList.toggle('is-active',view==='map');directoryButton.classList.toggle('is-active',view==='directory');
+  mapButton.setAttribute('aria-pressed',String(view==='map'));directoryButton.setAttribute('aria-pressed',String(view==='directory'));
+ };
+ mapButton.onclick=()=>switchView('map');
+ directoryButton.onclick=()=>switchView('directory');
+ const renderDirectory=()=>{
+  if(!cache)return;
+  const q=filters.q.toLowerCase();
+  const nets=cache.nets.filter(n=>
+   (!filters.gender||n.gender===filters.gender)&&
+   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:Boolean(n.is_active))));
+  const netIds=new Set(nets.map(n=>String(n.id)));
+  const groups=cache.groups.filter(g=>netIds.has(String(g.network_id))&&!g.leads_network&&
+   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
+  const matchingNets=nets.filter(n=>!q||String(n.name||'').toLowerCase().includes(q)||
+   String(n.leader_name||'').toLowerCase().includes(q)||
+   groups.some(g=>String(g.network_id)===String(n.id)&&
+    (String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q))));
+  directory.innerHTML=matchingNets.length?html`<div class="lifegroups-page__directory-head"><h2>Network directory</h2><p class="small muted">${matchingNets.length} matching networks. Open any Cell to manage members and attendance.</p></div>
+   <div class="lifegroups-page__directory-grid">${matchingNets.map(n=>{
+    const cells=groups.filter(g=>String(g.network_id)===String(n.id)&&(!q||
+      String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q)||
+      String(n.name||'').toLowerCase().includes(q)||String(n.leader_name||'').toLowerCase().includes(q)));
+    return html`<section class="card lifegroups-page__network-card"><div class="card__body">
+     <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3>${n.name||'Unnamed network'}</h3><p class="small muted">Leader: ${n.leader_name||'Not assigned'}</p></div><span class="badge">${n.is_active?'Active':'Inactive'}</span></div>
+     <div class="lifegroups-page__network-count">${cells.length} ${cells.length===1?'Cell':'Cells'} · ${cells.reduce((sum,g)=>sum+Number(g.member_count||0),0)} members</div>
+     ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>html`<li><div><strong>${g.name||'Unnamed Cell'}</strong><span>${g.leader_name||'No leader'} · ${Number(g.member_count||0)} members</span></div><a class="btn btn--sm" href="#/lifegroups/${g.id}" aria-label="Open Cell ${g.name||g.id}">Open Cell</a></li>`)}</ul>`:html`<p class="small muted">No matching Cells in this network.</p>`}
+    </div></section>`;
+   })}</div>`:html`<div class="card"><div class="card__body"><h3>No matching networks</h3><p class="muted">Try another search term or filter.</p><button type="button" class="btn" id="clearLifegroupFilters">Clear filters</button></div></div>`;
+  directory.querySelector('#clearLifegroupFilters')?.addEventListener('click',()=>{
+   filters.q='';filters.gender='';filters.status='active';
+   main.querySelector('#treeQ').value='';main.querySelector('#treeStatus').value='active';syncGender();load();
+  });
+ };
+
  function afterRemove(){
   // Both the legacy SVG cache and the React data model must reload.
   canvas.__lifegenTree?.members.clear();
@@ -398,6 +445,7 @@ export async function renderLifegroups({main, query}) {
   if(seq!==sequence||!main.contains(canvas))return;
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
+  renderDirectory();
   const summary=main.querySelector('#treeSummary');
   const visibleNetworks=cache.nets.filter(n =>
    (!filters.gender||n.gender===filters.gender) &&
