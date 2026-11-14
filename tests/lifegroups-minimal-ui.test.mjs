@@ -90,3 +90,15 @@ test('Lifegroups directory offers an accessible alternate view without removing 
  assert.match(page,/switchView\('directory'\)/);
  assert.match(css,/\.lifegroups-page__directory-grid/);
 });
+
+test('LifeGroups opens the directory by default with readable category options',()=>{
+ const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
+ assert.match(page,/let view='directory',cache=null,sequence=0/);
+ assert.match(page,/id="treeCanvas" hidden/);
+ assert.match(page,/id="showGroupDirectory" aria-pressed="true"/);
+ assert.match(page,/id="showGroupMap" aria-pressed="false"/);
+ for(const label of ['All','Boys','Girls'])
+  assert.ok(page.includes('<span>'+label+'</span>'),label);
+ assert.match(page,/mapButton\.onclick=\(\)=>switchView\('map'\)/);
+ assert.match(page,/directoryButton\.onclick=\(\)=>switchView\('directory'\)/);
+});
