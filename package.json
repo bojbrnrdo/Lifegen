@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "dev": "node scripts/serve.mjs",
-    "build": "npm run build:lifegroups && node scripts/check.mjs",
+    "build": "npm run build:lifegroups && npm run build:carousel && node scripts/check.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "supabase:bundle": "node scripts/bundle-supabase.mjs",
     "db:backup": "node scripts/backup.mjs",
@@ -25,6 +25,7 @@
     "video:add": "node scripts/add-video.mjs",
     "test:lifeide-browser": "node tests/lifeide-browser-smoke.mjs",
     "build:lifegroups": "esbuild frontend/lifegroups/Map.jsx --bundle --format=esm --jsx=automatic --minify --outfile=public/admin/react-lifegroups.js --loader:.css=css",
+    "build:carousel": "esbuild frontend/depth-carousel/index.jsx --bundle --format=iife --jsx=automatic --minify --outfile=public/lifegen/depth-carousel.js",
     "dev:local": "node scripts/start-local-demo.mjs"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "@xyflow/react": "^12.12.0",
     "dagre": "^0.8.5",
     "esbuild": "^0.25.12",
+    "gsap": "^3.15.1",
     "lucide-react": "^0.468.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
