@@ -316,19 +316,19 @@ export async function renderLifegroups({main, query}) {
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button class="btn" id="removeFromLifegroups">${icon('trash',16)} Remove</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
- <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
+ <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)} <span>All</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)} <span>Boys</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)} <span>Girls</span></button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
  <div class="lifegroups-page__viewbar" role="group" aria-label="Lifegroups view">
-  <button type="button" class="lifegroups-page__view is-active" id="showGroupMap" aria-pressed="true">Network map</button>
-  <button type="button" class="lifegroups-page__view" id="showGroupDirectory" aria-pressed="false">Directory</button>
-  <span class="lifegroups-page__viewhint">Switch views without losing your search or filters.</span>
+  <button type="button" class="lifegroups-page__view" id="showGroupMap" aria-pressed="false">Network map</button>
+  <button type="button" class="lifegroups-page__view is-active" id="showGroupDirectory" aria-pressed="true">Directory</button>
+  <span class="lifegroups-page__viewhint">Browse Cells in a list or explore relationships on the map.</span>
  </div>
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
- <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
- <div id="lifegroupsDirectory" class="lifegroups-page__directory" hidden aria-label="Networks and Cell Leaders"></div>
+ <div id="treeCanvas" hidden><div class="loading">Loading discipleship tree…</div></div>
+ <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
  <div class="lifegroups-page__extras">
  <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>All People</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
@@ -344,7 +344,7 @@ export async function renderLifegroups({main, query}) {
  const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');
  const directory=main.querySelector('#lifegroupsDirectory');
  const mapButton=main.querySelector('#showGroupMap'),directoryButton=main.querySelector('#showGroupDirectory');
- let view='map',cache=null,sequence=0;
+ let view='directory',cache=null,sequence=0;
  const switchView=next=>{
   view=next==='directory'?'directory':'map';
   canvas.hidden=view!=='map';directory.hidden=view!=='directory';
