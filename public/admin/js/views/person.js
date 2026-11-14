@@ -40,8 +40,8 @@ export async function renderPerson({ main }, id) {
 
 
     <nav class="people-profile__tabs" aria-label="Profile sections">
-      <a href="#personDetails" class="people-profile__tab">Personal details</a>
-      <a href="#personAttendance" class="people-profile__tab">Attendance history</a>
+      <button type="button" data-profile-section="personDetails" class="people-profile__tab">Personal details</button>
+      <button type="button" data-profile-section="personAttendance" class="people-profile__tab">Attendance history</button>
     </nav>
     <div class="grid grid--2">
       <div class="card" id="personDetails">
@@ -85,6 +85,8 @@ export async function renderPerson({ main }, id) {
         <button class="btn btn--ghost small" id="archiveBtn" style="color:var(--muted)" title="Hide from lists; keep history">Archive</button>
       </span>
     </div>` : ''}`;
+
+  main.querySelectorAll('[data-profile-section]').forEach(button=>button.addEventListener('click',()=>main.querySelector('#'+button.dataset.profileSection)?.scrollIntoView({behavior:'smooth',block:'start'})));
 
   main.querySelector('#archiveBtn')?.addEventListener('click', async (e) => {
     const ok = await confirmDialog({
