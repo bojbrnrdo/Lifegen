@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const people=readFileSync(new URL('../public/admin/js/views/people.js',import.meta.url),'utf8');
+const form=readFileSync(new URL('../public/admin/js/views/personForm.js',import.meta.url),'utf8');
 const profile=readFileSync(new URL('../public/admin/js/views/person.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/admin/styles.css',import.meta.url),'utf8');
 
@@ -33,4 +34,15 @@ test('People profile has readable navigable sections',()=>{
  assert.match(profile,/aria-label="Profile sections"/);
  assert.match(css,/\.people-directory__tabs/);
  assert.match(css,/\.people-profile__tab/);
+});
+
+test('Person registration shows essential fields first without dropping optional data',()=>{
+ assert.match(form,/Basic information/);
+ assert.match(form,/people-form__optional/);
+ assert.match(form,/p\?\.id \? 'open' : ''/);
+ for(const field of ['first_name','last_name','contact_number','status','privacy_consent','birthdate','date_first_attended','notes'])
+  assert.ok(form.includes(field),field);
+ assert.match(form,/duplicateGuard/);
+ assert.match(form,/collectPerson\(form\)/);
+ assert.match(css,/\.people-form__optional-summary/);
 });
