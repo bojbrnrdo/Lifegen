@@ -338,7 +338,8 @@ body.vip-fs-open{overflow:hidden}
   align-items: center;
   gap: 4px;
 }
-.nav-links .dropdown .dropbtn i {
-  width: 14px;
-  height: 14px;
+.nav-links .dropdown .dropbtn span {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-left: 2px;
 }
