@@ -46,3 +46,14 @@ test('Person registration shows essential fields first without dropping optional
  assert.match(form,/collectPerson\(form\)/);
  assert.match(css,/\.people-form__optional-summary/);
 });
+
+test('Invalid registration fields are revealed and focused before saving',()=>{
+ assert.match(form,/const optionalDetails=form\.querySelector\('\.people-form__optional'\)/);
+ assert.match(form,/optionalDetails\?\.contains\(field\)\)optionalDetails\.open=true/);
+ assert.match(form,/field\?\.focus\(\)/);
+ assert.match(form,/field\?\.scrollIntoView/);
+ assert.match(form,/!field\.validity\.valid/);
+ assert.match(form,/invalid\.setAttribute\('aria-invalid','true'\)/);
+ assert.match(form,/showFieldError\(invalid,invalid\.validationMessage/);
+ assert.match(form,/duplicateGuard\(data/);
+});
