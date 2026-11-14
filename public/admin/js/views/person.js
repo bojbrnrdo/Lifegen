@@ -39,8 +39,12 @@ export async function renderPerson({ main }, id) {
     </div>
 
 
+    <nav class="people-profile__tabs" aria-label="Profile sections">
+      <a href="#personDetails" class="people-profile__tab">Personal details</a>
+      <a href="#personAttendance" class="people-profile__tab">Attendance history</a>
+    </nav>
     <div class="grid grid--2">
-      <div class="card">
+      <div class="card" id="personDetails">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
           ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`, true)}
@@ -59,7 +63,7 @@ export async function renderPerson({ main }, id) {
         </dl></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="personAttendance">
         <div class="card__header"><h2>Attendance history</h2><span class="hint">${present.length} Sunday${present.length === 1 ? '' : 's'} present</span></div>
         <div class="card__body card__body--flush">
           ${p.history.length ? html`<ul class="timeline" style="padding:4px 20px">
