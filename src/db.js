@@ -83,7 +83,17 @@ export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCE
  u.port='6543';
  return u.toString();
 }
-export function getPool() { return pool ||= new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()}); }
+export function getPool() {
+ if(!pool) {
+  const instance=new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()});
+  // pg emits errors from idle clients on the Pool itself. Without a listener, Node
+  // treats them as uncaught exceptions and can terminate the running API process.
+  // Never include connection strings or credentials in the error output.
+  instance.on('error',(error)=>console.error('Idle database connection error:',String(error?.code||'UNKNOWN')));
+  pool=instance;
+ }
+ return pool;
+}
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
  if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}
