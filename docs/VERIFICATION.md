@@ -1,6 +1,79 @@
 # LIFEGEN verification · current revision
 
-## Code & deployment audit addendum (this revision)
+## Lifegroups end-to-end review addendum (this revision)
+
+The tracker row *Lifegroups — "Check that Lifegroups work from start to finish"* was
+verified by driving the **shipped** Admin portal in a browser environment (jsdom)
+against the **running local app** and the disposable PGlite demo database. Nothing was
+stubbed: `public/admin/js/app.js` and its view modules made real same-origin `/api`
+requests, so the UI, the server and the database were all exercised together.
+
+**Defect found and fixed.** A Cell Leader removed with *Remove from Lifegroups* →
+**Cell Leader** (or removed from the Network page) stayed active=false while its Network
+stayed active. The Lifegroups directory only listed inactive records when the *Network*
+was also inactive, so the removed Cell appeared in **no** view — "Active" correctly hid
+it and "Inactive" showed an empty directory. The directory now keeps such a Network
+visible in the Inactive view, labels the removed Cell **Inactive**, and no longer offers
+an *Open Cell* link for it (that link would open a page that still renders the old
+roster as if it were active). The rule lives in the shared
+`filterTrackerView()` in `public/admin/js/views/hierarchy.js` and is covered by
+`tests/lifegroups-inactive-view.test.mjs` (7 tests).
+
+**Coverage of the automated browser pass** (154 checks over six suites; local
+PGlite demo database, synthetic data only):
+
+- **List page** — directory card per Network with its Leader and Cells, Network /
+  Cell Leader / Member summary counts, All/Boys/Girls filters with `aria-pressed`, search,
+  no-match state, Clear filters, React Flow **Network map** mount and the Directory toggle.
+- **Cell (Cell Leader) page** — identity + Network link, Members/Consistent stats,
+  roster with profile links, member search for Cells over five members, per-member menu,
+  collapsed *Network & leadership* and *Attendance & progress* disclosures (progress is
+  fetched only when opened), 12-week strip and the meeting-report table.
+- **Network page** — header and category badge, leader link, Cell Leaders / Members /
+  Meetings-this-week stats, structure tree, the automatic Network Leader Cell created
+  exactly once, Quick actions, collapsed eight-week attendance history, and the
+  **Edit Network** form (blank name refused, category change clears a mismatched leader,
+  re-picking a registered leader via search, save persists without losing the leader).
+- **Add New wizard** — Network Leader → Cell Leader → Member with consent and
+  duplicate guards; the rejected "Open Cell" path writes nothing; each saved record
+  arrives with the right Network/Cell, role and Closed-cell classification.
+- **Cell management** — Edit Cell Leader, Add member (person search restricted to the
+  Cell's gender, role stored), Closed ⇄ Open cell moves, and the six-member Closed-cell
+  target.
+- **Meeting reports** — create (held / not held + reason, present and devotion marks on
+  canonical Person IDs), edit (date locked, topic/notes), delete, and the progress KPIs
+  updating; then Remove member (history + Former members preserved), Remove Cell Leader
+  (members released, People untouched, Active/All/Inactive views consistent).
+
+**Other test failures fixed in this revision** (all were stale assertions or
+environment assumptions, not behaviour changes):
+
+- `lifegroup-essential-ui` asserted the exact `<details class="card mt-2">` string; the
+  progress disclosure carries a modifier class and an id, so the assertion now checks
+  the same contract (a collapsed card disclosure).
+- `lifeide-security` asserted source text that has since been hardened (status-message
+  guards, the Save button being re-enabled in `finally`).
+- `lifeide-api` assumed the fixture repository's default branch is `main`; on a machine
+  whose git default is `master` the checkout failed. It now resolves the real default
+  branch and configures a git identity so the only possible 409 is the protected-branch
+  rule.
+- `package-verification` set a tampered ZIP flag in the central directory only, so the
+  stricter local-header consistency check rejects it first; the assertion now accepts
+  either rejection path.
+
+**Verification commands**
+
+```bash
+npm test            # 425 tests, 425 passed
+npm run build       # esbuild bundles + scripts/check.mjs (75 files) — passed
+```
+
+plus the six browser-level suites above (`154 passed, 0 failed`) run from a folder with
+`jsdom` installed, against `LOCAL_DEMO=true` on a disposable PGlite database seeded with
+`preview-db/seed-demo.mjs` and the new `preview-db/seed-lifegroup-demo.mjs`. No Supabase
+project was contacted and no production data was read or written.
+
+## Code & deployment audit addendum (previous revision)
 
 A full-repository audit focused on code and deployment (not UI/function copy). Findings and the fixes applied:
 

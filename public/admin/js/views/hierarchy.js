@@ -131,6 +131,24 @@ export function findUnassignedGroups(networks,groups,filters={}){
   (g.network_id==null||!ids.has(String(g.network_id)))
  );
 }
+const isActiveRecord=record=>record.is_active!==false&&record.is_active!==0;
+/**
+ * Networks and Cells visible for a status filter. An inactive Cell Leader can
+ * be removed while their Network stays active, so the Inactive view has to keep
+ * such a Network (and its matching Cells) visible; without this, a removed Cell
+ * appears in no view at all. The Active and All views keep their rule that the
+ * Network itself must match.
+ */
+export function filterTrackerView(networks,groups,filters={}){
+ const gender=filters.gender||'',status=filters.status||'active';
+ const inGender=record=>!gender||record.gender===gender;
+ const statusOk=record=>status==='all'||(status==='inactive'?!isActiveRecord(record):isActiveRecord(record));
+ const nets=(networks||[]).filter(net=>inGender(net)&&(statusOk(net)||(status==='inactive'&&
+  (groups||[]).some(g=>String(g.network_id)===String(net.id)&&!g.leads_network&&!isActiveRecord(g)))));
+ const ids=new Set(nets.map(n=>String(n.id)));
+ const cells=(groups||[]).filter(g=>ids.has(String(g.network_id))&&!g.leads_network&&statusOk(g));
+ return {networks:nets,cells};
+}
 export function buildLifegroupTree(networks,groups,filters,expanded,members,loading){
  const query=String(filters.q||'').trim().toLowerCase(), gender=filters.gender||'', status=filters.status||'active';
  const allowed=o=>status==='all'||(status==='inactive'?o.is_active===false||o.is_active===0:o.is_active!==false&&o.is_active!==0);

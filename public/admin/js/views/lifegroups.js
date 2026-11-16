@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { renderHierarchy, findUnassignedGroups } from './hierarchy.js';
+import { renderHierarchy, findUnassignedGroups, filterTrackerView } from './hierarchy.js';
 // React Flow map is code-split and loaded only on the Lifegroups page.
 let lifegroupsReact=null;
 async function loadReactLifegroups(){
@@ -356,12 +356,9 @@ export async function renderLifegroups({main, query}) {
  const renderDirectory=()=>{
   if(!cache)return;
   const q=filters.q.toLowerCase();
-  const nets=cache.nets.filter(n=>
-   (!filters.gender||n.gender===filters.gender)&&
-   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:Boolean(n.is_active))));
-  const netIds=new Set(nets.map(n=>String(n.id)));
-  const groups=cache.groups.filter(g=>netIds.has(String(g.network_id))&&!g.leads_network&&
-   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
+  const view=filterTrackerView(cache.nets,cache.groups,filters);
+  const nets=view.networks;
+  const groups=view.cells;
   const matchingNets=nets.filter(n=>!q||String(n.name||'').toLowerCase().includes(q)||
    String(n.leader_name||'').toLowerCase().includes(q)||
    groups.some(g=>String(g.network_id)===String(n.id)&&
@@ -374,7 +371,7 @@ export async function renderLifegroups({main, query}) {
     return html`<section class="card lifegroups-page__network-card"><div class="card__body">
      <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3>${n.name||'Unnamed network'}</h3><p class="small muted">Leader: ${n.leader_name||'Not assigned'}</p></div><span class="badge">${n.is_active?'Active':'Inactive'}</span></div>
      <div class="lifegroups-page__network-count">${cells.length} ${cells.length===1?'Cell':'Cells'} · ${cells.reduce((sum,g)=>sum+Number(g.member_count||0),0)} members</div>
-     ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>html`<li><div><strong>${g.name||'Unnamed Cell'}</strong><span>${g.leader_name||'No leader'} · ${Number(g.member_count||0)} members</span></div><a class="btn btn--sm" href="#/lifegroups/${g.id}" aria-label="Open Cell ${g.name||g.id}">Open Cell</a></li>`)}</ul>`:html`<p class="small muted">No matching Cells in this network.</p>`}
+     ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>html`<li><div><strong>${g.name||'Unnamed Cell'}</strong><span>${g.leader_name||'No leader'} · ${Number(g.member_count||0)} members</span></div>${g.is_active?html`<a class="btn btn--sm" href="#/lifegroups/${g.id}" aria-label="Open Cell ${g.name||g.id}">Open Cell</a>`:html`<span class="badge badge--inactive badge--nodot" title="Removed from the active Lifegroups tree">Inactive</span>`}</li>`)}</ul>`:html`<p class="small muted">No matching Cells in this network.</p>`}
     </div></section>`;
    })}</div>`:html`<div class="card"><div class="card__body"><h3>No matching networks</h3><p class="muted">Try another search term or filter.</p><button type="button" class="btn" id="clearLifegroupFilters">Clear filters</button></div></div>`;
   directory.querySelector('#clearLifegroupFilters')?.addEventListener('click',()=>{

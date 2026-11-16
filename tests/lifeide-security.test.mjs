@@ -48,7 +48,8 @@ test('commit button is disabled while a commit request is pending',()=>{
 test('repository save captures path and content before awaiting and preserves new edits',()=>{
  assert.match(client,/const path=current,f=repoFiles\.get\(path\)/);
  assert.match(client,/if\(current===path&&\$\('editor'\)\.value===content\)/);
- assert.match(client,/finally\{saveBusy=false;\}/);
+ // The handler also re-enables the Save button when the save settles.
+ assert.match(client,/finally\{saveBusy=false;\$\('saveFile'\)\.disabled=!current;\}/);
 });
 
 test('repository navigation blocks file and workspace switches while a save is in flight',()=>{
@@ -57,8 +58,11 @@ test('repository navigation blocks file and workspace switches while a save is i
 });
 
 test('repository refresh and entry creation refuse pending saves',()=>{
- assert.match(client,/if\(repoMode\)\{if\(saveBusy\|\|commitBusy\)/);
- assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\|\|commitBusy\)/);
+ // Refresh now reports through the status line instead of a bare guard.
+ assert.match(client,/if\(repoMode\)\{if\(saveBusy\|\|commitBusy\)\{\$\('status'\)\.textContent='Finish the pending save or commit before refreshing\.'/);
+ // A read-only GitHub source short-circuits first, so the pending-save guard
+ // is asserted on its own (it still refuses entry creation while a save runs).
+ assert.match(client,/if\(saveBusy\|\|commitBusy\)throw Error\('Finish the pending save or commit before creating files\.'\)/);
 });
 
 test('Git commit waits for an active repository save',()=>{

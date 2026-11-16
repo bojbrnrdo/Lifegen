@@ -51,7 +51,10 @@ test('Group overview focuses on people and leadership, without optional logistic
     assert.doesNotMatch(groupPage, new RegExp('<dt>' + key + '</dt>'));
   }
   assert.match(groupPage, /Former members/);
-  assert.match(groupPage, /<details class="card mt-2">/);
+  // The progress section is a collapsed <details> card; its modifier class and
+  // id may change without changing that meaning (verified in the browser-level
+  // pass: collapsed by default, loaded on open).
+  assert.match(groupPage, /<details class="card mt-2[^"]*"[^>]*id="progressDisclosure"/);
   assert.match(groupPage, /renderProgressCard\(/);
 });
 
