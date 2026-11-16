@@ -63,6 +63,9 @@ export function inspectPackageZip(zipBytes, selectedPaths=[]){
   const localFlags=u16(localOffset+6),localMethod=u16(localOffset+8);
   const localNameLength=u16(localOffset+26),localExtraLength=u16(localOffset+28);
   const dataStart=localOffset+30+localNameLength+localExtraLength;
+  // Give actionable security feedback before checking header consistency.
+  if(flags&1||localFlags&1)throw Error('ZIP contains an encrypted entry.');
+  if(![0,8].includes(method)||![0,8].includes(localMethod))throw Error('ZIP contains an unsupported compression method.');
   if(versionNeeded>45||flags!==localFlags||method!==localMethod||
      localNameLength!==nameLength||dataStart+compressed>offset||
      compressed===0&&size!==0||method===0&&compressed!==size||

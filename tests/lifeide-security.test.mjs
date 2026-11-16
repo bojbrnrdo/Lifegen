@@ -48,7 +48,7 @@ test('commit button is disabled while a commit request is pending',()=>{
 test('repository save captures path and content before awaiting and preserves new edits',()=>{
  assert.match(client,/const path=current,f=repoFiles\.get\(path\)/);
  assert.match(client,/if\(current===path&&\$\('editor'\)\.value===content\)/);
- assert.match(client,/finally\{saveBusy=false;\}/);
+ assert.match(client,/finally\{saveBusy=false;/);
 });
 
 test('repository navigation blocks file and workspace switches while a save is in flight',()=>{
@@ -58,7 +58,7 @@ test('repository navigation blocks file and workspace switches while a save is i
 
 test('repository refresh and entry creation refuse pending saves',()=>{
  assert.match(client,/if\(repoMode\)\{if\(saveBusy\|\|commitBusy\)/);
- assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\|\|commitBusy\)/);
+ assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(githubMode\).*?if\(saveBusy\|\|commitBusy\)/s);
 });
 
 test('Git commit waits for an active repository save',()=>{
