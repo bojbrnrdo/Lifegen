@@ -18,25 +18,17 @@ test('sidebar and page are named Lifegroups, without changing its route',()=>{
  assert.match(nav, /navLink\('#\/lifegroups',\s*'lifegroups',\s*'Lifegroups',\s*'group'(?:,\s*true)?\)/);
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page, /<h1>Lifegroups<\/h1>/);
- assert.match(page, /id="treeCanvas"/);
- assert.match(page, /loadReactLifegroups\(\)/);
- assert.match(page, /mount\(canvas,\{/);
- assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters,\{onRemove:removeContext\}\)/);
+ assert.match(page, /id="lifegroupsDirectory"/);
+ assert.match(page, /id="findPersonPanel"/);
  assert.match(page, /createAddNewModal/);
  assert.match(page, /id="treeRefresh"/);
  assert.match(page, /id="treeStatus"/);
+ // No map: no canvas, no React Flow loader, no SVG fallback.
+ for(const dead of ['treeCanvas','showGroupMap','react-lifegroups','renderHierarchy','mountMap'])
+  assert.ok(!page.includes(dead), 'the removed network map is gone: '+dead);
 });
 
-test('diagram remains a three-level interactive SVG network with always-fit tools',()=>{
- assert.match(tree, /<svg class="lfg__svg"/);
- for(const name of ['fit','collapse','plus','minus'])assert.match(tree,new RegExp('data-action="'+name+'"'));
- assert.match(tree, /treeControlIcon/);
- assert.match(tree, /aria-label="Interactive Lifegroup network/);
- assert.doesNotMatch(tree, /data-action="focus"/);
- assert.match(tree, /target\.querySelector\('\[data-action="fit"\]'\)\.onclick/);
- assert.match(tree, /profileAvatar\(n\)/);
- assert.match(tree, /target\.querySelector\('\.lfg__svg'\)/);
- assert.match(tree, /api\.lifegroup\(node\.record\.id\)/);
+test('the shared Lifegroup tree model keeps its three levels',()=>{
  const networks=[{id:1,name:'Network',leader_name:'Network Leader',is_active:true,gender:'boys'}];
  const groups=[{id:2,network_id:1,name:'Cell',leader_name:'Cell Leader',member_count:1,is_active:true,gender:'boys'}];
  const initial=buildLifegroupTree(networks,groups,{},new Set(),new Map(),new Set());
@@ -72,37 +64,32 @@ test('leadership, attendance and history remain available as expandable sections
  assert.match(detail, /lifegroup-detail__info/);
  assert.match(detail, /lifegroup-detail__progress/);
  assert.match(detail, /progressDisclosure\.addEventListener\('toggle'/);
- assert.match(detail, /renderProgressCard\(main\.querySelector\('#progressCard'\)/);
+ assert.match(detail, /renderProgressCard\(progressCard, g\.id/);
+ assert.match(detail, /const progressCard=main\.querySelector\('#progressCard'\)/);
  assert.match(detail, /Former members/);
  assert.match(detail, /api\.setTier/);
  assert.match(detail, /bindMemberActions/);
 });
 
-test('Lifegroups directory offers an accessible alternate view without removing the map',()=>{
+test('Lifegroups has a single, list-first view with no map toggle',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- for(const id of ['showGroupMap','showGroupDirectory','lifegroupsDirectory','treeCanvas','treeQ','treeStatus'])
-  assert.ok(page.includes('id="'+id+'"'),id);
- assert.match(page,/aria-label="Lifegroups view"/);
- assert.match(page,/aria-pressed/);
  assert.match(page,/const renderDirectory=/);
  assert.match(page,/renderDirectory\(\)/);
  assert.match(page,/href="#\/lifegroups\/\$\{g.id\}"/);
- assert.match(page,/switchView\('directory'\)/);
  assert.match(css,/\.lifegroups-page__directory-grid/);
+ assert.doesNotMatch(page,/aria-label="Lifegroups view"/);
 });
 
-test('LifeGroups opens the directory by default with readable category options',()=>{
+test('the directory is the only view and the map build is gone from the project',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- assert.match(page,/let view='directory',cache=null,sequence=0/);
- assert.match(page,/id="treeCanvas" hidden/);
- assert.match(page,/id="showGroupDirectory" aria-pressed="true"/);
- assert.match(page,/id="showGroupMap" aria-pressed="false"/);
- // The map bundle must stay off the critical path: it loads on the first
- // press of "Network map", not when the page opens.
- assert.match(page,/if\(view==='map'\)await mountMap\(\)/);
- assert.match(page,/if\(!canvas\.hasAttribute\('data-react-mounted'\)\)mountMap\(true\)/);
+ assert.match(page,/let cache=null,sequence=0/);
  for(const label of ['All','Boys','Girls'])
   assert.ok(page.includes('<span>'+label+'</span>'),label);
- assert.match(page,/mapButton\.onclick=\(\)=>\{\s*\n\s*switchView\('map'\);/);
- assert.match(page,/directoryButton\.onclick=\(\)=>switchView\('directory'\)/);
+ const pkg=JSON.parse(read('../package.json'));
+ assert.ok(!pkg.scripts['build:lifegroups']);
+ assert.ok(!pkg.scripts.build.includes('lifegroups'));
+ for(const dep of ['react','react-dom','@xyflow/react','dagre'])
+  assert.ok(!pkg.devDependencies[dep],'removed dependency: '+dep);
+ const index=read('../public/admin/index.html');
+ assert.ok(!index.includes('react-lifegroups'));
 });

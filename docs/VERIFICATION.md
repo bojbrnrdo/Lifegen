@@ -1,5 +1,34 @@
 # LIFEGEN verification · current revision
 
+## Lifegroups: network map removed (this revision)
+
+The interactive **Network map** is gone. It was a 510 KB React Flow bundle
+(165 KB gzipped) for one optional view, and on a phone it could not be panned,
+scrolled or pinch-zoomed at all (all three are disabled below 780 px), so it was
+fit-and-tap only while re-fitting itself on every viewport resize. Removing it
+also removes the SVG fallback renderer, four dev dependencies
+(`react`, `react-dom`, `@xyflow/react`, `dagre`), the `build:lifegroups` step and
+a stylesheet from `public/admin/index.html`.
+
+What replaced it: the plain-DOM **directory** (Network → Cell Leader → Cells),
+**Find a person** (one search box over every Cell, with Cell shortcuts), the
+**Network drill-down** pages, and the Cell/Network detail pages that already
+carried every action the map's side panel offered.
+
+**Defect found while re-verifying, and fixed.** The progress card starts
+rendering, *then* fetches. If the page was rebuilt in between (a live update
+after saving a meeting report), the response either threw
+`Cannot set properties of null` or painted the previous numbers over the new
+ones — which is why a just-saved meeting could still show "Met this week —" and
+`0/4`. `views/progressGuard.js` now gives each render a token: only the newest
+render for a card that is still in the document may paint. The Cell page also
+reads `#progressCard` before awaiting instead of after. Covered by
+`tests/lifegroup-progress-card-race.test.mjs` (6 tests).
+
+Verification: `npm test` **418/418**, `npm run build` (77 files), and the six
+browser suites + the new find-a-person suite (`t1` 20, `t2` 24, `t3` 30,
+`t4` 21, `t5` 20, `t6` 41, `t7` 21 = 177 checks, all passed) on a clean reset.
+
 ## Lifegroups end-to-end review addendum (this revision)
 
 The tracker row *Lifegroups — "Check that Lifegroups work from start to finish"* was
@@ -24,7 +53,7 @@ PGlite demo database, synthetic data only):
 
 - **List page** — directory card per Network with its Leader and Cells, Network /
   Cell Leader / Member summary counts, All/Boys/Girls filters with `aria-pressed`, search,
-  no-match state, Clear filters, React Flow **Network map** mount and the Directory toggle.
+  no-match state, Clear filters, and the absence of any network map.
 - **Cell (Cell Leader) page** — identity + Network link, Members/Consistent stats,
   roster with profile links, member search for Cells over five members, per-member menu,
   collapsed *Network & leadership* and *Attendance & progress* disclosures (progress is

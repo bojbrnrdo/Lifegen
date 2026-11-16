@@ -3,6 +3,7 @@
 import { api } from '../api.js';
 import { can } from '../app.js';
 import { html, raw, esc, icon, fmtDate, toISODate, toast, openModal, closeModal, confirmDialog, withLoading, emptyState, debounce } from '../ui.js';
+import { createProgressGuard } from './progressGuard.js';
 
 const DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 export const weekLabel = (monday) => { const d = new Date(`${monday}T00:00:00`); return `${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}`; };
@@ -56,12 +57,22 @@ export function memberSections(rows, { manage = false, extraHead = raw(''), extr
 // Group detail: Progress card
 // ---------------------------------------------------------------------------
 export async function renderProgressCard(card, groupId, { onChange, onLoaded } = {}) {
+  if (!card) return;
   const manage = can('lifegroups:manage');
   card.innerHTML = '<div class="card__header"><h2>Progress</h2></div><div class="card__body"><div class="loading">Loading…</div></div>';
+  // Only the newest request for this card may paint it, and nothing may paint a
+  // card the page has already replaced (a live update or a second rapid open).
+  const guard = createProgressGuard(card);
+  const current = guard.current;
   let p;
-  try { p = await api.lifegroupProgress(groupId, 12); } catch (e) { card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; }
+  try { p = await api.lifegroupProgress(groupId, 12); } catch (e) {
+    if (current() && card.querySelector('.card__body')) card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`;
+    return;
+  }
+  if (!current()) return;
   try { onLoaded?.(p); } catch { /* cosmetic */ }
   const draw = () => {
+    if (!current()) return;
     const last = p.calendar[p.calendar.length - 1];
     card.innerHTML = html`
       <div class="card__header"><h2>Progress</h2>${solidBadge(p.solid, p.target, p.is_solid)}</div>

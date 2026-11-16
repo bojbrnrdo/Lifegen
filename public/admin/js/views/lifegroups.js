@@ -1,11 +1,5 @@
 import { api } from '../api.js';
-import { renderHierarchy, findUnassignedGroups, filterTrackerView } from './hierarchy.js';
-// React Flow map is code-split and loaded only on the Lifegroups page.
-let lifegroupsReact=null;
-async function loadReactLifegroups(){
- if(!lifegroupsReact)lifegroupsReact=import('/admin/react-lifegroups.js').catch(e=>{lifegroupsReact=null;throw e;});
- return lifegroupsReact;
-}
+import { findUnassignedGroups, filterTrackerView } from './hierarchy.js';
 
 import { filterPeople, rankPeople, relationshipLine } from './lifegroupSearch.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
@@ -320,15 +314,10 @@ export async function renderLifegroups({main, query}) {
  <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)} <span>All</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)} <span>Boys</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)} <span>Girls</span></button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
- <div class="lifegroups-page__viewbar" role="group" aria-label="Lifegroups view">
-  <button type="button" class="lifegroups-page__view is-active" id="showGroupDirectory" aria-pressed="true">Browse Cells</button>
-  <button type="button" class="lifegroups-page__view" id="showGroupMap" aria-pressed="false" title="Heavy on phones — best on a larger screen">${icon('group',15)} Network map</button>
-  <span class="lifegroups-page__viewhint">Lists open instantly; the map is best on a larger screen.</span>
- </div>
+
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
- <div id="treeCanvas" hidden><div class="loading">Loading discipleship tree…</div></div>
  <div id="findPersonPanel" class="lifegroups-page__find"></div>
  <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
  <div class="lifegroups-page__extras">
@@ -347,21 +336,9 @@ export async function renderLifegroups({main, query}) {
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
  main.querySelector('#treeStatus').value=filters.status;
- const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');
+ const notice=main.querySelector('#treeNotice');
  const directory=main.querySelector('#lifegroupsDirectory');
- const mapButton=main.querySelector('#showGroupMap'),directoryButton=main.querySelector('#showGroupDirectory');
- let view='directory',cache=null,sequence=0;
- const switchView=next=>{
-  view=next==='directory'?'directory':'map';
-  canvas.hidden=view!=='map';directory.hidden=view!=='directory';
-  mapButton.classList.toggle('is-active',view==='map');directoryButton.classList.toggle('is-active',view==='directory');
-  mapButton.setAttribute('aria-pressed',String(view==='map'));directoryButton.setAttribute('aria-pressed',String(view==='directory'));
- };
- mapButton.onclick=()=>{
-  switchView('map');
-  if(!canvas.hasAttribute('data-react-mounted'))mountMap(true).catch(()=>{});
- };
- directoryButton.onclick=()=>switchView('directory');
+ let cache=null,sequence=0;
  const renderDirectory=()=>{
   if(!cache)return;
   const q=filters.q.toLowerCase();
@@ -459,11 +436,7 @@ export async function renderLifegroups({main, query}) {
  function afterRemove(){
   // People may have moved, so the find box reloads with the tree.
   peopleIndex=null;peopleIndexError='';drawFindPanel();loadPeopleIndex();
-  // Both the legacy SVG cache and the React data model must reload.
-  canvas.__lifegenTree?.members.clear();
-  canvas.__lifegenTree?.loading.clear();
-  if(canvas.__lifegenTree)canvas.__lifegenTree.selected=null;
-  load(true).then(()=>{if(view==='map')mountMap(true).catch(()=>{});});
+  load(true);
  }
  function renderUnassigned(){
   const missing=findUnassignedGroups(cache.nets,cache.groups,filters);
@@ -494,7 +467,6 @@ export async function renderLifegroups({main, query}) {
     try{
      await api.updateLifegroup(group.id,{network_id:network.id,network_manual:true});
      toast('Network assignment saved.');
-     canvas.__lifegenTree?.expanded.add('network:'+network.id);
      await load(true);
     }catch(error){toast(error.message,'error');}
    });
@@ -504,20 +476,16 @@ export async function renderLifegroups({main, query}) {
  async function load(force=false){
   const seq=++sequence;
   if(!cache||force){
-   // React owns this mount point after first render; clearing it manually
-   // would desynchronize React DOM and make Refresh/Remove appear broken.
-   if(!canvas.__lifegenReactVersion&&!canvas.hasAttribute('data-react-mounted'))
-     canvas.innerHTML='<div class="loading">Loading Lifegroups network…</div>';
    try{
     const [groups,nets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]);
-    if(seq!==sequence||!main.contains(canvas))return;
+    if(seq!==sequence||!main.contains(directory))return;
     cache={groups,nets};
    }catch(e){
-    if(seq===sequence)canvas.innerHTML=html`<div class="alert alert--error">${e.message}</div>`;
+    if(seq===sequence)directory.innerHTML=html`<div class="alert alert--error">${e.message}</div>`;
     return;
    }
   }
-  if(seq!==sequence||!main.contains(canvas))return;
+  if(seq!==sequence||!main.contains(directory))return;
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
   renderDirectory();
@@ -531,109 +499,8 @@ export async function renderLifegroups({main, query}) {
    (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
   summary.hidden=Boolean(filters.q);
   summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
-  // The map bundle (React Flow) is only downloaded on the first tap of
-  // "Network map". The directory and Find-a-person use plain DOM, so a phone
-  // no longer pays for a canvas it never looks at.
-  if(view==='map')await mountMap();
-  if(seq!==sequence||!main.contains(canvas))return;
  }
 
- let mounting=null;
- async function mountMap(force=false){
-  if(mounting)return mounting;
-  const removeContext=can('lifegroups:manage')?({kind,networkId,groupId,personId})=>
-    openRemoveFromLifegroups({initialTab:kind==='group'?'cell':kind,
-      networkId,groupId,personId,onRemoved:afterRemove}):null;
-  mounting=(async()=>{
-  try {
-    const {mount}=await loadReactLifegroups();
-    if(!main.contains(canvas))return;
-    if(force)canvas.__lifegenReactVersion=(canvas.__lifegenReactVersion||0)+1;
-    mount(canvas,{
-      networks:cache.nets,groups:cache.groups,filters:{...filters,q:filters.q},
-      version:canvas.__lifegenReactVersion||0,
-    },{
-      manage:can('lifegroups:manage'),
-      canAttendance:can('attendance:view'),
-      onProfile:can('people:view')?async id=>{
-        try{
-          const p=await api.person(id);
-          const savedClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
-          const nextMode={vip:'member',member:'cell',cell_leader:'network'}[savedClassification]||null;
-          const modal=openModal({
-            title:fullName(p),
-            wide:true,
-            body:html`<div class="profile-head">${raw(avatar(p,'lg'))}<div class="info"><strong>${fullName(p)}</strong><div class="small muted">${p.person_code||''}</div><div class="mt-1">${raw(statusBadge(p.status))}</div></div></div>
-              <dl class="dl mt-2">
-                <div><dt>Registered</dt><dd>${p.date_registered?fmtDate(p.date_registered):'—'}</dd></div>
-                <div><dt>Sunday attendance</dt><dd>${Number(p.sundays_attended||p.history?.filter(h=>h.status==='present').length||0)}</dd></div>
-                <div><dt>Preferred area</dt><dd>${p.preferred_area||'—'}</dd></div>
-                <div><dt>Preferred day</dt><dd>${p.preferred_day||'—'}</dd></div>
-              </dl>
-              ${can('lifegroups:manage')?html`<div class="toolbar mt-2"><label class="grow">Classification
-                <select data-classification aria-label="Discipleship classification">
-                  <option value="">Choose classification…</option>
-                  <option value="vip">VIP</option><option value="member">Member</option>
-                  <option value="cell_leader">Cell Leader</option><option value="network_leader">Network Leader</option>
-                </select>
-              </label><button class="btn btn--primary" type="button" data-change-classification>Update</button></div>
-              <p class="small muted">Changing classification does not grant admin access or erase attendance history. Leadership roles require their corresponding active relationship.</p>`:''}`.value,
-            footer:html`${can('attendance:view')?html`<a class="btn" href="#/attendance?person_id=${p.id}">View Attendance</a>`:''}${can('people:write')?html`<a class="btn" href="#/people/${p.id}/edit">Edit Person</a>`:''}<a class="btn" href="#/people/${p.id}">Full record</a>${can('lifegroups:manage')&&can('people:write')?html`<button class="btn" type="button" data-transfer-profile>Assign / Transfer Cell</button>`:''}${nextMode&&can('lifegroups:manage')&&can('people:write')?html`<button type="button" class="btn btn--primary" data-promote-profile>Promote</button>`:''}<button type="button" class="btn" data-close-profile>Close</button>`.value
-          });
-          modal.querySelector('[data-close-profile]')?.addEventListener('click',closeModal);
-          modal.querySelector('[data-transfer-profile]')?.addEventListener('click',()=>{closeModal();findLifegroup(p,()=>load(true));});
-          modal.querySelector('[data-promote-profile]')?.addEventListener('click',()=>{closeModal();createAddNewModal({initialTab:nextMode,personId:p.id,onSaved:()=>load(true)});});
-          const currentClassification=p.discipleship_classification||p.extras?.discipleship_classification||'';
-          const choice=modal.querySelector('[data-classification]');
-          if(choice)choice.value=currentClassification;
-          modal.querySelector('[data-change-classification]')?.addEventListener('click',async event=>{
-            const next=choice?.value;
-            if(!next)return toast('Choose a classification.','error');
-            const confirmed=await confirmDialog({title:'Change discipleship classification?',
-              message:'Update this People record to '+next.replaceAll('_',' ')+'? Attendance and membership history will remain available.',
-              confirmText:'Update'});
-            if(!confirmed)return;
-            await withLoading(event.currentTarget,async()=>{
-              try{await api.setDiscipleshipClassification(p.id,next,'Staff classification change');
-                toast('Classification updated.');await load(true);
-              }catch(error){toast(error.message||'Could not change classification.','error');}
-            });
-          });
-        }catch(error){toast(error.message||'Unable to open profile.','error');}
-      }:null,
-      loadMembers:id=>api.lifegroup(id),
-      loadProgress:id=>api.lifegroupProgress(id,12),
-      loadProfile:id=>api.person(id),
-      onClearSearch:()=>{filters.q='';const input=main.querySelector('#treeQ');if(input)input.value='';load();},
-      onError:ex=>toast(ex.message||'Unable to load Lifegroup information.','error'),
-      onRemove:selection=>removeContext?.({
-        kind:selection.role==='cell'?'group':selection.role,
-        networkId:selection.role==='network'?selection.person.id:
-          selection.role==='cell'?selection.person.network_id:
-          cache.groups.find(g=>g.id===selection.groupId)?.network_id,
-        groupId:selection.role==='network'?null:selection.groupId,
-        personId:selection.role==='member'?selection.person.id:null,
-      }),
-      onAdd:selection=>createAddNewModal({
-        initialTab:'member',networkId:selection.person.network_id,onSaved:()=>load(true),
-      }),
-      onReassign:selection=>{
-        if(selection.role==='network')networkForm(selection.person,()=>load(true));
-        else if(selection.role==='cell')groupForm(selection.person,()=>load(true));
-      },
-    });
-    canvas.setAttribute('data-react-mounted','true');
-  }catch(error){
-    // Keep the existing working SVG dashboard available if the React bundle
-    // fails to load (old deployments, blocked assets, or network errors).
-    console.error('React Lifegroups map unavailable, using SVG fallback',error);
-    await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:removeContext});
-  }finally{
-    mounting=null;
-  }
-  })();
-  return mounting;
- }
  let peopleSearchSeq=0;
  async function searchPeople(){
    const box=main.querySelector('#treePeopleMatches'),q=filters.q.trim(),seq=++peopleSearchSeq;
@@ -652,9 +519,7 @@ export async function renderLifegroups({main, query}) {
  if(filters.q)searchPeople();
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
- main.querySelector('#treeRefresh').addEventListener('click',()=>load(true).then(()=>{
-  if(view==='map')mountMap(true).catch(()=>{});
- }));
+ main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
  const allPeople=main.querySelector('#allPeoplePanel');
  allPeople.addEventListener('toggle',()=>{if(allPeople.open&&!allPeople.dataset.loaded){allPeople.dataset.loaded='yes';drawAllPeople(main.querySelector('#allPeopleBody'));}});
  const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
@@ -834,7 +699,11 @@ export async function renderLifegroup({ main }, id) {
   progressDisclosure.addEventListener('toggle',()=>{
     if(!progressDisclosure.open||progressDisclosure.dataset.loaded)return;
     progressDisclosure.dataset.loaded='true';
-    renderProgressCard(main.querySelector('#progressCard'), g.id, { onChange: () => {}, onLoaded: (p) => {
+    // A live update can replace the card before the fetch returns, so read it
+    // now rather than querying the page again later.
+    const progressCard=main.querySelector('#progressCard');
+    if(!progressCard)return;
+    renderProgressCard(progressCard, g.id, { onChange: () => {}, onLoaded: (p) => {
     // fill in the last-4-weeks cells now that progress data is here
     const by = new Map(p.members.map((m) => [m.id, m.last4]));
     main.querySelectorAll('#membersCard tr[data-pid] .l4slot').forEach((el) => { const l4 = by.get(Number(el.closest('tr').dataset.pid)); if (l4) el.outerHTML = memberDots(l4).value + (l4.consistency_pct != null ? ` <span class="small muted">${l4.consistency_pct}%</span>` : ''); else el.textContent = '—'; });

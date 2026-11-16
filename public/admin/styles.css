@@ -1413,7 +1413,6 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__summary>span{display:inline-flex;align-items:center;gap:6px;color:#728579;font-size:.8rem}
 .lifegroups-page__summary svg{color:#367b54}
 .lifegroups-page__summary b{font-size:.86rem;color:#205b3a;font-variant-numeric:tabular-nums}
-.lifegroups-page #treeCanvas{min-width:0}
 .lifegroups-page .lfg{border-radius:15px;border-color:#dce9df;box-shadow:none}
 .lifegroups-page__extras{display:grid;gap:10px;margin-top:2px}
 .lifegroups-page__extras .card{margin:0;box-shadow:none;border-radius:11px}
@@ -1683,13 +1682,8 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .people-form__optional-summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-4px;border-radius:8px}
 @media(max-width:640px){.people-form__optional-summary{padding:16px;gap:10px}.people-form__optional-content{padding:16px}.people-form__expand{display:none}}
 
-/* LifeGroups directory: a simple alternative to the interactive network map. */
-.lifegroups-page__viewbar{display:flex;align-items:center;gap:6px;margin:16px 0 12px;padding:5px;border:1px solid var(--ink-200,#dae5df);background:var(--surface,#fff);border-radius:12px;flex-wrap:wrap}
-.lifegroups-page__view{border:0;border-radius:8px;background:transparent;padding:10px 16px;color:var(--muted);font-size:.85rem;font-weight:650;cursor:pointer}
-.lifegroups-page__view.is-active{background:var(--ink-100,#e9f3ed);color:var(--green-700,#276d49)}
-.lifegroups-page__view:focus-visible{outline:2px solid var(--green-500,#3f9062);outline-offset:2px}
-.lifegroups-page__viewhint{margin-left:auto;color:var(--muted);font-size:.77rem;padding:0 10px}
-.lifegroups-page__directory[hidden],#treeCanvas[hidden]{display:none!important}
+/* LifeGroups directory: the one and only view (the network map was removed). */
+.lifegroups-page__directory[hidden]{display:none!important}
 .lifegroups-page__directory-head{margin:18px 0 14px}
 .lifegroups-page__directory-head h2{font-size:1.16rem;margin:0 0 4px}
 .lifegroups-page__directory-head p{margin:0}
@@ -1704,7 +1698,7 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__cell-list li>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
 .lifegroups-page__cell-list li span{font-size:.78rem;color:var(--muted)}
 .lifegroups-page__cell-list .btn{flex-shrink:0}
-@media(max-width:650px){.lifegroups-page__viewhint{width:100%;margin-left:0;padding:4px 10px}.lifegroups-page__cell-list li{align-items:flex-start}}
+@media(max-width:650px){.lifegroups-page__cell-list li{align-items:flex-start}}
 
 /* Focused Cell member management: compact search, no extra navigation bar. */
 .lifegroup-detail__members-head{align-items:center}
@@ -1718,9 +1712,8 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 /* LifeGroups: directory-first navigation and understandable category filters. */
 .lifegroups-page .lg-gender-filter__button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:64px;padding-inline:10px}
 .lifegroups-page .lg-gender-filter__button span{font-size:.76rem;font-weight:650}
-.lifegroups-page__viewbar{margin-top:12px}
 .lifegroups-page__directory{min-height:160px}
-@media(max-width:560px){.lifegroups-page .lg-gender-filter__button{min-width:60px}.lifegroups-page__viewhint{display:none}}
+@media(max-width:560px){.lifegroups-page .lg-gender-filter__button{min-width:60px}}
 
 /* LifeGroups: "Find a person" — the phone-first way in, replacing map hunting. */
 .lifegroups-page__find{margin:16px 0 0}

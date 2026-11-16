@@ -40,9 +40,9 @@ test('network starts collapsed; expands Cell Leaders and then Members only on cl
  assert.equal(complete[0].children[0].children.length,2);
 });
 
-test('no separate Lifegroup title appears in the interactive diagram',()=>{
- assert.match(treeSource,/Network Leader → Cell Leader → Member/);
+test('the shared tree model keeps the three levels and never invents a Lifegroup node',()=>{
  assert.match(treeSource,/subtitle:'Cell Leader'/);
+ assert.match(treeSource,/subtitle:'Network Leader'/);
  assert.doesNotMatch(treeSource,/subtitle:g\.name\|\|'Lifegroup'/);
 });
 
