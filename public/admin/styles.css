@@ -1721,3 +1721,29 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__viewbar{margin-top:12px}
 .lifegroups-page__directory{min-height:160px}
 @media(max-width:560px){.lifegroups-page .lg-gender-filter__button{min-width:60px}.lifegroups-page__viewhint{display:none}}
+
+/* LifeGroups: "Find a person" — the phone-first way in, replacing map hunting. */
+.lifegroups-page__find{margin:16px 0 0}
+.lifegroups-page__find-card{border-color:var(--ink-200,#dce5df)}
+.lifegroups-page__find-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.lifegroups-page__find-head h2{margin:0 0 4px;font-size:1.06rem}
+.lifegroups-page__find-head p{margin:0}
+.lifegroups-page__find-input{max-width:none;width:100%}
+.lifegroups-page__find-input input{font-size:1rem} /* 16px stops iOS zooming on focus */
+.lifegroups-page__find-results{margin-top:10px}
+.lifegroups-page__find-hint{margin:2px 0 0}
+.lifegroups-page__find-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lifegroups-page__find-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:9px 10px;border:1px solid var(--ink-100,#e9edea);border-radius:10px;text-decoration:none;color:inherit}
+.lifegroups-page__find-row:hover,.lifegroups-page__find-row:focus-visible{border-color:var(--green-500,#438b62);background:var(--ink-50,#f7faf8)}
+.lifegroups-page__find-who{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;overflow-wrap:anywhere}
+.lifegroups-page__find-where{color:var(--green-700,#276d49)}
+.lifegroups-page__find-go{color:var(--muted);flex:none}
+@media(max-width:600px){
+ .lifegroups-page__find-head{flex-direction:column;gap:4px}
+ .lifegroups-page__find-row{padding:10px 8px}
+ /* Directory Cells become full-width tap rows instead of tiny "Open Cell" buttons. */
+ .lifegroups-page__cell-list li{flex-direction:column;align-items:stretch;gap:8px}
+ .lifegroups-page__cell-list li .btn{width:100%;min-height:44px;justify-content:center}
+ .lifegroups-page__cell-list li .badge{align-self:flex-start}
+}
+.lifegroups-page__find-cells{margin-bottom:10px;display:grid;gap:6px}

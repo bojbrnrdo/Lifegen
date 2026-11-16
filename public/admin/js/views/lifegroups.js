@@ -7,6 +7,7 @@ async function loadReactLifegroups(){
  return lifegroupsReact;
 }
 
+import { filterPeople, rankPeople, relationshipLine } from './lifegroupSearch.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
 import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './networkLeaderRegistration.js';
 import { createFourFieldNetwork } from './networkFourField.js';
@@ -320,21 +321,26 @@ export async function renderLifegroups({main, query}) {
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
  <div class="lifegroups-page__viewbar" role="group" aria-label="Lifegroups view">
-  <button type="button" class="lifegroups-page__view" id="showGroupMap" aria-pressed="false">Network map</button>
-  <button type="button" class="lifegroups-page__view is-active" id="showGroupDirectory" aria-pressed="true">Directory</button>
-  <span class="lifegroups-page__viewhint">Browse Cells in a list or explore relationships on the map.</span>
+  <button type="button" class="lifegroups-page__view is-active" id="showGroupDirectory" aria-pressed="true">Browse Cells</button>
+  <button type="button" class="lifegroups-page__view" id="showGroupMap" aria-pressed="false" title="Heavy on phones — best on a larger screen">${icon('group',15)} Network map</button>
+  <span class="lifegroups-page__viewhint">Lists open instantly; the map is best on a larger screen.</span>
  </div>
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="treeCanvas" hidden><div class="loading">Loading discipleship tree…</div></div>
+ <div id="findPersonPanel" class="lifegroups-page__find"></div>
  <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
  <div class="lifegroups-page__extras">
  <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>All People</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>Reports &amp; progress</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
  </div></section>`;
- main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>load(true)}));
+ main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>{
+  // A new Cell or member changes the find-person index too.
+  peopleIndex=null;peopleIndexError='';drawFindPanel();loadPeopleIndex();
+  load(true);
+ }}));
  main.querySelector('#removeFromLifegroups')?.addEventListener('click',()=>openRemoveFromLifegroups({onRemoved:afterRemove}));
 
  const genderButtons=main.querySelectorAll('[data-gender-filter]');
@@ -351,7 +357,10 @@ export async function renderLifegroups({main, query}) {
   mapButton.classList.toggle('is-active',view==='map');directoryButton.classList.toggle('is-active',view==='directory');
   mapButton.setAttribute('aria-pressed',String(view==='map'));directoryButton.setAttribute('aria-pressed',String(view==='directory'));
  };
- mapButton.onclick=()=>switchView('map');
+ mapButton.onclick=()=>{
+  switchView('map');
+  if(!canvas.hasAttribute('data-react-mounted'))mountMap(true).catch(()=>{});
+ };
  directoryButton.onclick=()=>switchView('directory');
  const renderDirectory=()=>{
   if(!cache)return;
@@ -369,7 +378,7 @@ export async function renderLifegroups({main, query}) {
       String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q)||
       String(n.name||'').toLowerCase().includes(q)||String(n.leader_name||'').toLowerCase().includes(q)));
     return html`<section class="card lifegroups-page__network-card"><div class="card__body">
-     <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3>${n.name||'Unnamed network'}</h3><p class="small muted">Leader: ${n.leader_name||'Not assigned'}</p></div><span class="badge">${n.is_active?'Active':'Inactive'}</span></div>
+     <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3><a href="#/networks/${n.id}" aria-label="Open Network ${n.name||n.id}">${n.name||'Unnamed network'}</a></h3><p class="small muted">Leader: ${n.leader_name||'Not assigned'}</p></div><span class="badge">${n.is_active?'Active':'Inactive'}</span></div>
      <div class="lifegroups-page__network-count">${cells.length} ${cells.length===1?'Cell':'Cells'} · ${cells.reduce((sum,g)=>sum+Number(g.member_count||0),0)} members</div>
      ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>html`<li><div><strong>${g.name||'Unnamed Cell'}</strong><span>${g.leader_name||'No leader'} · ${Number(g.member_count||0)} members</span></div>${g.is_active?html`<a class="btn btn--sm" href="#/lifegroups/${g.id}" aria-label="Open Cell ${g.name||g.id}">Open Cell</a>`:html`<span class="badge badge--inactive badge--nodot" title="Removed from the active Lifegroups tree">Inactive</span>`}</li>`)}</ul>`:html`<p class="small muted">No matching Cells in this network.</p>`}
     </div></section>`;
@@ -380,12 +389,81 @@ export async function renderLifegroups({main, query}) {
   });
  };
 
+ // ---------------------------------------------------------------------------
+ // Find a person — one box, one tap to where somebody sits.
+ // Replaces hunting for a name on the network map (which stays available for
+ // staff who want the whole picture, but is no longer the way in).
+ // ---------------------------------------------------------------------------
+ let peopleIndex=null, peopleIndexError='';
+ let repaintFind=null;
+ const findPanel=main.querySelector('#findPersonPanel');
+ const drawFindPanel=()=>{
+  if(!findPanel)return;
+  const ready=Array.isArray(peopleIndex);
+  findPanel.innerHTML=html`<section class="card lifegroups-page__find-card" aria-labelledby="findPersonHeading">
+   <div class="card__body">
+    <div class="lifegroups-page__find-head"><div><h2 id="findPersonHeading">Find a person</h2>
+     <p class="small muted">Type a name, Person ID, Cell or Network. Answers include people in every Cell.</p></div>
+     ${ready?html`<span class="small muted nowrap" id="findPersonCount">${peopleIndex.length} people in Cells</span>`:''}</div>
+    <div class="lifegroups-page__find-input gsearch">${icon('search',17)}
+     <input id="findPersonQ" type="search" autocomplete="off" placeholder="e.g. Maria, P-0042, James Cell…" aria-label="Find a person in any Cell" aria-controls="findPersonResults" />
+    </div>
+    <div id="findPersonResults" class="lifegroups-page__find-results" role="region" aria-live="polite"></div>
+   </div>
+  </section>`;
+  const input=findPanel.querySelector('#findPersonQ'), results=findPanel.querySelector('#findPersonResults');
+  const paint=()=>{
+   const q=input.value.trim();
+   if(peopleIndexError&&!Array.isArray(peopleIndex)){
+    results.innerHTML=html`<div class="alert alert--error">${peopleIndexError}</div>`;
+    return;
+   }
+   if(!Array.isArray(peopleIndex)){results.innerHTML='<div class="loading">Loading people…</div>';return;}
+   if(q.length<2){
+    results.innerHTML=html`<p class="small muted lifegroups-page__find-hint">Start typing a name, Person ID or Cell to see where someone belongs. Tap a result to open their profile.</p>`;
+    return;
+   }
+   const rows=rankPeople(filterPeople(peopleIndex,q),q).slice(0,40);
+   // Cells whose name or leader matches: one tap straight into the Cell.
+   const cells=q.length>=2?filterTrackerView(cache?.nets||[],cache?.groups||[],{status:'all'}).cells
+     .filter(g=>[g.name,g.leader_name].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase()))).slice(0,6):[];
+   const cellBlock=cells.length?html`<div class="lifegroups-page__find-cells"><span class="small muted">Cells</span>
+     <div class="row" style="gap:6px;flex-wrap:wrap">${cells.map(g=>html`<a class="btn btn--sm" href="#/lifegroups/${g.id}">${icon('group',14)} ${g.name||'Cell'} · ${Number(g.member_count||0)}</a>`)}</div></div>`:'';
+   if(!rows.length){
+    results.innerHTML=cellBlock||html`<p class="small muted lifegroups-page__find-hint">Nobody in a Cell matches “${q}”. ${can('lifegroups:manage')?html`<a href="#/lifegroups?tab=needs">Check the People to connect list</a> for people without a Cell.`:''}</p>`;
+    return;
+   }
+   results.innerHTML=html`${cellBlock}<ul class="lifegroups-page__find-list">${rows.map(p=>html`<li>
+    <a class="lifegroups-page__find-row" href="#/people/${p.id}">
+     ${raw(avatar({first_name:p.first_name,last_name:p.last_name,photo:p.photo},'sm'))}
+     <span class="lifegroups-page__find-who"><b>${p.first_name||''} ${p.last_name||''}</b>
+      <span class="small muted">${p.person_code||''}</span>
+      <span class="small lifegroups-page__find-where">${relationshipLine(p)}</span></span>
+     <span class="lifegroups-page__find-go" aria-hidden="true">${icon('chevR',16)}</span>
+    </a></li>`)}</ul>
+    ${rows.length===40?html`<p class="small muted">Showing the first 40 matches — keep typing to narrow it down.</p>`:''}`;
+  };
+  input.addEventListener('input',debounce(paint,140));
+  repaintFind=paint;
+  paint();
+ };
+ const loadPeopleIndex=async()=>{
+  if(Array.isArray(peopleIndex))return;
+  try{ const rows=await api.lifegroupPeopleIndex(4000); peopleIndex=Array.isArray(rows)?rows:[]; }
+  catch(error){ peopleIndexError=error.message||'Unable to load people.'; }
+  if(main.contains(findPanel))drawFindPanel();
+ };
+ drawFindPanel();
+ loadPeopleIndex();
+
  function afterRemove(){
+  // People may have moved, so the find box reloads with the tree.
+  peopleIndex=null;peopleIndexError='';drawFindPanel();loadPeopleIndex();
   // Both the legacy SVG cache and the React data model must reload.
   canvas.__lifegenTree?.members.clear();
   canvas.__lifegenTree?.loading.clear();
   if(canvas.__lifegenTree)canvas.__lifegenTree.selected=null;
-  load(true);
+  load(true).then(()=>{if(view==='map')mountMap(true).catch(()=>{});});
  }
  function renderUnassigned(){
   const missing=findUnassignedGroups(cache.nets,cache.groups,filters);
@@ -443,6 +521,7 @@ export async function renderLifegroups({main, query}) {
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
   renderDirectory();
+  repaintFind?.();
   const summary=main.querySelector('#treeSummary');
   const visibleNetworks=cache.nets.filter(n =>
    (!filters.gender||n.gender===filters.gender) &&
@@ -452,12 +531,23 @@ export async function renderLifegroups({main, query}) {
    (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
   summary.hidden=Boolean(filters.q);
   summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
+  // The map bundle (React Flow) is only downloaded on the first tap of
+  // "Network map". The directory and Find-a-person use plain DOM, so a phone
+  // no longer pays for a canvas it never looks at.
+  if(view==='map')await mountMap();
+  if(seq!==sequence||!main.contains(canvas))return;
+ }
+
+ let mounting=null;
+ async function mountMap(force=false){
+  if(mounting)return mounting;
   const removeContext=can('lifegroups:manage')?({kind,networkId,groupId,personId})=>
     openRemoveFromLifegroups({initialTab:kind==='group'?'cell':kind,
       networkId,groupId,personId,onRemoved:afterRemove}):null;
+  mounting=(async()=>{
   try {
     const {mount}=await loadReactLifegroups();
-    if(seq!==sequence||!main.contains(canvas))return;
+    if(!main.contains(canvas))return;
     if(force)canvas.__lifegenReactVersion=(canvas.__lifegenReactVersion||0)+1;
     mount(canvas,{
       networks:cache.nets,groups:cache.groups,filters:{...filters,q:filters.q},
@@ -538,7 +628,11 @@ export async function renderLifegroups({main, query}) {
     // fails to load (old deployments, blocked assets, or network errors).
     console.error('React Lifegroups map unavailable, using SVG fallback',error);
     await renderHierarchy(canvas,cache.nets,cache.groups,filters,{onRemove:removeContext});
+  }finally{
+    mounting=null;
   }
+  })();
+  return mounting;
  }
  let peopleSearchSeq=0;
  async function searchPeople(){
@@ -558,7 +652,9 @@ export async function renderLifegroups({main, query}) {
  if(filters.q)searchPeople();
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
- main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
+ main.querySelector('#treeRefresh').addEventListener('click',()=>load(true).then(()=>{
+  if(view==='map')mountMap(true).catch(()=>{});
+ }));
  const allPeople=main.querySelector('#allPeoplePanel');
  allPeople.addEventListener('toggle',()=>{if(allPeople.open&&!allPeople.dataset.loaded){allPeople.dataset.loaded='yes';drawAllPeople(main.querySelector('#allPeopleBody'));}});
  const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');

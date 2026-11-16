@@ -97,8 +97,12 @@ test('LifeGroups opens the directory by default with readable category options',
  assert.match(page,/id="treeCanvas" hidden/);
  assert.match(page,/id="showGroupDirectory" aria-pressed="true"/);
  assert.match(page,/id="showGroupMap" aria-pressed="false"/);
+ // The map bundle must stay off the critical path: it loads on the first
+ // press of "Network map", not when the page opens.
+ assert.match(page,/if\(view==='map'\)await mountMap\(\)/);
+ assert.match(page,/if\(!canvas\.hasAttribute\('data-react-mounted'\)\)mountMap\(true\)/);
  for(const label of ['All','Boys','Girls'])
   assert.ok(page.includes('<span>'+label+'</span>'),label);
- assert.match(page,/mapButton\.onclick=\(\)=>switchView\('map'\)/);
+ assert.match(page,/mapButton\.onclick=\(\)=>\{\s*\n\s*switchView\('map'\);/);
  assert.match(page,/directoryButton\.onclick=\(\)=>switchView\('directory'\)/);
 });

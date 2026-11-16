@@ -264,6 +264,54 @@ async function membershipForPerson(personId) {
   return { current: history.find((r) => !r.left_at) || null, history };
 }
 
+/**
+ * Everyone currently in a Cell, with where they sit (Cell, Cell Leader,
+ * Network). One read-only query powers the "Find a person" box on the
+ * Lifegroups page, which replaces hunting for a name on the network map.
+ * Members with no Cell are not here — they are the "People to connect" queue.
+ */
+async function peopleInCells(limit = 4000) {
+  const max = Math.max(1, Math.min(Number(limit) || 4000, 8000));
+  // Members of a Cell, plus the Cell Leaders and Network Leaders who may not
+  // hold a membership row of their own. A leader's own membership wins when
+  // both exist, so nobody is listed twice.
+  const { rows } = await query(`WITH cell_rows AS (
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.sex,
+        CASE WHEN m.role <> 'leader' THEN 'member'
+             WHEN EXISTS(SELECT 1 FROM networks xn WHERE xn.leader_person_id=g.leader_person_id AND xn.is_active)
+               THEN 'network_leader' ELSE 'cell_leader' END AS role,
+        g.id AS cell_id,g.name AS cell_name,n.id AS network_id,n.name AS network_name,
+        l.full_name AS cell_leader_name
+      FROM lifegroup_memberships m
+      JOIN people p ON p.id=m.person_id
+      JOIN lifegroups g ON g.id=m.lifegroup_id
+      LEFT JOIN networks n ON n.id=g.network_id
+      LEFT JOIN people l ON l.id=g.leader_person_id
+      WHERE m.left_at IS NULL AND p.archived_at IS NULL AND g.is_active
+    ), leader_rows AS (
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.sex,
+        CASE WHEN EXISTS(SELECT 1 FROM networks xn WHERE xn.leader_person_id=g.leader_person_id AND xn.is_active)
+          THEN 'network_leader' ELSE 'cell_leader' END AS role,
+        g.id AS cell_id,g.name AS cell_name,n.id AS network_id,n.name AS network_name,
+        p.full_name AS cell_leader_name
+      FROM lifegroups g
+      JOIN people p ON p.id=g.leader_person_id
+      LEFT JOIN networks n ON n.id=g.network_id
+      WHERE g.is_active AND p.archived_at IS NULL
+    )
+    SELECT * FROM cell_rows
+    UNION ALL
+    SELECT * FROM leader_rows WHERE id NOT IN (SELECT id FROM cell_rows)
+    ORDER BY first_name,last_name,id LIMIT $1`, [max]);
+  return rows.map((r) => ({
+    id: Number(r.id), person_code: r.person_code, first_name: r.first_name, last_name: r.last_name, sex: r.sex,
+    role: r.role,
+    cell_id: Number(r.cell_id), cell_name: r.cell_name,
+    network_id: r.network_id == null ? null : Number(r.network_id), network_name: r.network_name,
+    cell_leader_name: r.cell_leader_name,
+  }));
+}
+
 async function needsLifegroup(filters = {}) {
   const q = clean(filters.q);
   const limit = Math.max(1, Math.min(Number(filters.limit) || 500, 1000));
@@ -1121,6 +1169,7 @@ async function lifegroupMethod(name, args, actor) {
   if (name === 'lifegroups') return listGroups(args[0] || {});
   if (name === 'lifegroupOptions') return options();
   if (name === 'lifegroupNeeds') return needsLifegroup(args[0] || {});
+  if (name === 'lifegroupPeopleIndex') return peopleInCells(args[0]);
   if (name === 'lifegroupRecommend') {
     const prefs = args[0] || {};
     const sex = clean(prefs.sex);
