@@ -39,13 +39,39 @@ export const YOUTH_WELFARE_PEOPLE_TABS = Object.freeze([
 const PEOPLE_TAB_IDS = new Set(YOUTH_WELFARE_PEOPLE_TABS.map(({id})=>id));
 const TASK_TYPES = new Set(['data_verification', 'registration_review', 'admin_follow_up']);
 const TASK_STATUSES = new Set(['needs_review', 'in_progress', 'resolved']);
+export const YOUTH_WELFARE_TASK_PRIORITIES=Object.freeze(['low','normal','high','urgent']);
+export const YOUTH_WELFARE_TASK_OUTCOMES=Object.freeze(['reached_no_need','reached_support_arranged','unreachable','referred','declined']);
+const TASK_PRIORITIES = new Set(YOUTH_WELFARE_TASK_PRIORITIES);
+const TASK_OUTCOMES = new Set(YOUTH_WELFARE_TASK_OUTCOMES);
 const REPORT_TYPES = new Set(['registration_summary', 'current_directory', 'data_quality', 'tasks']);
+export const YOUTH_CARE_STATUSES=Object.freeze({doing_well:'Doing well',monitor:'Monitor',needs_support:'Needs support',urgent:'Urgent'});
 const IS_LOCAL_DEMO = () => process.env.LOCAL_DEMO === 'true';
 
 // These People rows are the canonical LIFEGEN source. The public_registration
 // audit event also covers a regular registration that reused an existing email.
 // Every VIP-linked person is excluded independently of registration_source.
-function eligiblePredicate(localDemo = IS_LOCAL_DEMO()) {
+function calculatedAgeSql(personAlias='p') {
+  return `COALESCE(CASE WHEN ${personAlias}.birthdate IS NULL THEN NULL ELSE EXTRACT(YEAR FROM age(current_date,${personAlias}.birthdate))::int END,${personAlias}.age)`;
+}
+function agePolicyPredicate({includeUnknownAge=false}={}) {
+  const age=calculatedAgeSql('p');
+  return `(
+    NOT EXISTS (
+      SELECT 1 FROM public.youth_welfare_eligibility_policy configured_age
+      WHERE configured_age.id=1 AND (configured_age.minimum_age IS NOT NULL OR configured_age.maximum_age IS NOT NULL)
+    )
+    ${includeUnknownAge?`OR ${age} IS NULL`:''}
+    OR EXISTS (
+      SELECT 1 FROM public.youth_welfare_eligibility_policy configured_age
+      WHERE configured_age.id=1
+        AND ${age} IS NOT NULL
+        AND (configured_age.minimum_age IS NULL OR ${age} >= configured_age.minimum_age)
+        AND (configured_age.maximum_age IS NULL OR ${age} <= configured_age.maximum_age)
+    )
+  )`;
+}
+function eligiblePredicate(localDemo = IS_LOCAL_DEMO(), applyAgePolicy = true) {
+  const agePolicy = applyAgePolicy ? `AND ${agePolicyPredicate()}` : '';
   return `p.archived_at IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.vip_registrations vip WHERE vip.person_id = p.id
@@ -62,7 +88,10 @@ function eligiblePredicate(localDemo = IS_LOCAL_DEMO()) {
           AND registration_event.entity_id = p.id::text
           AND registration_event.action = 'public_registration'
       )${localDemo ? "\n      OR p.is_demo = true" : ''}
-    )`;
+    )${agePolicy}`;
+}
+function dataQualityScopePredicate(localDemo=IS_LOCAL_DEMO()) {
+  return `${eligiblePredicate(localDemo,false)} AND ${agePolicyPredicate({includeUnknownAge:true})}`;
 }
 
 const nullText = field => `NULLIF(BTRIM(${field}), '') IS NULL`;
@@ -94,6 +123,7 @@ function welfareIncompletePredicate(personAlias='p',welfareAlias='welfare') {
     OR ${welfareAlias}.lcsol_enrolled IS NULL OR ${welfareAlias}.lcsol_status IS NULL
     OR ${welfareAlias}.welfare_consent_at IS NULL)`;
 }
+export const youthWelfareIncompleteSql=(personAlias='p',welfareAlias='welfare')=>welfareIncompletePredicate(personAlias,welfareAlias);
 function duplicateEmailPredicate() {
   const peerEligibility = eligiblePredicate().replace(/(^|[^a-zA-Z0-9_])p\./g, '$1peer.');
   return `(NULLIF(BTRIM(p.email),'') IS NOT NULL AND EXISTS (
@@ -140,6 +170,8 @@ function personSelect() {
       welfare.church_invited_at::text AS church_invited_at,
       welfare.lcsol_enrolled,
       welfare.lcsol_status,
+      welfare.care_status,
+      welfare.care_status_reviewed_at::text AS care_status_reviewed_at,
       welfare.welfare_consent_at::text AS welfare_consent_at,
       welfare.verification_status,
       ${welfareIncompletePredicate()} AS is_incomplete
@@ -159,13 +191,72 @@ export function youthCategoryLabel(category) {
   return CATEGORY_LABELS.get(category) || CATEGORY_LABELS.get('unclassified');
 }
 
-export function youthWelfareEligibilitySql({ localDemo = IS_LOCAL_DEMO() } = {}) {
-  return eligiblePredicate(localDemo);
+export function youthWelfareEligibilitySql({ localDemo = IS_LOCAL_DEMO(), applyAgePolicy = true } = {}) {
+  return eligiblePredicate(localDemo, applyAgePolicy);
+}
+
+export async function youthWelfareEligibilityPolicy() {
+  return transaction(async client => {
+    const { rows } = await client.query(`SELECT minimum_age,maximum_age,updated_by,updated_at::text AS updated_at
+      FROM public.youth_welfare_eligibility_policy WHERE id=1`);
+    const row = rows[0] || { minimum_age:null,maximum_age:null,updated_by:null,updated_at:null };
+    return {
+      minimum_age:row.minimum_age===null?null:Number(row.minimum_age),
+      maximum_age:row.maximum_age===null?null:Number(row.maximum_age),
+      age_filter_enabled:row.minimum_age!==null||row.maximum_age!==null,
+      updated_by:row.updated_by===null?null:Number(row.updated_by),
+      updated_at:row.updated_at,
+      unknown_age_policy:'Unknown-age profiles remain available in Data Quality review but are not counted as eligible while an age limit is configured.',
+      category_policy:'One manually assigned primary category; Unclassified remains a valid category.',
+      verification_freshness:'Not configured; freshness is deferred by policy.',
+    };
+  },{write:false});
+}
+
+export async function setYouthWelfareEligibilityPolicy(raw,actor) {
+  if(!actor?.permissions?.includes('youth_welfare:manage'))throw httpError(actor?403:401,'Your account cannot manage Youth Welfare eligibility settings.');
+  const body=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  const normalizeAge=(value,label)=>{
+    if(value===undefined||value===null||value==='')return null;
+    const number=Number(value);
+    if(!Number.isSafeInteger(number)||number<0||number>120)throw httpError(400,`${label} must be a whole number from 0 to 120, or blank.`);
+    return number;
+  };
+  const minimumAge=normalizeAge(body.minimum_age,'Minimum age');
+  const maximumAge=normalizeAge(body.maximum_age,'Maximum age');
+  if(minimumAge!==null&&maximumAge!==null&&minimumAge>maximumAge)throw httpError(400,'Minimum age cannot be greater than maximum age.');
+  return transaction(async client=>{
+    const previous=(await client.query('SELECT minimum_age,maximum_age FROM public.youth_welfare_eligibility_policy WHERE id=1 FOR UPDATE')).rows[0];
+    const {rows}=await client.query(`UPDATE public.youth_welfare_eligibility_policy
+      SET minimum_age=$1,maximum_age=$2,updated_by=$3,updated_at=now() WHERE id=1
+      RETURNING minimum_age,maximum_age,updated_by,updated_at::text AS updated_at`,[minimumAge,maximumAge,actor.id]);
+    await logAction(client,actor,'youth_welfare_eligibility_policy',1,'eligibility_policy_updated',{
+      from:{minimum_age:previous?.minimum_age??null,maximum_age:previous?.maximum_age??null},
+      to:{minimum_age:minimumAge,maximum_age:maximumAge},
+    });
+    return {...rows[0],minimum_age:rows[0].minimum_age===null?null:Number(rows[0].minimum_age),maximum_age:rows[0].maximum_age===null?null:Number(rows[0].maximum_age),age_filter_enabled:minimumAge!==null||maximumAge!==null};
+  });
 }
 
 function integerInRange(value, fallback, min, max) {
   const number = Number(value);
   return Number.isSafeInteger(number) ? Math.max(min, Math.min(max, number)) : fallback;
+}
+
+export function validateYouthWelfareTaskPriority(value='normal'){
+  const priority=String(value);
+  if(!TASK_PRIORITIES.has(priority))throw httpError(400,'Choose a valid task priority.');
+  return priority;
+}
+export function validateYouthWelfareTaskOutcome(value){
+  if(value===undefined||value===null||value==='')return null;
+  const outcome=String(value);
+  if(!TASK_OUTCOMES.has(outcome))throw httpError(400,'Choose a valid follow-up outcome.');
+  return outcome;
+}
+export function requireYouthWelfareTaskOutcomeForClosure(nextStatus,currentStatus,outcome){
+  if(nextStatus==='resolved'&&currentStatus!=='resolved'&&!outcome)throw httpError(400,'Choose an outcome before closing this follow-up.');
+  return true;
 }
 
 function validDate(value, label = 'date', { optional = false } = {}) {
@@ -385,6 +476,7 @@ export async function youthWelfareSummary(actor=null) {
   const data = await transaction(async (client) => {
     const schemaCheck=await client.query(`SELECT to_regclass('public.youth_welfare_records') IS NOT NULL AS welfare_records_available`);
     const welfareSchemaAvailable=Boolean(schemaCheck.rows[0]?.welfare_records_available);
+    const policy=(await client.query('SELECT minimum_age,maximum_age,updated_at::text AS updated_at FROM public.youth_welfare_eligibility_policy WHERE id=1')).rows[0]||{minimum_age:null,maximum_age:null,updated_at:null};
     const { rows } = await client.query(`
       WITH eligible_people AS (
         SELECT p.id,p.email,p.birthdate,p.sex,p.school,p.ministry,p.privacy_consent_at,
@@ -425,14 +517,14 @@ export async function youthWelfareSummary(actor=null) {
     let welfare=null;
     if(welfareSchemaAvailable)welfare=await client.query(`
       WITH eligible_people AS (
-        SELECT p.id,p.first_name,p.last_name,p.full_name,p.birthdate,p.sex,p.email,p.school,p.ministry,p.privacy_consent_at
+        SELECT p.id,p.first_name,p.last_name,p.full_name,p.birthdate,p.age,p.sex,p.email,p.school,p.ministry,p.privacy_consent_at
         FROM public.people p WHERE ${eligible}
       ), data AS (
         SELECT e.*,w.person_id AS welfare_person_id,w.education_status,w.grade_year_level,w.school_stop_period,
           w.school_stop_reasons,w.continue_studies,w.lcsol_enrolled,w.lcsol_status,w.verification_status,
           w.complete_address,w.contact_number,w.parent_guardian_name,w.parent_guardian_contact,
           w.cell_leader_person_id,w.cell_leader_manual_name,w.welfare_consent_at,
-          CASE WHEN e.birthdate IS NULL THEN NULL ELSE EXTRACT(YEAR FROM age(current_date,e.birthdate))::int END AS calculated_age,
+          ${calculatedAgeSql('e')} AS calculated_age,
           NOT ${welfareIncompletePredicate('e','w')} AS is_complete
         FROM eligible_people e LEFT JOIN public.youth_welfare_records w ON w.person_id=e.id
       )
@@ -495,7 +587,7 @@ export async function youthWelfareSummary(actor=null) {
           WHERE task.status IN ('needs_review','in_progress') AND task.due_date<current_date) AS overdue_followups
       FROM data
     `);
-    return { summary: rows[0], welfare: welfare?.rows[0]||null, welfare_schema_available:welfareSchemaAvailable };
+    return { summary: rows[0], welfare: welfare?.rows[0]||null, welfare_schema_available:welfareSchemaAvailable, eligibility_policy:policy };
   }, { write: false });
   const result = data.summary;
   const welfare = data.welfare;
@@ -507,6 +599,16 @@ export async function youthWelfareSummary(actor=null) {
   return {
     total: result.total,
     welfare_schema_available:data.welfare_schema_available,
+    eligibility_definition:{
+      source:'Eligible regular LIFEGEN People records; archived and VIP-linked records are excluded.',
+      minimum_age:data.eligibility_policy.minimum_age===null?null:Number(data.eligibility_policy.minimum_age),
+      maximum_age:data.eligibility_policy.maximum_age===null?null:Number(data.eligibility_policy.maximum_age),
+      age_filter_enabled:data.eligibility_policy.minimum_age!==null||data.eligibility_policy.maximum_age!==null,
+      unknown_age:'Unknown-age records remain in Data Quality review but are not counted as eligible when an age limit is configured.',
+      category:'Exactly one manually assigned primary category; Unclassified is included.',
+      verification_freshness:'Deferred; no stale-verification threshold is configured.',
+      updated_at:data.eligibility_policy.updated_at,
+    },
     categories: Object.fromEntries(YOUTH_WELFARE_CATEGORIES.map(({ id }) => [id, result[id]])),
     insights: {
       assignedStudentCategory: result.student,
@@ -549,7 +651,7 @@ export async function youthWelfareSummary(actor=null) {
         {id:'16_18',label:'16–18',count:Number(welfare.age_16_18||0)},
         {id:'19_24',label:'19–24',count:Number(welfare.age_19_24||0)},
         {id:'25_plus',label:'25+',count:Number(welfare.age_25_plus||0)},
-        {id:'unknown',label:'Birthday unavailable',count:Number(welfare.age_unknown||0)},
+        {id:'unknown',label:'Age unavailable',count:Number(welfare.age_unknown||0)},
       ],
       grade_year_counts: welfare.grade_year_counts || {},
       school_stop_period_counts: welfare.school_stop_period_counts || {},
@@ -584,7 +686,7 @@ export function shapeYouthProfileForViewer(person) {
 export function shapeYouthProfileForStaff(person) {
   const visible=['id','person_code','first_name','last_name','full_name','status','date_registered','youth_category','school','course_year','is_incomplete',
     'education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at',
-    'lcsol_enrolled','lcsol_status','verification_status','cell_leader_person_id','cell_leader_manual_name'];
+    'lcsol_enrolled','lcsol_status','care_status','care_status_reviewed_at','verification_status','cell_leader_person_id','cell_leader_manual_name'];
   return Object.fromEntries(visible.filter(key=>Object.hasOwn(person,key)).map(key=>[key,person[key]]));
 }
 
@@ -707,12 +809,12 @@ export async function youthWelfarePerson(personId,actor=null) {
     const includePrivate=actor?.permissions?.includes('youth_welfare:profile:private');
     const manageRecords=actor?.permissions?.includes('youth_welfare:records:manage');
     const details=registration.rows[0]||null;
-    const welfareKeys=['youth_welfare_record_id','messenger_facebook_name','complete_address','youth_contact_number','parent_guardian_name','parent_guardian_contact','cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','school_stop_reasons','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','welfare_consent_at','verification_status'];
+    const welfareKeys=['youth_welfare_record_id','messenger_facebook_name','complete_address','youth_contact_number','parent_guardian_name','parent_guardian_contact','cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','school_stop_reasons','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','care_status','care_status_reviewed_at','welfare_consent_at','verification_status'];
     const welfareRecord=Object.fromEntries(welfareKeys.filter(key=>Object.hasOwn(rows[0],key)).map(key=>[key,rows[0][key]]));
     const welfareRecordExists=Boolean(rows[0].youth_welfare_record_id);
     const person={...rows[0]};for(const key of welfareKeys)delete person[key];
     const canViewFollowup=actor?.permissions?.includes('youth_welfare:manage')===true;
-    const followUpHistory=canViewFollowup?(await client.query(`SELECT task.id,task.task_type,task.title,task.notes,task.status,task.due_date::text AS due_date,
+    const followUpHistory=canViewFollowup?(await client.query(`SELECT task.id,task.task_type,task.title,task.notes,task.status,task.priority,task.outcome,task.closure_note,task.due_date::text AS due_date,
         task.created_at::text AS created_at,task.updated_at::text AS updated_at,task.resolved_at::text AS resolved_at,
         assigned.display_name AS assigned_to_name,creator.display_name AS created_by_name
         FROM public.youth_welfare_follow_up_tasks task
@@ -725,14 +827,14 @@ export async function youthWelfarePerson(personId,actor=null) {
       return { ...person,welfare_record:welfareRecord,youth_welfare_record_exists:welfareRecordExists,pending_welfare_updates:pending.rows,follow_up_history:followUpHistory,registration_details:details };
     }
     if(manageRecords){
-      const staffRecord=Object.fromEntries(['cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','verification_status'].filter(key=>Object.hasOwn(welfareRecord,key)).map(key=>[key,welfareRecord[key]]));
+      const staffRecord=Object.fromEntries(['cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','care_status','care_status_reviewed_at','verification_status'].filter(key=>Object.hasOwn(welfareRecord,key)).map(key=>[key,welfareRecord[key]]));
       return { ...shapeYouthProfileForStaff({...person,...staffRecord}),welfare_record:staffRecord,youth_welfare_record_exists:welfareRecordExists,registration_details:details?{event_at:details.event_at,person_created:details.person_created,leader_assigned:details.leader_assigned}:null,private_fields_hidden:true };
     }
     return { ...shapeYouthProfileForViewer(person),registration_details:details?{event_at:details.event_at,person_created:details.person_created,leader_assigned:details.leader_assigned}:null,private_fields_hidden:true };
   }, { write: false });
 }
 
-const STAFF_WELFARE_FIELDS=new Set(['cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status']);
+const STAFF_WELFARE_FIELDS=new Set(['cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','care_status']);
 const ADMIN_WELFARE_FIELDS=new Set([...STAFF_WELFARE_FIELDS,'messenger_facebook_name','complete_address','contact_number','parent_guardian_name','parent_guardian_contact','school_stop_reasons']);
 const GRADE_REQUIRED_STATUSES=new Set(['currently_studying','currently_als','working_student']);
 const selectWelfareChoice=(value,choices,label)=>{
@@ -768,6 +870,7 @@ function normalizeWelfarePatch(body,allowed){
         if(value!==null&&typeof value!=='boolean')throw httpError(400,'Choose Yes or No for LCSOL enrollment.');
         patch[key]=value;break;
       case 'lcsol_status': patch[key]=selectWelfareChoice(value,YOUTH_LCSOL_STATUSES,'LCSOL status');break;
+      case 'care_status': patch[key]=selectWelfareChoice(value,YOUTH_CARE_STATUSES,'Care Status');break;
       case 'school_stop_reasons':{
         if(value==null){patch[key]=[];break;}
         if(!Array.isArray(value))throw httpError(400,'Select one or more school-stop reasons.');
@@ -786,8 +889,18 @@ function assertLcsolConsistent(enrolled,status){
   if(enrolled===true&&status==='not_yet_started')throw httpError(400,'LCSOL enrollment is Yes. Choose another status or correct the enrollment answer.');
 }
 function shapeStaffWelfareRecord(record){
-  const keys=['person_id','cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','verification_status','verified_at','created_at','updated_at'];
+  const keys=['person_id','cell_leader_person_id','cell_leader_manual_name','education_status','grade_year_level','school_stop_period','continue_studies','church_invited_at','lcsol_enrolled','lcsol_status','care_status','care_status_reviewed_at','verification_status','verified_at','created_at','updated_at'];
   return Object.fromEntries(keys.filter(key=>Object.hasOwn(record,key)).map(key=>[key,record[key]]));
+}
+async function recordYouthStatusTransitions(client,personId,before={},after={},actorId=null){
+  const tracked=['category','education_status','lcsol_enrolled','lcsol_status','care_status','verification_status'];
+  const valueText=value=>value===undefined||value===null?null:typeof value==='boolean'?(value?'true':'false'):String(value);
+  for(const field of tracked){
+    const oldValue=valueText(before[field]),newValue=valueText(after[field]);
+    if(oldValue===newValue)continue;
+    await client.query(`INSERT INTO public.youth_welfare_status_history(person_id,field_name,old_value,new_value,actor_id)
+      VALUES($1,$2,$3,$4,$5)`,[personId,field,oldValue,newValue,actorId]);
+  }
 }
 
 export async function updateYouthWelfareRecord(personId,raw,actor){
@@ -802,6 +915,10 @@ export async function updateYouthWelfareRecord(personId,raw,actor){
     if(!person)throw httpError(404,'Eligible Youth Welfare profile not found.');
     const current=(await client.query('SELECT * FROM public.youth_welfare_records WHERE person_id=$1 FOR UPDATE',[id])).rows[0]||null;
     const next={...(current||{}),...patch};
+    if(Object.hasOwn(patch,'care_status')){
+      patch.care_status_reviewed_at=patch.care_status?new Date().toISOString():null;
+      next.care_status_reviewed_at=patch.care_status_reviewed_at;
+    }
     assertLcsolConsistent(next.lcsol_enrolled,next.lcsol_status);
     if(next.cell_leader_person_id&&next.cell_leader_person_id===id)throw httpError(400,'A person cannot be their own Cell Leader.');
     if(patch.cell_leader_person_id){
@@ -828,6 +945,7 @@ export async function updateYouthWelfareRecord(personId,raw,actor){
       const placeholders=['$1',...columns.map((_,index)=>`$${index+2}`),"'staff_entry'",`$${values.length}` ,`$${values.length}`];
       await client.query(`INSERT INTO public.youth_welfare_records(${names.join(',')}) VALUES(${placeholders.join(',')})`,values);
     }
+    await recordYouthStatusTransitions(client,id,current||{},next,actor.id);
     await logAction(client,actor,'youth_welfare_records',id,'record_updated',{changed_fields:changed});
     return (await client.query('SELECT * FROM public.youth_welfare_records WHERE person_id=$1',[id])).rows[0];
   });
@@ -865,6 +983,7 @@ export async function setYouthWelfareVerification(personId,rawStatus,actor){
       verified_by=CASE WHEN $1='verified' THEN $2 ELSE NULL END,
       verified_at=CASE WHEN $1='verified' THEN now() ELSE NULL END,updated_by=$2,updated_at=now()
       WHERE person_id=$3`,[status,actor.id,id]);
+    await recordYouthStatusTransitions(client,id,{verification_status:row.verification_status},{verification_status:status},actor.id);
     await logAction(client,actor,'youth_welfare_records',id,status==='verified'?'record_verified':'verification_reset',{from:row.verification_status,to:status});
     return {person_id:id,verification_status:status};
   });
@@ -921,6 +1040,7 @@ export async function reviewYouthWelfareUpdate(updateId,decision,actor){
         normalized.grade_year_level,normalized.school_stop_period,normalized.school_stop_reasons,normalized.continue_studies,
         normalized.church_invited_at,normalized.lcsol_enrolled,normalized.lcsol_status,update.welfare_consent_at,
         raw.welfare_consent_version||YOUTH_WELFARE_CONSENT_VERSION,actor.id,update.person_id]);
+      await recordYouthStatusTransitions(client,update.person_id,previous,{...previous,...normalized,verification_status:'pending'},actor.id);
     }
     await client.query(`UPDATE public.youth_welfare_record_updates SET status=$1,reviewed_by=$2,reviewed_at=now() WHERE id=$3`,[choice==='approve'?'approved':'rejected',actor.id,id]);
     await logAction(client,actor,'youth_welfare_record_updates',id,choice==='approve'?'public_update_approved':'public_update_rejected',{person_id:update.person_id});
@@ -936,6 +1056,54 @@ export async function youthWelfareRecordHistory(personId,{limit=50}={}){
     if(!person)throw httpError(404,'Youth Welfare profile not found.');
     return (await client.query(`SELECT id,action,record_snapshot,created_at::text AS created_at
       FROM public.youth_welfare_record_history WHERE person_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2`,[id,max])).rows;
+  },{write:false});
+}
+
+export async function youthWelfareTimeline(personId,{limit=100}={}){
+  const id=validId(personId,'person'),max=integerInRange(limit,100,1,200),eligible=eligiblePredicate();
+  return transaction(async client=>{
+    const person=(await client.query(`SELECT p.id FROM public.people p WHERE p.id=$1 AND ${eligible}`,[id])).rows[0];
+    if(!person)throw httpError(404,'Youth Welfare profile not found.');
+    const [statusRows,taskRows,updateRows]=await Promise.all([
+      client.query(`SELECT history.id,history.field_name,history.old_value,history.new_value,history.created_at::text AS created_at,
+        staff.display_name AS actor_name FROM public.youth_welfare_status_history history
+        LEFT JOIN public.staff_users staff ON staff.id=history.actor_id
+        WHERE history.person_id=$1 ORDER BY history.created_at DESC,history.id DESC LIMIT $2`,[id,max]),
+      client.query(`SELECT audit.id,audit.action,audit.actor_name,audit.created_at::text AS created_at,
+        audit.details->>'to' AS status_after,audit.details->>'status' AS status_created,
+        audit.details->>'outcome' AS outcome,task.title,task.task_type
+        FROM public.audit_log audit JOIN public.youth_welfare_follow_up_tasks task ON task.id::text=audit.entity_id
+        WHERE audit.entity='youth_welfare_follow_up_tasks' AND task.person_id=$1
+          AND audit.action IN ('task_created','task_status_changed','task_updated')
+        ORDER BY audit.created_at DESC,audit.id DESC LIMIT $2`,[id,max]),
+      client.query(`SELECT id,status,created_at::text AS submitted_at,reviewed_at::text AS reviewed_at,
+        reviewer.display_name AS reviewer_name FROM public.youth_welfare_record_updates update_record
+        LEFT JOIN public.staff_users reviewer ON reviewer.id=update_record.reviewed_by
+        WHERE update_record.person_id=$1 ORDER BY update_record.created_at DESC,update_record.id DESC LIMIT $2`,[id,max]),
+    ]);
+    const statusLabels={category:'Primary category',education_status:'Education status',lcsol_enrolled:'LCSOL enrollment',lcsol_status:'LCSOL progress',care_status:'Care Status',verification_status:'Verification'};
+    const statusValue=(field,value)=>{
+      if(value===null||value===undefined)return 'Not recorded';
+      if(field==='category')return youthCategoryLabel(value);
+      if(field==='education_status')return YOUTH_EDUCATION_STATUSES[value]||value;
+      if(field==='lcsol_status')return YOUTH_LCSOL_STATUSES[value]||value;
+      if(field==='care_status')return YOUTH_CARE_STATUSES[value]||value;
+      if(field==='lcsol_enrolled')return value==='true'?'Yes':value==='false'?'No':'Not recorded';
+      return value==='verified'?'Verified':value==='pending'?'Pending':value;
+    };
+    const events=statusRows.rows.map(row=>({id:`status-${row.id}`,type:'status_change',field_name:row.field_name,
+      event_label:`${statusLabels[row.field_name]||'Youth Welfare status'} changed`,
+      detail:`${statusValue(row.field_name,row.old_value)} → ${statusValue(row.field_name,row.new_value)}`,
+      actor_name:row.actor_name,created_at:row.created_at}));
+    for(const row of taskRows.rows)events.push({id:`task-${row.id}`,type:'follow_up',
+      event_label:row.action==='task_created'?'Follow-up opened':row.action==='task_status_changed'?`Follow-up ${row.status_after==='resolved'?'closed':row.status_after==='in_progress'?'moved to in progress':'status changed'}`:'Follow-up updated',
+      detail:row.title,actor_name:row.actor_name,created_at:row.created_at,outcome:row.outcome||null});
+    for(const row of updateRows.rows){
+      events.push({id:`correction-${row.id}-submitted`,type:'correction',event_label:'Correction submitted for review',detail:'Proposed answers are not shown in this timeline.',actor_name:null,created_at:row.submitted_at});
+      if(row.reviewed_at)events.push({id:`correction-${row.id}-reviewed`,type:'correction',event_label:row.status==='approved'?'Correction approved':'Correction rejected',detail:'Review decision recorded.',actor_name:row.reviewer_name,created_at:row.reviewed_at});
+    }
+    events.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)||String(b.id).localeCompare(String(a.id)));
+    return {events:events.slice(0,max),scope:'Youth Welfare events only; no school-stop reasons, private answers, or Tracker history.'};
   },{write:false});
 }
 
@@ -1005,6 +1173,7 @@ export async function setYouthWelfareCategory(personId, rawCategory, actor) {
       VALUES($1,$2,$3,now(),now()) ON CONFLICT(person_id) DO UPDATE
       SET category=EXCLUDED.category,updated_by=EXCLUDED.updated_by,updated_at=now()
     `,[id,category,actor.id]);
+    await recordYouthStatusTransitions(client,id,{category:before},{category},actor.id);
     await logAction(client,actor,'youth_welfare_categories',id,'category_changed',{from:before,to:category});
     return { person_id:id,category,category_label:youthCategoryLabel(category) };
   });
@@ -1012,15 +1181,19 @@ export async function setYouthWelfareCategory(personId, rawCategory, actor) {
 
 export async function youthWelfareDataQuality({ limit = 50, offset = 0, includePrivate = false } = {}) {
   const eligible = eligiblePredicate();
+  const qualityScope = dataQualityScopePredicate();
   const pageSize = integerInRange(limit, 50, 1, 100);
   const pageOffset = integerInRange(offset, 0, 0, 1000000);
   const cte = `
     WITH eligible_people AS (
-      SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.email,p.birthdate,p.sex,p.school,p.ministry,p.privacy_consent_at
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.email,p.birthdate,p.age,p.sex,p.school,p.ministry,p.privacy_consent_at
       FROM public.people p WHERE ${eligible}
+    ), quality_scope AS (
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.full_name,p.email,p.birthdate,p.age,p.sex,p.school,p.ministry,p.privacy_consent_at
+      FROM public.people p WHERE ${qualityScope}
     ), duplicate_emails AS (
       SELECT lower(btrim(email)) AS email,count(*)::int AS matching_count
-      FROM eligible_people WHERE NULLIF(btrim(email),'') IS NOT NULL
+      FROM quality_scope WHERE NULLIF(btrim(email),'') IS NOT NULL
       GROUP BY lower(btrim(email)) HAVING count(*)>1
     ), flagged AS (
       SELECT p.*,
@@ -1030,11 +1203,13 @@ export async function youthWelfareDataQuality({ limit = 50, offset = 0, includeP
           CASE WHEN ${missingFieldSql.gender} THEN 'Gender not provided' END,
           CASE WHEN ${missingFieldSql.school} THEN 'School not provided' END,
           CASE WHEN ${missingFieldSql.ministry} THEN 'Ministry not provided' END,
-          CASE WHEN ${missingFieldSql.consent} THEN 'Consent record missing' END
+          CASE WHEN ${missingFieldSql.consent} THEN 'Consent record missing' END,
+          CASE WHEN ${calculatedAgeSql('p')} IS NULL THEN 'Age eligibility cannot be confirmed' END
         ],NULL) AS missing_fields,
         d.matching_count AS duplicate_email_count
-      FROM eligible_people p LEFT JOIN duplicate_emails d ON lower(btrim(p.email))=d.email
+      FROM quality_scope p LEFT JOIN duplicate_emails d ON lower(btrim(p.email))=d.email
       WHERE ${missingFieldSql.email} OR ${missingFieldSql.birthday} OR ${missingFieldSql.gender} OR ${missingFieldSql.school} OR ${missingFieldSql.ministry} OR ${missingFieldSql.consent} OR d.email IS NOT NULL
+        OR (${calculatedAgeSql('p')} IS NULL AND EXISTS (SELECT 1 FROM public.youth_welfare_eligibility_policy configured_age WHERE configured_age.id=1 AND (configured_age.minimum_age IS NOT NULL OR configured_age.maximum_age IS NOT NULL)))
     )
   `;
   return transaction(async (client) => {
@@ -1043,7 +1218,12 @@ export async function youthWelfareDataQuality({ limit = 50, offset = 0, includeP
         count(*)::int AS flagged_people,
         count(*) FILTER (WHERE cardinality(missing_fields)>0)::int AS incomplete_people,
         count(*) FILTER (WHERE duplicate_email_count IS NOT NULL)::int AS possible_duplicate_people,
-        (SELECT count(*)::int FROM duplicate_emails) AS duplicate_email_groups
+        (SELECT count(*)::int FROM duplicate_emails) AS duplicate_email_groups,
+        (SELECT count(*)::int FROM quality_scope p
+          WHERE ${calculatedAgeSql('p')} IS NULL
+            AND EXISTS (SELECT 1 FROM public.youth_welfare_eligibility_policy configured_age
+              WHERE configured_age.id=1 AND (configured_age.minimum_age IS NOT NULL OR configured_age.maximum_age IS NOT NULL))
+        ) AS age_unconfirmed_people
       FROM flagged
     `);
     const issues = includePrivate ? await client.query(`${cte}
@@ -1059,11 +1239,12 @@ export async function youthWelfareDataQuality({ limit = 50, offset = 0, includeP
       incomplete_people: result.incomplete_people,
       possible_duplicate_people: result.possible_duplicate_people,
       duplicate_email_groups: result.duplicate_email_groups,
+      age_unconfirmed_people:result.age_unconfirmed_people,
       issues: issues.rows,
       issues_redacted:!includePrivate,
       limit: pageSize,
       offset: pageOffset,
-      limitations: ['Possible matches use the same email address only; no automatic merge is performed.','Conflicting answers cannot be checked without an independent source or response history.'],
+      limitations: ['Possible matches use the same email address only; no automatic merge is performed.','Conflicting answers cannot be checked without an independent source or response history.','When an Admin configures an age range, profiles with unknown age remain in this review queue but are excluded from age-qualified eligible totals.'],
       reconciliation: {
         available: false,
         source: 'Only LIFEGEN records are connected; no independent source is available.',
@@ -1084,7 +1265,7 @@ export async function youthWelfareTasks({ status = 'all', q = '', assignee = 'al
   const max = integerInRange(limit, 100, 1, 250);
   return transaction(async (client) => {
     const { rows } = await client.query(`
-      SELECT task.id,task.person_id,task.task_type,task.title,task.notes,task.status,task.assigned_to,
+      SELECT task.id,task.person_id,task.task_type,task.title,task.notes,task.status,task.priority,task.outcome,task.closure_note,task.closed_by,task.assigned_to,
         assigned.display_name AS assigned_to_name,task.due_date::text AS due_date,
         task.created_by,task.created_at,task.updated_at,task.resolved_at::text AS resolved_at,
         COALESCE(NULLIF(btrim(p.full_name),''),concat_ws(' ',p.first_name,p.last_name)) AS person_name,
@@ -1104,6 +1285,43 @@ export async function youthWelfareTasks({ status = 'all', q = '', assignee = 'al
   }, { write: false });
 }
 
+export async function youthWelfareTaskMetrics() {
+  const eligible=eligiblePredicate();
+  return transaction(async client=>{
+    const summary=(await client.query(`
+      SELECT count(*)::int AS total,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress'))::int AS open,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress') AND task.priority='urgent')::int AS urgent_open,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress') AND task.due_date<(now() AT TIME ZONE 'Asia/Manila')::date)::int AS overdue_open,
+        count(*) FILTER(WHERE task.status='resolved')::int AS resolved,
+        count(*) FILTER(WHERE task.status='resolved' AND task.outcome IS NOT NULL)::int AS resolved_with_outcome,
+        count(*) FILTER(WHERE task.status='resolved' AND task.outcome IS NULL)::int AS resolved_without_outcome,
+        count(*) FILTER(WHERE task.status='resolved' AND task.outcome='reached_support_arranged')::int AS support_arranged
+      FROM public.youth_welfare_follow_up_tasks task
+      JOIN public.people p ON p.id=task.person_id
+      WHERE ${eligible}
+    `)).rows[0];
+    const outcomeRows=(await client.query(`SELECT task.outcome,count(*)::int AS count
+      FROM public.youth_welfare_follow_up_tasks task JOIN public.people p ON p.id=task.person_id
+      WHERE ${eligible} AND task.status='resolved' AND task.outcome IS NOT NULL
+      GROUP BY task.outcome ORDER BY task.outcome`)).rows;
+    const workload=(await client.query(`SELECT task.assigned_to,COALESCE(assigned.display_name,'Unassigned') AS assigned_to_name,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress'))::int AS open_tasks,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress') AND task.priority='urgent')::int AS urgent_open,
+        count(*) FILTER(WHERE task.status IN ('needs_review','in_progress') AND task.due_date<(now() AT TIME ZONE 'Asia/Manila')::date)::int AS overdue_open,
+        count(*) FILTER(WHERE task.status='resolved')::int AS resolved_tasks
+      FROM public.youth_welfare_follow_up_tasks task JOIN public.people p ON p.id=task.person_id
+      LEFT JOIN public.staff_users assigned ON assigned.id=task.assigned_to
+      WHERE ${eligible}
+      GROUP BY task.assigned_to,assigned.display_name
+      ORDER BY open_tasks DESC,overdue_open DESC,lower(COALESCE(assigned.display_name,'Unassigned'))`)).rows;
+    const outcomes=Object.fromEntries(YOUTH_WELFARE_TASK_OUTCOMES.map(outcome=>[outcome,0]));
+    for(const row of outcomeRows)outcomes[row.outcome]=Number(row.count);
+    const resolvedWithOutcome=Number(summary.resolved_with_outcome||0);
+    return {summary:{total:Number(summary.total||0),open:Number(summary.open||0),urgent_open:Number(summary.urgent_open||0),overdue_open:Number(summary.overdue_open||0),resolved:Number(summary.resolved||0),resolved_with_outcome:resolvedWithOutcome,resolved_without_outcome:Number(summary.resolved_without_outcome||0),support_arranged:Number(summary.support_arranged||0),support_arranged_rate:resolvedWithOutcome?Number(summary.support_arranged||0)/resolvedWithOutcome:null},outcomes,workload,scope:'Youth Welfare tasks for eligible non-VIP profiles. Outcome rates use only resolved tasks with an outcome; older resolved tasks without outcomes remain visible separately.'};
+  },{write:false});
+}
+
 export async function youthWelfareAssignees() {
   return transaction(async (client) => (await client.query('SELECT id,display_name FROM public.staff_users WHERE is_active=true ORDER BY lower(display_name),id')).rows,{write:false});
 }
@@ -1115,6 +1333,7 @@ export async function createYouthWelfareTask(raw, actor) {
   if (!TASK_TYPES.has(type)) throw httpError(400,'Choose a valid administrative task type.');
   const title = cleanString(body.title,160,'a task title',{required:true});
   const notes = cleanString(body.notes,500,'task notes');
+  const priority=validateYouthWelfareTaskPriority(body.priority);
   const dueDate = validDate(body.due_date,'due date',{optional:true});
   const assignedTo = body.assigned_to == null || body.assigned_to === '' ? null : validId(body.assigned_to,'assignee');
   const eligible = eligiblePredicate();
@@ -1124,11 +1343,11 @@ export async function createYouthWelfareTask(raw, actor) {
       if (!person.rows[0]) throw httpError(404,'Eligible Youth Welfare profile not found.');
       if (assignedTo && !(await client.query('SELECT id FROM public.staff_users WHERE id=$1 AND is_active=true',[assignedTo])).rows[0]) throw httpError(400,'Choose an active staff member.');
       const { rows } = await client.query(`
-        INSERT INTO public.youth_welfare_follow_up_tasks(person_id,task_type,title,notes,status,assigned_to,due_date,created_by,updated_by)
-        VALUES($1,$2,$3,$4,'needs_review',$5,$6,$7,$7)
-        RETURNING id,person_id,task_type,title,notes,status,assigned_to,due_date::text AS due_date,created_at,updated_at
-      `,[personId,type,title,notes,assignedTo,dueDate,actor.id]);
-      await logAction(client,actor,'youth_welfare_follow_up_tasks',rows[0].id,'task_created',{person_id:personId,task_type:type,status:'needs_review',due_date:dueDate});
+        INSERT INTO public.youth_welfare_follow_up_tasks(person_id,task_type,title,notes,status,priority,assigned_to,due_date,created_by,updated_by)
+        VALUES($1,$2,$3,$4,'needs_review',$5,$6,$7,$8,$8)
+        RETURNING id,person_id,task_type,title,notes,status,priority,outcome,closure_note,assigned_to,due_date::text AS due_date,created_at,updated_at
+      `,[personId,type,title,notes,priority,assignedTo,dueDate,actor.id]);
+      await logAction(client,actor,'youth_welfare_follow_up_tasks',rows[0].id,'task_created',{person_id:personId,task_type:type,status:'needs_review',priority,due_date:dueDate});
       return rows[0];
     });
   } catch (error) {
@@ -1154,16 +1373,22 @@ export async function updateYouthWelfareTask(taskId, raw, actor) {
     const notes = body.notes === undefined ? current.notes : cleanString(body.notes,500,'task notes');
     const dueDate = body.due_date === undefined ? current.due_date : validDate(body.due_date,'due date',{optional:true});
     const assignedTo = body.assigned_to === undefined ? current.assigned_to : (body.assigned_to == null || body.assigned_to === '' ? null : validId(body.assigned_to,'assignee'));
+    const priority=body.priority===undefined?current.priority:validateYouthWelfareTaskPriority(body.priority);
+    const outcome=status==='resolved'?(body.outcome===undefined?current.outcome:validateYouthWelfareTaskOutcome(body.outcome)):null;
+    const closureNote=status==='resolved'?(body.closure_note===undefined?current.closure_note:cleanString(body.closure_note,500,'closure note')):null;
+    requireYouthWelfareTaskOutcomeForClosure(status,current.status,outcome);
     if (assignedTo && !(await client.query('SELECT id FROM public.staff_users WHERE id=$1 AND is_active=true',[assignedTo])).rows[0]) throw httpError(400,'Choose an active staff member.');
     const resolvedAt = status === 'resolved' ? (current.resolved_at || new Date().toISOString()) : null;
+    const closedBy=status==='resolved'?(current.closed_by||actor.id):null;
     const { rows } = await client.query(`
-      UPDATE public.youth_welfare_follow_up_tasks SET status=$1,notes=$2,due_date=$3,assigned_to=$4,
-        updated_by=$5,updated_at=now(),resolved_at=$6
-      WHERE id=$7
-      RETURNING id,person_id,task_type,title,notes,status,assigned_to,due_date::text AS due_date,created_at,updated_at,resolved_at::text AS resolved_at
-    `,[status,notes,dueDate,assignedTo,actor.id,resolvedAt,id]);
-    if (current.status !== status) await logAction(client,actor,'youth_welfare_follow_up_tasks',id,'task_status_changed',{from:current.status,to:status,person_id:current.person_id});
-    else await logAction(client,actor,'youth_welfare_follow_up_tasks',id,'task_updated',{person_id:current.person_id,due_date:dueDate,assigned_to:assignedTo});
+      UPDATE public.youth_welfare_follow_up_tasks SET status=$1,notes=$2,due_date=$3,assigned_to=$4,priority=$5,
+        outcome=$6,closure_note=$7,closed_by=$8,updated_by=$9,updated_at=now(),resolved_at=$10
+      WHERE id=$11
+      RETURNING id,person_id,task_type,title,notes,status,priority,outcome,closure_note,closed_by,assigned_to,
+        due_date::text AS due_date,created_at,updated_at,resolved_at::text AS resolved_at
+    `,[status,notes,dueDate,assignedTo,priority,outcome,closureNote,closedBy,actor.id,resolvedAt,id]);
+    if (current.status !== status) await logAction(client,actor,'youth_welfare_follow_up_tasks',id,'task_status_changed',{from:current.status,to:status,person_id:current.person_id,outcome:status==='resolved'?outcome:null});
+    else await logAction(client,actor,'youth_welfare_follow_up_tasks',id,'task_updated',{person_id:current.person_id,due_date:dueDate,assigned_to:assignedTo,priority});
     return rows[0];
   });
 }
@@ -1181,6 +1406,85 @@ export async function youthWelfareReminders(actor) {
       AND task.due_date<=(now() AT TIME ZONE 'Asia/Manila')::date+7 AND dismissed.task_id IS NULL
     ORDER BY task.due_date,task.id LIMIT 100
   `,[actor.id])).rows,{write:false});
+}
+
+export async function youthWelfareAttentionQueue({limit=100}={}) {
+  const max=integerInRange(limit,100,1,200),eligible=eligiblePredicate();
+  return transaction(async client=>{
+    const {rows}=await client.query(`
+      WITH attention AS (
+        SELECT p.id AS person_id,p.person_code,
+          COALESCE(NULLIF(BTRIM(p.full_name),''),NULLIF(BTRIM(CONCAT_WS(' ',p.first_name,p.last_name)),'')) AS person_name,
+          COALESCE(category.category,'unclassified') AS category,
+          'care_status'::text AS reason_code,
+          CASE welfare.care_status WHEN 'urgent' THEN 'Urgent care status' ELSE 'Marked as needing support' END AS reason,
+          CASE WHEN EXISTS(SELECT 1 FROM public.youth_welfare_follow_up_tasks open_task WHERE open_task.person_id=p.id AND open_task.status IN ('needs_review','in_progress'))
+            THEN 'Review the open follow-up' ELSE 'Create a follow-up' END AS suggested_action,
+          CASE welfare.care_status WHEN 'urgent' THEN 4 ELSE 3 END AS priority_rank,
+          welfare.care_status_reviewed_at AS source_at
+        FROM public.people p
+        LEFT JOIN public.youth_welfare_categories category ON category.person_id=p.id
+        JOIN public.youth_welfare_records welfare ON welfare.person_id=p.id
+        WHERE ${eligible} AND welfare.care_status IN ('urgent','needs_support')
+        UNION ALL
+        SELECT p.id,p.person_code,
+          COALESCE(NULLIF(BTRIM(p.full_name),''),NULLIF(BTRIM(CONCAT_WS(' ',p.first_name,p.last_name)),'')),
+          COALESCE(category.category,'unclassified'),
+          'out_of_school_no_recent_followup',
+          'Out-of-School — no follow-up in 60 days',
+          'Create an OSY check-in',3,
+          COALESCE(welfare.updated_at,p.date_registered::timestamptz)
+        FROM public.people p
+        LEFT JOIN public.youth_welfare_categories category ON category.person_id=p.id
+        JOIN public.youth_welfare_records welfare ON welfare.person_id=p.id
+        WHERE ${eligible} AND welfare.education_status='out_of_school'
+          AND NOT EXISTS(SELECT 1 FROM public.youth_welfare_follow_up_tasks recent_task
+            WHERE recent_task.person_id=p.id AND recent_task.created_at>=now()-interval '60 days')
+        UNION ALL
+        SELECT p.id,p.person_code,
+          COALESCE(NULLIF(BTRIM(p.full_name),''),NULLIF(BTRIM(CONCAT_WS(' ',p.first_name,p.last_name)),'')),
+          COALESCE(category.category,'unclassified'),
+          'incomplete_profile','Incomplete Youth Welfare profile','Create a profile-completion task',2,
+          COALESCE(welfare.updated_at,p.date_registered::timestamptz)
+        FROM public.people p
+        LEFT JOIN public.youth_welfare_categories category ON category.person_id=p.id
+        LEFT JOIN public.youth_welfare_records welfare ON welfare.person_id=p.id
+        WHERE ${eligible} AND ${welfareIncompletePredicate('p','welfare')}
+          AND NOT EXISTS(SELECT 1 FROM public.youth_welfare_follow_up_tasks review_task
+            WHERE review_task.person_id=p.id AND review_task.task_type='data_verification' AND review_task.status IN ('needs_review','in_progress'))
+        UNION ALL
+        SELECT p.id,p.person_code,
+          COALESCE(NULLIF(BTRIM(p.full_name),''),NULLIF(BTRIM(CONCAT_WS(' ',p.first_name,p.last_name)),'')),
+          COALESCE(category.category,'unclassified'),
+          'correction_waiting','Correction pending more than 7 days','Review the proposed correction',3,
+          update_record.created_at
+        FROM public.youth_welfare_record_updates update_record
+        JOIN public.people p ON p.id=update_record.person_id
+        LEFT JOIN public.youth_welfare_categories category ON category.person_id=p.id
+        WHERE ${eligible} AND update_record.status='pending'
+          AND update_record.created_at<now()-interval '7 days'
+        UNION ALL
+        SELECT p.id,p.person_code,
+          COALESCE(NULLIF(BTRIM(p.full_name),''),NULLIF(BTRIM(CONCAT_WS(' ',p.first_name,p.last_name)),'')),
+          COALESCE(category.category,'unclassified'),
+          'overdue_follow_up',concat('Overdue follow-up: ',task.title),
+          CASE WHEN task.priority='urgent' THEN 'Escalate urgent follow-up' ELSE 'Review overdue follow-up' END,
+          CASE WHEN task.priority='urgent' THEN 4 ELSE 3 END,task.due_date::timestamptz
+        FROM public.youth_welfare_follow_up_tasks task
+        JOIN public.people p ON p.id=task.person_id
+        LEFT JOIN public.youth_welfare_categories category ON category.person_id=p.id
+        WHERE ${eligible} AND task.status<>'resolved'
+          AND task.due_date<(now() AT TIME ZONE 'Asia/Manila')::date
+      )
+      SELECT person_id,person_code,person_name,category,reason_code,reason,suggested_action,priority_rank,
+        source_at::text AS source_at,count(*) OVER()::int AS total_count
+      FROM attention
+      ORDER BY priority_rank DESC,source_at ASC NULLS FIRST,person_name
+      LIMIT $1
+    `,[max]);
+    const total=Number(rows[0]?.total_count||0),items=rows.map(({total_count,...item})=>item);
+    return {items,total,generated_at:new Date().toISOString(),rules:{out_of_school_no_recent_followup_days:60,pending_correction_days:7,overdue_follow_up:'Unresolved tasks with a due date before today in Asia/Manila'},scope:'Eligible non-VIP profiles; only authorized Youth Welfare managers can access this queue.'};
+  },{write:false});
 }
 
 export async function dismissYouthWelfareReminder(taskId, dueDateValue, actor) {
