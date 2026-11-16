@@ -51,7 +51,7 @@ test('Group overview focuses on people and leadership, without optional logistic
     assert.doesNotMatch(groupPage, new RegExp('<dt>' + key + '</dt>'));
   }
   assert.match(groupPage, /Former members/);
-  assert.match(groupPage, /<details class="card mt-2">/);
+  assert.match(groupPage, /<details class="card mt-2"[^>]*>/);
   assert.match(groupPage, /renderProgressCard\(/);
 });
 
