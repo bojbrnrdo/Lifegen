@@ -83,7 +83,7 @@ test('Lifegroups has a single, list-first view with no map toggle',()=>{
 test('the directory is the only view and the map build is gone from the project',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page,/let cache=null,sequence=0/);
- for(const label of ['All','Boys','Girls'])
+ for(const label of ['Everyone','Boys','Girls'])
   assert.ok(page.includes('<span>'+label+'</span>'),label);
  const pkg=JSON.parse(read('../package.json'));
  assert.ok(!pkg.scripts['build:lifegroups']);

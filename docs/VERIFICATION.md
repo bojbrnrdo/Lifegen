@@ -1,5 +1,62 @@
 # LIFEGEN verification · current revision
 
+## Lifegroups: plain language for non-technical staff (this revision)
+
+Church staff with no technical background use the Lifegroups pages, so the
+vocabulary was rewritten in their words. Internal terms that only made sense to
+the people who built the database are gone from every screen:
+
+| Before | Now |
+| --- | --- |
+| Closed cell / Open cell (a *membership* tier) | **Settled** / **New — still getting to know the group** |
+| "Membership classification" radios | "How well do we know them?" with one line per choice |
+| Solid / consistent | **Thriving** / **Settled** |
+| "Lifegroup tree", "active tree" | "Lifegroups", "the list", "Networks and their Cells" |
+| Tabs "Network Leader / Cell Leader / Member / VIP" | **Start a Network · Start a Cell · Add a person · Add a VIP guest**, each with one sentence saying what it does |
+| "Add New" | "Add something new" |
+| Raw "Existing Person ID" field | A collapsed **"They are already registered"** section pointing at "Everyone registered" |
+
+Other usability work in the same pass:
+
+- A collapsed **"New here? Read this first"** panel on the Lifegroups page
+  explains Network, Cell, Cell Leader and Member, and the three things staff do
+  most often.
+- Each Cell in the directory is now **one full-width tap target** (56–60 px,
+  `.lifegroups-page__cell-row`) instead of a small "Open Cell" button; removed
+  Cells are plain non-link rows with a "Removed" badge.
+- The Cell page leads with the Cell name, says "Cell Leader: <name>" in words,
+  and the member actions read "Mark as settled / Mark as new / Move / Remove /
+  Edit details".
+- Status and action messages were rewritten too ("Marked as Settled.",
+  "Person added to the Cell.", "This Cell already has its six Settled members.").
+
+**Two defects found while doing this, and fixed:**
+
+1. **Adding a person as "New" was impossible.** The Add New wizard refused with
+   *"Open Cell registration requires selecting a Closed Cell parent. This
+   feature is awaiting its database relationship and cannot be saved through
+   this form yet."* — the API accepts `tier: 'new'` (`src/lifegroups.js`), so the
+   guard was blocking a valid action and showing a developer note. The guard is
+   removed, **New** is now the default (most people start there) and Settled/New
+   can be switched later from the Cell page.
+2. **Archiving a person always failed with a 500.** `archivePerson` checks for
+   active Network/Cell leadership, but the read set for that domain write did
+   not include `networks` and `lifegroups`, so it threw
+   `Cannot read properties of undefined (reading 'some')` and the API masked it
+   as "The database request could not be completed." `src/db.js` now reads both
+   leadership tables inside the same transaction before calling the domain
+   method; the leadership guard still runs (verified: archiving a Cell Leader is
+   still refused, archiving a spare person now succeeds).
+
+Verification: `npm test` **422/422** (four new checks in
+`tests/plain-language-ui.test.mjs` fail the build if "Closed cell", "Open cell",
+"Lifegroup" or a database note reappears in a user-facing message or in any of
+the 50+ server validation strings), `npm run build` (77 files), and the seven
+browser suites on a clean reset: `t1` 20, `t2` 24, `t3` 30, `t4` 23, `t5` 20,
+`t6` 41, `t7` 21 — **179 checks, all passed**, including new assertions that the
+Add New tabs carry plain names, that "New" saves instead of being refused, and
+that no closed/open-cell wording or developer note is rendered.
+
 ## Lifegroups: network map removed (this revision)
 
 The interactive **Network map** is gone. It was a 510 KB React Flow bundle

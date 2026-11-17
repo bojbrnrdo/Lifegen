@@ -32,7 +32,7 @@ test('server rejects a thirteenth Cell Leader',()=>{
 });
 
 test('server rejects a thirteenth Member under one Cell Leader',()=>{
- assert.throws(()=>validateNetworkStructureInput(sample(1,13)),/up to 12 Members/);
+ assert.throws(()=>validateNetworkStructureInput(sample(1,13)),/A Cell can hold up to 12 people/);
 });
 
 test('a person cannot be a Network Leader, Cell Leader, or Member twice',()=>{
@@ -67,7 +67,7 @@ test('atomic operation has an authenticated permission gate and no partial netwo
  assert.match(api,/'createNetworkStructure'/);
  assert.match(backend,/return transaction\(async client =>/);
  assert.match(backend,/createNetworkStructure\(args\[0\] \|\| \{\},actor\)/);
- assert.match(backend,/Network has reached its 12 Cell Leader limit/);
- assert.match(backend,/Cell Leader has reached the 12-member limit/);
+ assert.match(backend,/This Network already has 12 Cell Leaders/);
+ assert.match(backend,/This Cell already has 12 people/);
  assert.match(backend,/SELECT id,first_name,last_name,sex,archived_at FROM people WHERE id=ANY/);
 });

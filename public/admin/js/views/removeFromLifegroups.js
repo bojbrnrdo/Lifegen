@@ -1,7 +1,8 @@
 import { api } from '../api.js';
 import { icon, openModal, closeModal, withLoading, toast, confirmDialog } from '../ui.js';
 
-const labels={network:'Network',cell:'Cell Leader',member:'Member'};
+// Talk about people and Cells, not record types.
+const labels={network:'A whole Network',cell:'A Cell Leader and their Cell',member:'One person'};
 const modes=Object.keys(labels);
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nameOf=p=>p.full_name||[p.first_name,p.last_name].filter(Boolean).join(' ')||p.name||'Member';
@@ -22,19 +23,19 @@ export function openRemoveFromLifegroups({
     'tabindex="'+(mode===initialTab?0:-1)+'">'+svg(['group','user','people'][i],18)+' '+labels[mode]+'</button>'
   ).join('');
   const panel=mode=>{
-    const network='<label class="lf-remove__field">Network<select data-select="network" required><option value="">Choose Network</option></select></label>';
-    const cell='<label class="lf-remove__field">Cell Leader<select data-select="cell" required disabled><option value="">Choose Cell Leader</option></select></label>';
-    const member='<label class="lf-remove__field">Member<select data-select="member" required disabled><option value="">Choose Member</option></select></label>';
+    const network='<label class="lf-remove__field">Which Network?<select data-select="network" required><option value="">Choose a Network</option></select></label>';
+    const cell='<label class="lf-remove__field">Which Cell?<select data-select="cell" required disabled><option value="">Choose a Cell Leader</option></select></label>';
+    const member='<label class="lf-remove__field">Which person?<select data-select="member" required disabled><option value="">Choose a person</option></select></label>';
     const fields=mode==='network'?network:mode==='cell'?network+cell:network+cell+member;
     return '<section id="remove-panel-'+mode+'" role="tabpanel" aria-labelledby="remove-tab-'+mode+'" '+
       (mode===initialTab?'':'hidden')+'>'+
       '<form data-remove-form="'+mode+'" novalidate><div class="lf-remove__fields">'+fields+'</div>'+
       '<div class="lf-remove__impact" data-impact role="status"></div>'+
       '<div class="alert alert--error" data-error role="alert" hidden></div>'+
-      '<button class="btn lf-remove__submit" type="submit">'+svg('trash',16)+' Remove '+labels[mode]+'</button>'+
+      '<button class="btn lf-remove__submit" type="submit">'+svg('trash',16)+' Remove '+(mode==='network'?'this Network':mode==='cell'?'this Cell':'this person')+'</button>'+
       '</form></section>';
   };
-  const modal=openModal({title:'Remove from Lifegroups',wide:true,
+  const modal=openModal({title:'Remove someone from Lifegroups',wide:true,
     body:'<div class="lf-remove"><div class="lf-remove__tabs" role="tablist" aria-label="Choose what to remove">'+
       tabs+'</div>'+modes.map(panel).join('')+
       '<p class="lf-remove__footer-note">'+svg('check',15)+' People profiles and attendance records are preserved.</p></div>',
@@ -67,17 +68,17 @@ export function openRemoveFromLifegroups({
       [...sel(mode,'member').options].find(o=>o.value===sel(mode,'member').value):null;
     if(mode==='network'&&network){
       impact.innerHTML='<strong>'+escapeHTML(network.leader_name||network.name)+'</strong>'+
-        '<p>Removes this Network and its Cells from the active tree. Current memberships end, but all People profiles, attendance, and past Lifegroup records stay available.</p>'+
-        '<small>'+Number(network.group_count||0)+' Cell records · '+Number(network.people_count||0)+' linked people</small>';
+        '<p>Takes this Network and its Cells off the list. Nobody stays linked to it, but every person, every past meeting and all history is kept.</p>'+
+        '<small>'+Number(network.group_count||0)+' Cells · '+Number(network.people_count||0)+' people</small>';
     }else if(mode==='cell'&&selectedCell){
       impact.innerHTML='<strong>'+escapeHTML(selectedCell.leader_name||selectedCell.name)+'</strong>'+
-        '<p>Removes this Cell Leader and their Cell from the active tree. Members become unassigned. Their profiles, past memberships, and attendance are retained.</p>'+
-        '<small>'+Number(selectedCell.member_count||0)+' current Members</small>';
+        '<p>Takes this Cell and its Cell Leader off the list. The people in it become “not in a Cell yet”. Their profiles and past meetings are kept.</p>'+
+        '<small>'+Number(selectedCell.member_count||0)+' people in this Cell</small>';
     }else if(mode==='member'&&selectedCell&&selectedMember?.value){
       impact.innerHTML='<strong>'+escapeHTML(selectedMember.textContent)+'</strong>'+
-        '<p>Removes only this Member’s active Cell assignment. The Person profile, attendance, and membership history are kept.</p>';
+        '<p>Only takes this person out of the Cell. Their profile, attendance and past Cell history are kept.</p>';
     }else{
-      impact.innerHTML='<p>Choose '+(mode==='network'?'a Network':mode==='cell'?'a Network and Cell Leader':'a Network, Cell Leader, and Member')+' to continue.</p>';
+      impact.innerHTML='<p>Choose '+(mode==='network'?'a Network':mode==='cell'?'a Network, then a Cell':'a Network, then a Cell, then a person')+' to continue.</p>';
     }
   }
   function chooseTab(mode){
@@ -145,21 +146,21 @@ export function openRemoveFromLifegroups({
     const network=selection===''?null:net(Number(selection));
     const group=mode==='network'?null:cell(Number(sel(mode,'cell').value));
     const member=mode==='member'?Number(sel(mode,'member').value):0;
-    if(!network)return error(mode,'Choose the Network or Unassigned Cells.');
+    if(!network)return error(mode,'Choose a Network first.');
     if(mode!=='network'&&(!group||!cellsFor(network).some(g=>g.id===group.id)))
       return error(mode,'Choose a Cell Leader in that Network.');
     if(mode==='member'&&(!Number.isSafeInteger(member)||member<1||
        ![...sel('member','member').options].some(o=>Number(o.value)===member)))
-      return error(mode,'Choose a Member under that Cell Leader.');
+      return error(mode,'Choose a person in that Cell.');
     const target=mode==='network'?(network.leader_name||network.name):
       mode==='cell'?(group.leader_name||group.name):
       sel('member','member').selectedOptions[0].textContent;
     const message=mode==='network'?
-      'This will remove <strong>'+escapeHTML(target)+'</strong> and all Cell Leaders and Members beneath this Network from the active tree. They will remain in history. This does not delete People or attendance records.':
-      mode==='cell'?'This will remove <strong>'+escapeHTML(target)+'</strong> and their Cell from the active tree. Members will be unassigned, but People profiles, attendance, and history will remain.':
-      'This will remove <strong>'+escapeHTML(target)+'</strong> from the selected Cell Leader. Their profile and history will remain.';
+      'This takes <strong>'+escapeHTML(target)+'</strong> and every Cell and person under it off the list. Nothing is deleted: profiles, meetings and history all stay in People and Attendance.':
+      mode==='cell'?'This takes <strong>'+escapeHTML(target)+'</strong> and their Cell off the list. The people in it become “not in a Cell yet”, but their profiles, meetings and history stay.':
+      'This takes <strong>'+escapeHTML(target)+'</strong> out of their Cell. Their profile and history stay.';
     const confirmed=await confirmDialog({
-      title:'Remove '+labels[mode]+'?',message,confirmText:'Remove',danger:true,
+      title:'Remove '+(mode==='network'?'this Network':mode==='cell'?'this Cell':'this person')+'?',message,confirmText:'Remove',danger:true,
       confirmWord:mode==='network'?'REMOVE':undefined,
     });
     // confirmDialog has its own modal and closes this selector first.
@@ -178,7 +179,7 @@ export function openRemoveFromLifegroups({
         else if(mode==='cell')await api.removeCellLeaderFromTree(group.id);
         else await api.removeMemberFromTree(group.id,member);
         closeModal();
-        toast(labels[mode]+' removed from the active Lifegroups tree. History preserved.','info');
+        toast(labels[mode]+' removed from Lifegroups. History is kept.','info');
         onRemoved({mode,networkId:network.id,groupId:group?.id||null,personId:member||null});
       });
     }catch(ex){restore(ex.message||'Removal failed. Please try again.');}

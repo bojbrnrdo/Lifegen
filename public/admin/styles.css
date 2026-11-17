@@ -1693,12 +1693,31 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__network-title h3{margin:3px 0 5px;overflow-wrap:anywhere}
 .lifegroups-page__network-title p{margin:0}
 .lifegroups-page__network-count{font-size:.82rem;font-weight:650;margin:16px 0 10px;color:var(--muted)}
-.lifegroups-page__cell-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink-100,#e9edea)}
-.lifegroups-page__cell-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ink-100,#e9edea)}
-.lifegroups-page__cell-list li>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
-.lifegroups-page__cell-list li span{font-size:.78rem;color:var(--muted)}
-.lifegroups-page__cell-list .btn{flex-shrink:0}
-@media(max-width:650px){.lifegroups-page__cell-list li{align-items:flex-start}}
+.lifegroups-page__cell-list{list-style:none;margin:0;padding:0}
+.lifegroups-page__cell-list li{border-bottom:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__cell-list li:last-child{border-bottom:0}
+/* One whole row is the tap target — no small "Open Cell" button to hunt for. */
+.lifegroups-page__cell-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:12px 6px;text-decoration:none;color:inherit;border-radius:10px}
+.lifegroups-page__cell-row:hover,.lifegroups-page__cell-row:focus-visible{background:var(--ink-50,#f4f9f5);outline:2px solid var(--green-500,#438b62);outline-offset:-2px}
+.lifegroups-page__cell-row-main{display:flex;flex-direction:column;gap:3px;min-width:0;overflow-wrap:anywhere}
+.lifegroups-page__cell-row-main strong{font-size:1rem}
+.lifegroups-page__cell-row-main span{font-size:.82rem;color:var(--muted)}
+.lifegroups-page__cell-row-go{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:.8rem;font-weight:650;color:var(--green-700,#276d49)}
+.lifegroups-page__cell-row.is-inactive{align-items:flex-start;padding:12px 6px}
+/* "New here? Read this first" — the whole orientation in one tap. */
+.lifegroups-page__help{margin:0 0 14px;border:1px solid var(--ink-200,#dbe6df);border-radius:12px;background:var(--surface,#fff)}
+.lifegroups-page__help>summary{cursor:pointer;padding:12px 16px;font-weight:650;color:var(--green-700,#276d49);display:flex;align-items:center;gap:8px;list-style:none}
+.lifegroups-page__help>summary::-webkit-details-marker{display:none}
+.lifegroups-page__help>summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-2px;border-radius:10px}
+.lifegroups-page__help-body{padding:0 18px 16px;border-top:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__help-body p{margin:12px 0 8px}
+.lifegroups-page__help-body ul,.lifegroups-page__help-body ol{margin:0 0 10px 20px;display:grid;gap:5px}
+.lifegroups-page__help-body li{font-size:.92rem}
+.lifegroups-page__extra-hint{font-weight:400;margin-left:6px}
+@media(max-width:650px){
+ .lifegroups-page__cell-row{padding:12px 2px}
+ .lifegroups-page__cell-row-go span{display:none}
+}
 
 /* Focused Cell member management: compact search, no extra navigation bar. */
 .lifegroup-detail__members-head{align-items:center}
@@ -1735,8 +1754,15 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
  .lifegroups-page__find-head{flex-direction:column;gap:4px}
  .lifegroups-page__find-row{padding:10px 8px}
  /* Directory Cells become full-width tap rows instead of tiny "Open Cell" buttons. */
- .lifegroups-page__cell-list li{flex-direction:column;align-items:stretch;gap:8px}
- .lifegroups-page__cell-list li .btn{width:100%;min-height:44px;justify-content:center}
- .lifegroups-page__cell-list li .badge{align-self:flex-start}
+ .lifegroups-page__cell-row{min-height:60px}
+ .lifegroups-page__help-body{padding:0 14px 14px}
 }
 .lifegroups-page__find-cells{margin-bottom:10px;display:grid;gap:6px}
+
+/* Add New: say what each choice does, in plain words. */
+.unified-add__purpose{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:var(--ink-50,#f4f9f5);color:var(--green-900,#1d3f2c);font-size:.9rem;line-height:1.45}
+.unified-add__hint{margin:6px 0 12px;font-size:.8rem;color:var(--muted)}
+.unified-add__tier legend{font-weight:650;font-size:.86rem;margin-bottom:6px}
+.unified-add__tier label{display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-top:1px solid var(--ink-100,#e9edea);font-size:.9rem}
+.unified-add__tier label span{display:block;line-height:1.4}
+.unified-add__tier small{display:block;margin-top:8px;color:var(--muted)}

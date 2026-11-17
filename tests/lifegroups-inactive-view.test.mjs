@@ -65,7 +65,9 @@ test('the Lifegroups directory uses the shared view filter and marks removed Cel
  const block=view.slice(start,stop);
  assert.match(block,/filterTrackerView\(cache\.nets,cache\.groups,filters\)/);
  assert.match(block,/badge--inactive/);
- // A removed Cell must not offer an Open Cell link, which would land on a page
- // that still renders the old roster as if it were active.
- assert.match(block,/g\.is_active\?html`<a class="btn btn--sm" href="#\/lifegroups\/\$\{g\.id\}"/);
+ // A removed Cell must not be a link at all, which would land on a page that
+ // still renders the old roster as if it were active. The whole row is the tap
+ // target for a live Cell; a removed one is plain text with a Removed badge.
+ assert.match(block,/g\.is_active\?html`<a class="lifegroups-page__cell-row" href="#\/lifegroups\/\$\{g\.id\}"/);
+ assert.match(block,/badge--inactive/);
 });

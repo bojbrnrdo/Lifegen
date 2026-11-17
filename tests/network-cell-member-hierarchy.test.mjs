@@ -50,7 +50,7 @@ test('new Cell Leader creation links a registered person to the Network',()=>{
  const start=view.indexOf('async function groupForm(');
  const end=view.indexOf('export async function findLifegroup(',start);
  const form=view.slice(start,end);
- assert.match(form,/title: g \? 'Edit Cell Leader' : 'Add Cell Leader'/);
+ assert.match(form,/title: g \? 'Edit this Cell' : 'Add a Cell Leader'/);
  assert.match(form,/type="hidden" name="name"/);
  assert.doesNotMatch(form,/<label>Group name/);
  assert.match(form,/name="network_id" required/);
@@ -62,8 +62,8 @@ test('new Cell Leader creation links a registered person to the Network',()=>{
 test('navigation and actions show Cell Leaders and Members without a separate group step',()=>{
  assert.match(nav,/'Lifegroups'/);
  assert.match(view,/id="addNew"[^\n]+Add New/);
- assert.match(detail,/quickButton\('netCreateGroup', 'Add Cell Leader'/);
- assert.match(detail,/Add member/);
+ assert.match(detail,/quickButton\('netCreateGroup', 'Add a Cell Leader'/);
+ assert.match(detail,/Add a member/);
  assert.doesNotMatch(detail,/Add Lifegroup/);
  assert.match(detail,/Meetings this week/);
 });

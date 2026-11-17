@@ -13,18 +13,18 @@ test('only explicitly tagged cell conflicts are retried during auto-assignment',
 test('cell eligibility failures and full capacity are tagged for alternate Cell selection',()=>{
  assert.match(assign,/retryableVipCellConflict\('Cell requires an assigned leader/);
  assert.match(assign,/retryableVipCellConflict\('Cell, parent Network and Cell Leader/);
- assert.match(assign,/extra\.auto_assign \? retryableVipCellConflict\('Network has reached/);
- assert.match(assign,/extra\.auto_assign \? retryableVipCellConflict\('Cell Leader has reached/);
+ assert.match(assign,/extra\.auto_assign \? retryableVipCellConflict\('This Network already has 12 Cell Leaders/);
+ assert.match(assign,/extra\.auto_assign \? retryableVipCellConflict\('This Cell already has 12 people/);
 });
 test('person-specific validation is not marked as retryable',()=>{
  assert.match(assign,/throw httpError\(409, 'Reactivate this person before assigning them to a Cell\.'/);
  assert.match(assign,/throw httpError\(409, 'Active leaders require manual review before Cell assignment\.'/);
- assert.ok(assign.includes('does not match this ${group.gender} Lifegroup.'), 'Gender mismatch remains an untagged person validation error');
+ assert.ok(assign.includes('is not the same gender as this ${group.gender} Cell.'), 'Gender mismatch remains an untagged person validation error');
 });
 
 test('deactivated candidate Cell is retryable only in automatic placement',()=>{
  assert.match(assign,/if \(!group\.is_active\) throw \(extra\.auto_assign \? retryableVipCellConflict\(/);
- assert.match(assign,/ : httpError\(409, 'This Lifegroup is inactive\./);
+ assert.match(assign,/ : httpError\(409, 'This Cell is switched off\./);
 });
 
 test('retry decision rejects unrelated conflicts and malformed errors',()=>{

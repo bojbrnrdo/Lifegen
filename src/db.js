@@ -197,6 +197,12 @@ const READ_TABLES={
  person:['people','services','records'],
 };
 export const runDomain=(method,args=[],actor=null,write=false)=>withState(async({data,client})=>{
+ // Archiving a person must not break an active Network or Cell leadership, so
+ // the two leadership tables are read inside the same transaction first.
+ if(method==='archivePerson'){
+  data.networks=(await client.query('SELECT id,leader_person_id,is_active FROM networks')).rows;
+  data.lifegroups=(await client.query('SELECT id,leader_person_id,is_active FROM lifegroups')).rows;
+ }
  const result=await domain[method](...args);
  // Attendance is one shared source of truth, including staff corrections/undo.
  if(write&&['mark','undoMark'].includes(method)){

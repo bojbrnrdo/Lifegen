@@ -55,8 +55,8 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
 
   const aside = document.createElement('aside');
   aside.className = 'card network-detail__actions';
-  aside.innerHTML = '<h2>Quick actions</h2>' +
-    '<p class="network-detail__secondary">Manage this network in a few clicks.</p>' +
+  aside.innerHTML = '<h2>What do you want to do?</h2>' +
+    '<p class="network-detail__secondary">Pick one of these to keep this Network up to date.</p>' +
     '<div class="network-detail__action-list" id="netActionList"></div>' +
     '<div id="netMemberChooser" class="network-detail__chooser" hidden></div>' +
     '<div id="netExtras" class="network-detail__extras"></div>';
@@ -74,9 +74,9 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     return button;
   };
   if (manage) {
-    if (!leaderRegistered) quickButton('netLinkLeader', 'Link / register leader', '↗');
-    quickButton('netCreateGroup', 'Add Cell Leader', '+');
-    quickButton('netQuickAddMember', 'Add member', '+', !cells.length);
+    if (!leaderRegistered) quickButton('netLinkLeader', 'Register or link the Network Leader', '↗');
+    quickButton('netCreateGroup', 'Add a Cell Leader', '+');
+    quickButton('netQuickAddMember', 'Add a member to a Cell', '+', !cells.length);
     if (leaderChips) {
       // Older Network Leader team assignments remain accessible without adding
       // a second, confusing Cell Leader button to the primary workflow.
