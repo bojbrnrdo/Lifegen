@@ -31,7 +31,7 @@ function panel(mode,initial){
  existingPerson+
  '<div class="unified-add__identity"><label class="unified-add__photo"><span data-photo-preview class="unified-add__photo-preview">'+svg('user',28)+'</span><span class="unified-add__photo-action">'+svg('camera',15)+' Upload photo</span><input type="file" data-photo accept="image/jpeg,image/png,image/webp" aria-label="Photo of the new '+tabLabel[mode]+'"/></label>'+
  '<div class="unified-add__names"><label class="unified-add__field">First name<input name="first_name" required maxlength="120" placeholder="First name"/></label><label class="unified-add__field">Last name<input name="last_name" required maxlength="120" placeholder="Last name"/></label></div></div>'+
- '<p class="unified-add__hint">Names only — you can add a photo, contact details and social links later.</p>'+
+ '<p class="unified-add__hint">Only the name is needed. Everything else on this form is optional.</p>'+
  vipDetails+
  '<details class="unified-add__optional"><summary>'+svg('link',15)+' Social media (optional)</summary><div class="unified-add__socials">'+social+'</div></details>'+
  '<label class="unified-add__consent"><input type="checkbox" data-consent required/><span>I confirm this person agreed to their information being stored for church follow-up.</span></label>'+
