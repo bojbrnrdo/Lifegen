@@ -1,5 +1,84 @@
 # LIFEGEN verification · current revision
 
+## Lifegroups: Bishop → Network Leaders → Cell Leaders → Members (this revision)
+
+The church is organised in four levels, and the Lifegroups area now shows that
+shape instead of a flat list of Networks:
+
+```
+Bishop Arsie (boys)            Pastora Jane (girls)
+  ├─ Roxxane   ┐                 ├─ Grace   ┐
+  ├─ Zeff      │  Network Leaders│─ Faith   │ 3 Network Leaders each
+  └─ Red       ┘                 └─ Hope    ┘
+        each leads 3 Cell Leaders, each with 6 people
+```
+
+**How it is modelled.** A Network may now sit *under a pastor Network*
+(`networks.parent_network_id`, migration `016_network_parent.sql`). Two levels
+only: a pastor cannot itself have a parent, a Network cannot be its own parent.
+Existing Networks keep `parent_network_id = NULL` and behave exactly as before,
+so nothing needed rewriting.
+
+The "cell group" the user described is the Network's leader cell: the Cell that
+already existed to hold the leader team now holds the people one level down.
+
+| Level | Who is in whose Cell |
+| --- | --- |
+| Bishop / Pastora | Owns a Cell; their **Network Leaders are members of it** |
+| Network Leader | Owns a Cell; their **Cell Leaders are members of it** |
+| Cell Leader | Owns a Cell; their **members** are in it |
+| Member | In one Cell |
+
+**Two rules had to change, and both were blockers:**
+
+1. *"A Network Leader cannot join someone else's Cell while leading a Network."*
+   That is exactly what the hierarchy requires — a Network Leader **is** a member
+   of their pastor's cell — so the blanket block is gone. What remains, and is
+   tested, is the part that still matters: a Network Leader may not take a
+   **leadership** role in a Cell outside their own Network, and their own Cells
+   must sit in their own Network (`leaderHierarchyProblem` in
+   `src/lifegroups.js`).
+2. The Add New wizard wrote Cell Leaders into the leader cell with
+   `role: 'leader'`, which the rule above (correctly) rejected. In this
+   hierarchy a Cell Leader is a **member** of their Network Leader's cell, the
+   same way a Network Leader is a member of their pastor's cell; the Cell they
+   lead is what makes them a Cell Leader.
+
+**UI, kept obvious on purpose.** The Lifegroups page now opens with one card per
+pastor ("Bishop" / "Pastora" label, their name, how many Network Leaders are
+under them), each Network Leader being one full-width row that opens their
+Network. A pastor's page lists the Network Leaders under them. A Network
+Leader's page lists their Cells, and starts with "Network Leader under Arsie
+Borromeo". Networks that are not under a pastor stay in their own card, or in a
+collapsed "Other Networks" list — so a church that never uses the pastor level
+sees the same page as before. Add New gained a first tab, **Start a pastor
+Network**, and the Network form gained "Who is this Network under?".
+
+**Seed for this preview:** `preview-db/seed-pastoral-hierarchy.mjs` builds the
+real structure through the public API — Bishop Arsie Borromeo and Pastora Jane
+Borromeo, their six Network Leaders (Roxxane, Zeff, Red / Grace, Faith, Hope),
+three Cell Leaders each and six people per Cell (18 Cells, 108 people).
+
+**Defects found while building this, fixed:**
+
+- `archivePerson` returned 500 for every person (it read `networks`/`lifegroups`
+  that the domain read set never loaded). Both tables are now read in the same
+  transaction; the "cannot archive an active leader" guard still applies.
+- The directory lost its `lifegroups-page__network-card` class during the
+  rewrite, which silently dropped a card per Network; the browser suite caught it
+  (`t1` went from 20/20 to 11/20) and it is restored.
+- A Cell Leader with no Network was rejected as "a Cell's Network must be your
+  own" — the rule now only applies to people who actually lead a Network.
+
+Verification: `npm test` **432/432** (10 new checks in
+`tests/pastoral-hierarchy.test.mjs` pin the four-level rules, the one-level
+parenting, the pastor card, the pastor page and the new Add New tab),
+`npm run build` (77 files), migration `016` applied to the local PostgreSQL
+preview database, and the seven browser suites on a clean reset:
+`t1` 20, `t2` 24, `t3` 30, `t4` 24, `t5` 20, `t6` 41, `t7` 21 —
+**180 checks, all passed** — plus a live end-to-end walk of
+Bishop → Roxxane Network → Kai Cell → member with no JavaScript errors.
+
 ## Lifegroups: plain language for non-technical staff (this revision)
 
 Church staff with no technical background use the Lifegroups pages, so the

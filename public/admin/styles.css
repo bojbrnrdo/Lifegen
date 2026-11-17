@@ -1766,3 +1766,17 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .unified-add__tier label{display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-top:1px solid var(--ink-100,#e9edea);font-size:.9rem}
 .unified-add__tier label span{display:block;line-height:1.4}
 .unified-add__tier small{display:block;margin-top:8px;color:var(--muted)}
+
+/* Pastor level: Bishop / Pastora above their Network Leaders. */
+.lifegroups-page__pastor-card{border-left:4px solid var(--green-600,#2f7d52);height:auto}
+.lifegroups-page__pastor-card + .lifegroups-page__pastor-card{margin-top:10px}
+.lifegroups-page__pastor-card .lifegroups-page__network-title{margin-bottom:2px}
+.lifegroups-page__cell-row--leader strong{font-size:1.02rem}
+.lifegroups-page__loose-net{border-top:1px solid var(--ink-100,#e9edea);padding:10px 0}
+.lifegroups-page__loose-net:first-of-type{border-top:0}
+.lifegroups-page__loose-net summary{cursor:pointer;padding:6px 0;line-height:1.45}
+.lifegroups-page__loose-net[open] summary{margin-bottom:4px}
+@media(max-width:600px){
+ .lifegroups-page__pastor-card{border-left-width:3px}
+ .lifegroups-page__loose-net summary{font-size:.95rem}
+}

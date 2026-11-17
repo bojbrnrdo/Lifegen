@@ -36,6 +36,6 @@ test('server errors shown in the UI avoid Closed cell / Open cell and Lifegroup'
 
 test('the Add New tabs are named for the task, not the record type',()=>{
   const source=views.find(([name])=>name==='unifiedAddNew')[1];
-  assert.match(source,/const tabLabel=\{network:'Start a Network',cell:'Start a Cell',member:'Add a person',vip:'Add a VIP guest'\}/);
+  assert.match(source,/const tabLabel=\{pastor:'Start a pastor Network',network:'Start a Network',cell:'Start a Cell',member:'Add a person',vip:'Add a VIP guest'\}/);
   assert.match(source,/const purposeOf=\{/);
 });

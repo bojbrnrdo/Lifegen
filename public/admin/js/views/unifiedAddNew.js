@@ -2,12 +2,13 @@ import {api} from '../api.js';
 import {icon,openModal,closeModal,withLoading,toast} from '../ui.js';
 import {fileToDataUrl,duplicateGuard} from './personForm.js';
 
-const modes=['network','cell','member','vip'];
+const modes=['pastor','network','cell','member','vip'];
 const sexOf={boys:'male',girls:'female'};
 // Plain, task-shaped labels: a volunteer should not have to know our data model
 // to pick the right tab.
-const tabLabel={network:'Start a Network',cell:'Start a Cell',member:'Add a person',vip:'Add a VIP guest'};
+const tabLabel={pastor:'Start a pastor Network',network:'Start a Network',cell:'Start a Cell',member:'Add a person',vip:'Add a VIP guest'};
 const purposeOf={
+ pastor:'The top level: the Bishop (boys) or the Pastora (girls). Their cell holds the Network Leaders who report to them.',
  network:'A Network groups several Cells — all boys or all girls — under one Network Leader.',
  cell:'A Cell is one weekly small group with its own Cell Leader, inside a Network.',
  member:'Add someone who is already registered, or register a new person and put them straight into a Cell.',
@@ -17,17 +18,19 @@ const svg=(key,size=18)=>icon(key,size).value;
 
 function panel(mode,initial){
  // What the button says, in the user's words rather than the record's.
- const submitOf={network:'Create the Network',cell:'Create the Cell',member:'Add this person',vip:'Register the VIP guest'};
- const gender=(mode==='network'||mode==='vip'||mode==='member')?'<fieldset class="unified-add__gender"><legend>Boy or girl?</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Boy">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Girl">'+svg('venus',20)+'</label></fieldset>':'';
- const network=mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Which Network?<select data-field="network" required><option value="">Choose the Network first</option></select><small>Only Networks of the gender you picked are listed.</small></label>';
+ const submitOf={pastor:'Create the pastor Network',network:'Create the Network',cell:'Create the Cell',member:'Add this person',vip:'Register the VIP guest'};
+ const gender=(mode==='pastor'||mode==='network'||mode==='vip'||mode==='member')?'<fieldset class="unified-add__gender"><legend>Boy or girl?</legend><label><input type="radio" name="network_gender" value="boys" aria-label="Boy">'+svg('mars',20)+'</label><label><input type="radio" name="network_gender" value="girls" aria-label="Girl">'+svg('venus',20)+'</label></fieldset>':'';
+ const network=mode==='pastor'||mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Which Network?<select data-field="network" required><option value="">Choose the Network first</option></select><small>Only Networks of the gender you picked are listed.</small></label>'+
+ (mode==='network'?'<label class="unified-add__field">Under which pastor? <select data-field="parent"><option value="">On its own (no pastor above it)</option></select><small>Choose the Bishop or Pastora whose cell this Network Leader will join.</small></label>':'');
  const cell=mode==='member'?'<label class="unified-add__field">Which Cell?<select data-field="cell" required disabled><option value="">Choose the Cell first</option></select><small>Choose a Network above and its Cells appear here.</small></label>':'';
  const membershipTier=mode==='member'?'<fieldset class="unified-add__tier" aria-label="How well do we know this person?"><legend>How well do we know them?</legend><label><input type="radio" name="member_tier" value="new" checked/><span><b>New</b> — just joined, still getting to know the group</span></label><label><input type="radio" name="member_tier" value="solid"/><span><b>Settled</b> — attends regularly and is committed</span></label><small>Most new people start as New. You can switch to Settled at any time from the Cell page.</small></fieldset>':'';
+ const pastorNote=mode==='pastor'?'<p class="unified-add__hint">A pastor Network sits at the top. Network Leaders are added under it afterwards, and they become members of this pastor’s cell.</p>':'';
  const existingPerson='<details class="unified-add__optional" data-existing-wrap><summary>'+svg('user',15)+' They are already registered</summary><div class="unified-add__socials"><label class="unified-add__field">Their Person ID<input name="existing_person_id" type="number" min="1" placeholder="e.g. 0042"/><small>Look it up under “Everyone registered” on the Lifegroups page. Leave this closed to register a brand-new person.</small></label></div></details>';
  const vipDetails=mode==='vip'?'<div class="unified-add__names"><label class="unified-add__field">Age<input name="age" type="number" min="1" max="120" required /></label><label class="unified-add__field">School / Institution<input name="school" maxlength="300" required /></label><label class="unified-add__field">Invited by<input name="inviter" maxlength="200" required /></label><label class="unified-add__field">Contact (optional)<input name="contact_number" type="tel" maxlength="40" /></label></div>':'';
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
  return '<section role="tabpanel" id="unified-'+mode+'" aria-labelledby="tab-'+mode+'" '+(mode===initial?'':'hidden')+'><form data-form="'+mode+'" novalidate>'+
  '<p class="unified-add__purpose">'+purposeOf[mode]+'</p>'+
- '<div class="alert alert--error" data-error role="alert" hidden></div>'+gender+network+cell+membershipTier+
+ '<div class="alert alert--error" data-error role="alert" hidden></div>'+pastorNote+gender+network+cell+membershipTier+
  existingPerson+
  '<div class="unified-add__identity"><label class="unified-add__photo"><span data-photo-preview class="unified-add__photo-preview">'+svg('user',28)+'</span><span class="unified-add__photo-action">'+svg('camera',15)+' Upload photo</span><input type="file" data-photo accept="image/jpeg,image/png,image/webp" aria-label="Photo of the new '+tabLabel[mode]+'"/></label>'+
  '<div class="unified-add__names"><label class="unified-add__field">First name<input name="first_name" required maxlength="120" placeholder="First name"/></label><label class="unified-add__field">Last name<input name="last_name" required maxlength="120" placeholder="Last name"/></label></div></div>'+
@@ -42,10 +45,10 @@ function panel(mode,initial){
 /** Unified admin entry: children are People profiles, not login accounts. */
 export function createAddNewModal({initialTab='network',networkId=null,personId=null,onSaved=()=>{}}={}){
  if(!modes.includes(initialTab))initialTab='network';
- const tabs=modes.map((mode,i)=>'<button type="button" role="tab" id="tab-'+mode+'" aria-controls="unified-'+mode+'" aria-selected="'+(mode===initialTab)+'" tabindex="'+(mode===initialTab?0:-1)+'" data-tab="'+mode+'" title="'+purposeOf[mode]+'">'+svg(['network','people','user','user'][i],18)+' '+tabLabel[mode]+'</button>').join('');
+ const tabs=modes.map((mode,i)=>'<button type="button" role="tab" id="tab-'+mode+'" aria-controls="unified-'+mode+'" aria-selected="'+(mode===initialTab)+'" tabindex="'+(mode===initialTab?0:-1)+'" data-tab="'+mode+'" title="'+purposeOf[mode]+'">'+svg(['star','network','people','user','user'][i],18)+' '+tabLabel[mode]+'</button>').join('');
  const modal=openModal({title:'Add something new',wide:true,body:'<div class="unified-add"><div class="unified-add__tabs" role="tablist" aria-label="What would you like to add?">'+tabs+'</div>'+modes.map(m=>panel(m,initialTab)).join('')+'</div>',footer:'<button type="button" class="btn" data-close>Close</button>'});
  modal.querySelector('[data-close]').onclick=closeModal;
- const state={networkId:networkId?Number(networkId):null,networks:[],photos:{network:null,cell:null,member:null,vip:null},busy:false,pending:{},keys:{vip:crypto.randomUUID().replaceAll('-','')}};
+ const state={networkId:networkId?Number(networkId):null,networks:[],photos:{pastor:null,network:null,cell:null,member:null,vip:null},busy:false,pending:{},keys:{vip:crypto.randomUUID().replaceAll('-','')}};
  const getForm=mode=>modal.querySelector('[data-form="'+mode+'"]');
  if(personId){
    const form=getForm(initialTab);
@@ -92,6 +95,16 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
  async function loadNetworks(){
   const response=await api.networks({status:'active'});
   state.networks=Array.isArray(response)?response:response?.networks||[];
+  {
+   const parentSelect=getForm('network').querySelector('[data-field=parent]');
+   if(parentSelect){
+    const keep=parentSelect.value;
+    parentSelect.replaceChildren(new Option('On its own (no pastor above it)',''));
+    state.networks.filter(n=>Number(n.child_count||0)>0||(!n.parent_network_id&&state.networks.some(c=>String(c.parent_network_id)===String(n.id))))
+     .forEach(n=>parentSelect.add(new Option((n.leader_name?n.leader_name+' — ':'')+n.name,String(n.id))));
+    if([...parentSelect.options].some(o=>o.value===keep))parentSelect.value=keep;
+   }
+  }
   for(const mode of ['cell','member']){
    const select=getForm(mode).querySelector('[data-field=network]'),previous=select.value||String(state.networkId||'');
    select.replaceChildren(new Option('Choose Network',''));
@@ -183,7 +196,23 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
     if(!created?.id)throw new Error('That did not save. Please try again.');
     if(existingId&&created.sex&&created.sex!==person.sex)throw new Error('That person is a different gender from this Network or Cell.');
     state.pending[mode]=pending||{fingerprint,person:created};
-    if(mode==='network'){
+    if(mode==='pastor'){
+     // Top of the hierarchy: a pastor Network (Bishop / Pastora) plus the cell
+     // that will hold their Network Leaders.
+     const priorNetwork=state.networks.find(n=>Number(n.leader_person_id)===Number(created.id));
+     const result=state.pending[mode].network||priorNetwork||await api.createNetwork({
+       name:((created.first_name||first)+' '+(created.last_name||last)).slice(0,120),
+       gender, leader_person_id:created.id, is_active:true,
+     });
+     state.pending[mode].network=result;
+     await api.ensureNetworkLeaderGroup(result.id);
+     await api.setDiscipleshipClassification(created.id,gender==='girls'?'pastora':'bishop',gender==='girls'?'Pastora':'Bishop');
+     state.networkId=Number(result.id);
+     await loadNetworks();reset(mode);
+     toast('Pastor Network created. Next, add the Network Leaders under them.');
+     state.busy=false;setTab('network');
+     onSaved({mode,person:created,network:result});
+    }else if(mode==='network'){
      const priorNetwork=state.networks.find(n=>Number(n.leader_person_id)===Number(created.id));
      const result=state.pending[mode].network||priorNetwork||await api.createNetworkStructure({leader_person_id:created.id,gender,cell_leaders:[]});
      state.pending[mode].network=result;
@@ -199,9 +228,11 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
      if(priorCell&&Number(priorCell.network_id)!==Number(network.id))throw new Error('This person already leads a Cell in another Network. Move that Cell here first, or choose someone else.');
      const result=state.pending[mode].group||priorCell||await api.createLifegroup({name:((created.first_name||first)+' '+(created.last_name||last)+' Cell').slice(0,120),gender,network_id:network.id,network_manual:true,leader_person_id:created.id,capacity:12});
      state.pending[mode].group=result;
-     // Link this Cell Leader to the Network Leader team for existing reports.
+     // In this hierarchy the Cell Leader is a *member* of the Network Leader's
+     // cell, just as the Network Leader is a member of their pastor's cell.
+     // Their own Cell above is what makes them a Cell Leader.
      const team=await api.ensureNetworkLeaderGroup(network.id);
-     await api.assignLifegroup(team.lifegroup_id,created.id,{role:'leader',sex:sexOf[gender]});
+     await api.assignLifegroup(team.lifegroup_id,created.id,{role:'member',sex:sexOf[gender]});
      await api.setDiscipleshipClassification(created.id,'cell_leader','Cell Leader');
      state.networkId=Number(network.id);
      reset(mode);

@@ -368,27 +368,79 @@ export async function renderLifegroups({main, query}) {
     (String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q))));
   const allCells=matchingNets.reduce((t,n)=>t+groups.filter(g=>String(g.network_id)===String(n.id)).length,0);
   const allPeople=matchingNets.reduce((t,n)=>t+groups.filter(g=>String(g.network_id)===String(n.id)).reduce((s,g)=>s+Number(g.member_count||0),0),0);
-  directory.innerHTML=matchingNets.length?html`<div class="lifegroups-page__directory-head"><h2>Networks and their Cells</h2><p class="small muted">${matchingNets.length} ${matchingNets.length===1?'Network':'Networks'} · ${allCells} ${allCells===1?'Cell':'Cells'} · ${allPeople} ${allPeople===1?'person':'people'}. Tap a Cell to see and manage the people in it.</p></div>
-   <div class="lifegroups-page__directory-grid">${matchingNets.map(n=>{
-    const cells=groups.filter(g=>String(g.network_id)===String(n.id)&&(!q||
-      String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q)||
-      String(n.name||'').toLowerCase().includes(q)||String(n.leader_name||'').toLowerCase().includes(q)));
-    const memberTotal=cells.reduce((sum,g)=>sum+Number(g.member_count||0),0);
-    return html`<section class="card lifegroups-page__network-card"><div class="card__body">
-     <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3><a href="#/networks/${n.id}" aria-label="Open Network ${n.name||n.id}">${n.name||'Unnamed network'}</a></h3><p class="small muted">Network Leader: ${n.leader_name||'not assigned yet'}</p></div><span class="badge">${n.is_active?'Active':'Removed'}</span></div>
-     <div class="lifegroups-page__network-count">${cells.length} ${cells.length===1?'Cell':'Cells'} · ${memberTotal} ${memberTotal===1?'person':'people'}</div>
-     ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>{
-      const people=Number(g.member_count||0);
-      const summary=g.leader_name
-        ?`Cell Leader ${g.leader_name} · ${people} ${people===1?'person':'people'}`
-        :`No Cell Leader yet · ${people} ${people===1?'person':'people'}`;
-      return html`<li>${g.is_active?html`<a class="lifegroups-page__cell-row" href="#/lifegroups/${g.id}" aria-label="Open ${g.name||'Cell'} — ${summary}">
-        <span class="lifegroups-page__cell-row-main"><strong>${g.name||'Unnamed Cell'}</strong><span>${summary}</span></span>
-        <span class="lifegroups-page__cell-row-go" aria-hidden="true">Open ${icon('chevR',15)}</span>
-       </a>`:html`<div class="lifegroups-page__cell-row is-inactive"><span class="lifegroups-page__cell-row-main"><strong>${g.name||'Unnamed Cell'}</strong><span>${summary}</span></span><span class="badge badge--inactive badge--nodot" title="This Cell was removed. Its people and history are kept.">Removed</span></div>`}</li>`;
-     })}</ul>`:html`<p class="small muted">No Cells to show in this Network${filters.status==='active'?' right now':''}.</p>`}
-    </div></section>`;
-   })}</div>`:html`<div class="card"><div class="card__body"><h3>No matching networks</h3><p class="muted">Try another search term or filter.</p><button type="button" class="btn" id="clearLifegroupFilters">Clear filters</button></div></div>`;
+  // Two levels, in the order the church is actually organised:
+  //   Bishop / Pastora  ->  Network Leaders  ->  their Cells  ->  people
+  // A pastor Network has no cells of its own; its leader-team Cell holds the
+  // Network Leaders beneath them.
+  const isPastor = n => (n.child_count || 0) > 0 || (n.parent_network_id == null && nets.some(c => String(c.parent_network_id) === String(n.id)));
+  const pastorNets = matchingNets.filter(isPastor);
+  const childrenOf = n => matchingNets.filter(c => String(c.parent_network_id) === String(n.id));
+  const looseNets = matchingNets.filter(n => !isPastor(n) && !matchingNets.some(p => String(p.id) === String(n.parent_network_id)));
+  const matches = (n) => !q || String(n.name || '').toLowerCase().includes(q) || String(n.leader_name || '').toLowerCase().includes(q) ||
+    groups.some(g => String(g.network_id) === String(n.id) && (String(g.name || '').toLowerCase().includes(q) || String(g.leader_name || '').toLowerCase().includes(q)));
+  const shownPastors = pastorNets.filter(p => matches(p) || childrenOf(p).some(matches));
+  const shownLoose = looseNets.filter(matches);
+  const cellsOf = id => groups.filter(g => String(g.network_id) === String(id) && (!q ||
+    String(g.name || '').toLowerCase().includes(q) || String(g.leader_name || '').toLowerCase().includes(q)));
+  const cellRow = g => {
+    const people = Number(g.member_count || 0);
+    const summary = g.leader_name
+      ? `Cell Leader ${g.leader_name} · ${people} ${people === 1 ? 'person' : 'people'}`
+      : `No Cell Leader yet · ${people} ${people === 1 ? 'person' : 'people'}`;
+    return html`<li>${g.is_active ? html`<a class="lifegroups-page__cell-row" href="#/lifegroups/${g.id}" aria-label="Open ${g.name || 'Cell'} — ${summary}">
+      <span class="lifegroups-page__cell-row-main"><strong>${g.name || 'Unnamed Cell'}</strong><span>${summary}</span></span>
+      <span class="lifegroups-page__cell-row-go" aria-hidden="true">Open ${icon('chevR', 15)}</span>
+     </a>` : html`<div class="lifegroups-page__cell-row is-inactive"><span class="lifegroups-page__cell-row-main"><strong>${g.name || 'Unnamed Cell'}</strong><span>${summary}</span></span><span class="badge badge--inactive badge--nodot" title="This Cell was removed. Its people and history are kept.">Removed</span></div>`}</li>`;
+  };
+  // One row per Network Leader: the whole row opens that Network.
+  const networkRow = (n, extra = '') => {
+    const kids = Number(n.child_count || 0);
+    const cells = groups.filter(g => String(g.network_id) === String(n.id) && !g.leads_network);
+    const people = cells.reduce((sum, g) => sum + Number(g.member_count || 0), 0);
+    const where = kids ? `${kids} ${kids === 1 ? 'Network' : 'Networks'}` : `${cells.length} ${cells.length === 1 ? 'Cell' : 'Cells'}`;
+    return html`<li>${n.is_active ? html`<a class="lifegroups-page__cell-row lifegroups-page__cell-row--leader" href="#/networks/${n.id}" aria-label="Open ${n.name || 'Network'}">
+      <span class="lifegroups-page__cell-row-main"><strong>${n.leader_name || n.name || 'Network Leader'}</strong><span>${n.name || 'Network'} · ${where} · ${people} ${people === 1 ? 'person' : 'people'}${extra}</span></span>
+      <span class="lifegroups-page__cell-row-go" aria-hidden="true">Open ${icon('chevR', 15)}</span>
+     </a>` : html`<div class="lifegroups-page__cell-row is-inactive"><span class="lifegroups-page__cell-row-main"><strong>${n.leader_name || n.name}</strong><span>${n.name} · removed</span></span><span class="badge badge--inactive badge--nodot">Removed</span></div>`}</li>`;
+  };
+  const totalCells = matchingNets.reduce((t, n) => t + groups.filter(g => String(g.network_id) === String(n.id)).length, 0);
+  const totalPeople = matchingNets.reduce((t, n) => t + groups.filter(g => String(g.network_id) === String(n.id)).reduce((sum, g) => sum + Number(g.member_count || 0), 0), 0);
+  directory.innerHTML = (shownPastors.length || shownLoose.length) ? html`<div class="lifegroups-page__directory-head"><h2>Who leads whom</h2><p class="small muted">${shownPastors.length ? 'Tap a pastor to see the Network Leaders under them. Tap a Network Leader to see their Cells.' : 'Tap a Network to see its Cells.'} ${totalCells} ${totalCells === 1 ? 'Cell' : 'Cells'} · ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'}.</p></div>
+   ${shownPastors.map(p => {
+     const kids = childrenOf(p);
+     const leaders = (cache.groups || []).filter(g => String(g.network_id) === String(p.id) && g.leads_network);
+     const leadTotal = kids.reduce((t, k) => t + Number(k.leaders_here || 0), 0);
+     return html`<section class="card lifegroups-page__network-card lifegroups-page__pastor-card mb-2"><div class="card__body">
+       <div class="lifegroups-page__network-title"><div><span class="small muted">${p.gender === 'girls' ? 'Pastora' : 'Bishop'}</span><h3><a href="#/networks/${p.id}" aria-label="Open ${p.name || 'pastor Network'}">${p.leader_name || p.name || 'Pastor'}</a></h3><p class="small muted">${kids.length} ${kids.length === 1 ? 'Network Leader' : 'Network Leaders'}${leadTotal ? ` · ${leadTotal} in their cell` : ''}</p></div><span class="badge">${p.is_active ? 'Active' : 'Removed'}</span></div>
+       ${kids.length ? html`<ul class="lifegroups-page__cell-list">${kids.map(k => networkRow(k, ''))}</ul>`
+         : html`<p class="small muted">No Network Leaders under them yet.</p>`}
+       ${leaders.length ? html`` : html`<p class="small muted lifegroups-page__extra-hint">The pastor’s own cell holds the Network Leaders. Open “${p.leader_name || p.name}” to see it.</p>`}
+     </div></section>`;
+   })}
+   ${shownLoose.length ? (shownPastors.length
+     ? html`<section class="card lifegroups-page__network-card mb-2"><div class="card__body">
+     <div class="lifegroups-page__network-title"><div><span class="small muted">Not under a pastor yet</span><h3>Other Networks</h3><p class="small muted">These Networks are on their own. Edit a Network to place it under a pastor.</p></div></div>
+     ${shownLoose.map(n => {
+       const cells = groups.filter(g => String(g.network_id) === String(n.id) && (!q || matches(n)));
+       const memberTotal = cells.reduce((sum, g) => sum + Number(g.member_count || 0), 0);
+       return html`<details class="lifegroups-page__loose-net">
+         <summary><b>${n.name || 'Unnamed Network'}</b> <span class="small muted">Network Leader: ${n.leader_name || 'not assigned yet'} · ${cells.length} ${cells.length === 1 ? 'Cell' : 'Cells'} · ${memberTotal} ${memberTotal === 1 ? 'person' : 'people'}</span></summary>
+         ${cells.length ? html`<ul class="lifegroups-page__cell-list">${cells.map(g => cellRow(g))}</ul>` : html`<p class="small muted">No Cells to show in this Network${filters.status === 'active' ? ' right now' : ''}.</p>`}
+         ${n.is_active ? html`<p class="small"><a href="#/networks/${n.id}">Open ${n.name || 'this Network'} ›</a></p>` : ''}
+       </details>`;
+     })}
+   </div></section>`
+     : shownLoose.map(n => {
+       const cells = groups.filter(g => String(g.network_id) === String(n.id) && (!q || matches(n)));
+       const memberTotal = cells.reduce((sum, g) => sum + Number(g.member_count || 0), 0);
+       return html`<section class="card lifegroups-page__network-card mb-2"><div class="card__body">
+         <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3><a href="#/networks/${n.id}" aria-label="Open Network ${n.name || n.id}">${n.name || 'Unnamed network'}</a></h3><p class="small muted">Network Leader: ${n.leader_name || 'not assigned yet'}</p></div><span class="badge">${n.is_active ? 'Active' : 'Removed'}</span></div>
+         <div class="lifegroups-page__network-count">${cells.length} ${cells.length === 1 ? 'Cell' : 'Cells'} · ${memberTotal} ${memberTotal === 1 ? 'person' : 'people'}</div>
+         ${cells.length ? html`<ul class="lifegroups-page__cell-list">${cells.map(g => cellRow(g))}</ul>`
+           : html`<p class="small muted">No Cells to show in this Network${filters.status === 'active' ? ' right now' : ''}.</p>`}
+       </div></section>`;
+     })) : ''}`
+   : html`<div class="card"><div class="card__body"><h3>No matching networks</h3><p class="muted">Try another search term or filter.</p><button type="button" class="btn" id="clearLifegroupFilters">Clear filters</button></div></div>`;
   directory.querySelector('#clearLifegroupFilters')?.addEventListener('click',()=>{
    filters.q='';filters.gender='';filters.status='active';
    main.querySelector('#treeQ').value='';main.querySelector('#treeStatus').value='active';syncGender();load();
@@ -825,6 +877,9 @@ async function networkForm(n, onSaved) {
         </div>
         ${n?.leader_name && !n?.leader_person_id ? `<div class="network-leader-picker__legacy" role="status">${icon('info', 15)} Existing name: <b>${v('leader_name')}</b>. Select or register this person to link a real profile.</div>` : ''}
       </div>
+      <div class="field span-2"><label>Who is this Network under? <span class="opt">optional</span></label>
+        <select name="parent_network_id" id="netParent"><option value="">On its own (no pastor above it)</option></select>
+        <span class="help">Choose the Bishop or Pastora whose cell this Network Leader belongs to.</span></div>
       ${n ? `<div class="field span-2"><label class="toggle"><input type="checkbox" name="is_active" ${n.is_active ? 'checked' : ''}/> Network is active</label></div>` : ''}
     </form>${can('people:write') ? networkLeaderRegistrationHtml() : ''}`,
     footer: `<button class="btn" data-close>Cancel</button><button class="btn btn--primary" id="saveNet">${n ? 'Save' : 'Create Network'}</button>`,
@@ -893,6 +948,17 @@ async function networkForm(n, onSaved) {
     },
   });
   showLeaderStatus();
+  // Pastor choices: Networks that hold other Networks (Bishop / Pastora).
+  const parentSelect = modal.querySelector('#netParent');
+  if (parentSelect) {
+    api.networks({ status: 'active' }).then(list => {
+      const nets = Array.isArray(list) ? list : (list?.networks || []);
+      for (const p of nets.filter(x => Number(x.child_count || 0) > 0 || (!x.parent_network_id && nets.some(c => String(c.parent_network_id) === String(x.id))))) {
+        parentSelect.add(new Option((p.leader_name ? p.leader_name + ' — ' : '') + p.name, String(p.id)));
+      }
+      if (n?.parent_network_id) parentSelect.value = String(n.parent_network_id);
+    }).catch(() => {});
+  }
   clear.onclick = () => {
     personId.value = '';
     personPick.value = '';
@@ -938,6 +1004,7 @@ async function networkForm(n, onSaved) {
       data.gender = netGenderNow();
       data.leader_person_id = personId.value || null;
       data.leader_name = data.leader_person_id ? null : (legacyName.value.trim() || null);
+      data.parent_network_id = parentSelect?.value ? Number(parentSelect.value) : null;
       if (n) data.is_active = form.querySelector('[name=is_active]').checked;
       for (const key of Object.keys(data)) if (data[key] === '') data[key] = null;
       try {
@@ -958,6 +1025,8 @@ async function networkForm(n, onSaved) {
 export async function renderNetwork({ main }, id, openGroups = new Set(), { autoTried = false } = {}) {
   const [n, cal] = await Promise.all([api.network(id), api.networkCalendar(id, 8, { members: true }).catch(() => null)]);
   const manage = can('lifegroups:manage');
+  const isPastorNet = (net) => Boolean(net && net.parent_network_id == null &&
+    (Number(net.child_count || 0) > 0 || (net.child_networks || []).length > 0));
   // The Network QR is the network leader's own Cell link. If the leader has no Cell yet, create it once
   // ("<Network> Leaders" — it holds the cell leaders) so the QR always loads.
   let autoErr = '';
@@ -979,6 +1048,8 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
       <div>
         <a class="small" href="#/lifegroups">${icon('back', 14)} Back to all Lifegroups</a>
         <h1 class="mt-1">${n.name}</h1>
+        ${n.parent_network_id ? html`<p class="small muted">Network Leader under <a href="#/networks/${n.parent_network_id}">${n.parent_name || 'their pastor'}</a></p>`
+          : isPastorNet(n) ? html`<p class="small muted">Pastor · the Network Leaders under them are listed below</p>` : ''}
         <div class="row mt-1">${genderBadge(n.gender, { long: true, noun: 'network' })}<span class="small muted">${n.is_auto ? 'Created automatically' : 'Created by staff'}</span>${n.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${n.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
       </div>
       ${manage ? html`<div class="page-actions">${leaderGroup ? html`<button class="btn btn--primary" id="netReport">${icon('plus')} Report a meeting</button>` : ''}<button class="btn" id="editNet">${icon('edit')} Edit</button>${n.is_active?html`<button class="btn" id="removeNetwork">${icon('trash',16)} Remove</button>`:''}</div>` : ''}
@@ -994,6 +1065,16 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
       <div class="card stat"><span class="stat__label">New / not yet regular</span><span class="stat__value">${n.open_cell || 0}</span><span class="small muted">no limit — everyone is welcome</span></div>
     </div>
 
+    ${(n.child_networks || []).length ? html`
+    <div class="card mb-2" id="childNetworks">
+      <div class="card__header"><h2>Network Leaders under ${n.leader_name || 'this pastor'}</h2><span class="hint">${n.child_networks.length} ${n.child_networks.length === 1 ? 'Network' : 'Networks'}</span></div>
+      <div class="card__body card__body--flush">
+        <ul class="lifegroups-page__cell-list">${n.child_networks.map(c => html`<li><a class="lifegroups-page__cell-row lifegroups-page__cell-row--leader" href="#/networks/${c.id}">
+          <span class="lifegroups-page__cell-row-main"><strong>${c.leader_name || c.name}</strong><span>${c.name} · ${c.group_count} ${c.group_count === 1 ? 'Cell' : 'Cells'} · ${c.people_count} ${c.people_count === 1 ? 'person' : 'people'}</span></span>
+          <span class="lifegroups-page__cell-row-go" aria-hidden="true">Open ${icon('chevR', 15)}</span></a></li>`)}</ul>
+      </div>
+    </div>` : ''}
+
     <div class="card mb-2">
       <div class="card__header"><h2>Structure</h2></div>
       <div class="card__body">
@@ -1002,7 +1083,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
             <div class="tree__node tree__node--root">
               <span class="tree__tag">Network leader</span>
               <div class="tree__who">${n.leader_person_id ? html`<a href="#/people/${n.leader_person_id}"><b>${n.leader_name}</b></a>` : n.leader_name ? html`<b>${n.leader_name}</b> <span class="small muted">(profile not linked)</span>` : raw('<span class="muted">No leader set yet</span>')}${n.leader_contact ? html`<span class="small muted"> · ${n.leader_contact}</span>` : ''}</div>
-              <div class="small muted">Independent network · ${n.cell_leaders || 0} cell leader${n.cell_leaders === 1 ? '' : 's'} report here${leaderGroup ? html`` : ''}</div>
+              <div class="small muted">${isPastorNet(n) ? `Pastor · ${(n.child_networks || []).length} Network Leader${(n.child_networks || []).length === 1 ? '' : 's'} report here` : `Network · ${n.cell_leaders || 0} Cell Leader${n.cell_leaders === 1 ? '' : 's'} report here`}</div>
               ${own ? html`<div class="small mt-1 row" style="gap:6px;flex-wrap:wrap;align-items:center">Cell leaders:${own.members.length ? own.members.map((m) => html`<span class="chip-sm"><a href="#/people/${m.id}">${fullName(m)}</a>${manage ? html`<button type="button" class="chip-sm__x" data-leave="${m.id}" data-gid="${own.id}" data-name="${fullName(m)}" data-gname="${own.name}" title="Remove ${fullName(m)} as cell leader" aria-label="Remove ${fullName(m)}">×</button>` : ''}</span>`) : raw('<span class="muted">none yet</span>')}${manage ? html`<button type="button" class="btn btn--ghost btn--sm" id="addCellLeader">${icon('plus', 14)} Add to leader team</button>` : ''}</div>` : ''}
               ${manage ? html`<div class="row mt-1" style="gap:6px;flex-wrap:wrap"><button type="button" class="btn btn--sm" id="editNet2">${icon('edit', 14)} Edit network / change leader</button></div>` : ''}
             </div>
@@ -1025,7 +1106,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
                 ${manage ? html`<span class="row" style="gap:6px"><button type="button" class="btn btn--sm" data-edit-group="${g.id}">${icon('edit', 14)} Edit group / leader</button><button type="button" class="btn btn--sm" data-add-member="${g.id}">${icon('plus', 14)} Add member</button></span>` : ''}</div>
               ${g.members.length ? memberSections(g.members.map((m) => ({ ...m, name: fullName(m), last4: last4Of(g.id, m.id), sub: raw(statusBadge(m.status)) })), { manage, actions: (m) => memberActions(m, g) }) : raw('<div class="small muted" style="padding:6px 0">No members yet.</div>')}
             </div>
-          </details>`)}</div>` : html`<div class="tree__children"><div class="tree__node small muted">No Cell Leaders connected yet.${manage ? ' Use Add Cell Leader to connect one.' : ''}</div></div>`}
+          </details>`)}</div>` : html`<div class="tree__children"><div class="tree__node small muted">${isPastorNet(n) ? 'No Network Leaders under this pastor yet.' : 'No Cell Leaders connected yet.'}${manage ? ' Use Add Cell Leader to connect one.' : ''}</div></div>`}
         </div>
       </div>
       <div class="card__footer small muted">${dotsKey()} · Settled = attends regularly and is committed · New = still getting to know the group. For all the numbers and a spreadsheet export, open <a href="#/reports?view=lifegroups">Reports</a>.</div>
