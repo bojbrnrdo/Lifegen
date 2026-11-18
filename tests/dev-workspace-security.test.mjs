@@ -36,6 +36,30 @@ test('Git writes are fail-closed outside explicitly enabled preview deployments'
  assert.equal(writesAllowed({VERCEL_ENV:'preview',NODE_ENV:'development',LIFEGEN_DEV_WRITES_ENABLED:'true',LIFEGEN_DEV_DATABASE_ISOLATED:'true'}),true);
 });
 
+test('production branch writes require a GitHub App and an explicit production switch',()=>{
+ const base={VERCEL_ENV:'production',NODE_ENV:'production',LIFEGEN_GITHUB_APP_ID:'123',
+  LIFEGEN_GITHUB_APP_INSTALLATION_ID:'456',LIFEGEN_GITHUB_APP_PRIVATE_KEY:'-----BEGIN PRIVATE KEY-----placeholder',
+  LIFEGEN_GITHUB_PROD_WRITES_ENABLED:'true'};
+ assert.equal(writesAllowed(base),true);
+ assert.equal(writesAllowed({...base,LIFEGEN_GITHUB_PROD_WRITES_ENABLED:'false'}),false);
+ assert.equal(writesAllowed({...base,LIFEGEN_GITHUB_APP_PRIVATE_KEY:undefined}),false);
+ assert.equal(writesAllowed({...base,LIFEGEN_GITHUB_APP_INSTALLATION_ID:undefined}),false);
+ assert.equal(writesAllowed({...base,LIFEGEN_GITHUB_APP_ID:undefined}),false);
+ assert.equal(writesAllowed({VERCEL_ENV:'production',NODE_ENV:'production',
+  LIFEGEN_GITHUB_DEV_TOKEN:'old-preview-token',LIFEGEN_DEV_WRITES_ENABLED:'true',
+  LIFEGEN_DEV_DATABASE_ISOLATED:'true'}),false);
+ assert.equal(editableBranch('main'),false);
+ assert.equal(editableBranch('develop'),false);
+ assert.equal(editablePath('src/auth.js'),false);
+ assert.equal(editablePath('src/dev-workspace.js'),false);
+});
+
+test('installation credentials never appear in browser assets',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const client=await readFile(new URL('../public/lifeide/app.js',import.meta.url),'utf8');
+ assert.equal(client.includes('LIFEGEN_GITHUB_APP_PRIVATE_KEY'),false);
+ assert.equal(client.includes('LIFEGEN_GITHUB_APP_INSTALLATION_ID'),false);
+});
 test('Vercel build never executes a database migration',async()=>{
  const {readFile}=await import('node:fs/promises');
  const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));

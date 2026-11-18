@@ -2,6 +2,12 @@ name: LIFEGEN Development Package
 
 on:
   workflow_dispatch:
+    inputs:
+      paths:
+        description: 'Optional newline-delimited tracked paths for a selected-files ZIP; empty exports all source files'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -40,12 +46,73 @@ jobs:
           npm run build
           npm test
       - name: Create portable source package
+        env:
+          PACKAGE_PATHS: ${{ inputs.paths }}
         run: |
-          mkdir -p dist
-          git archive --format=zip --output=dist/LIFEGEN-source.zip HEAD
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          raw = os.environ.get('PACKAGE_PATHS', '')
+          paths = raw.splitlines() if raw else []
+          if len(paths) > 40 or len(paths) != len(set(paths)):
+              raise SystemExit('Invalid selected file list (maximum 40 unique files)')
+          tracked = set(subprocess.check_output(
+              ['git', 'ls-tree', '-r', '--name-only', 'HEAD'], text=True
+          ).splitlines())
+          for path in paths:
+              parts = path.split('/')
+              if (not path or len(path) > 240 or '\\' in path or
+                  any(part in ('', '.', '..') for part in parts) or
+                  path not in tracked):
+                  raise SystemExit('Invalid or untracked package file: ' + repr(path))
+          pathlib.Path('dist').mkdir(exist_ok=True)
+          subprocess.run([
+              'git', 'archive', '--format=zip', '--output=dist/LIFEGEN-source.zip',
+              'HEAD', *paths
+          ], check=True)
+          print('Packaged', len(paths) if paths else 'all', 'tracked source files')
+          PY
+      - name: Write package manifest and checksum
+        env:
+          PACKAGE_PATHS: ${{ inputs.paths }}
+          PACKAGE_BRANCH: ${{ github.ref_name }}
+          PACKAGE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          archive = Path('dist/LIFEGEN-source.zip')
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          Path('dist/SHA256SUMS.txt').write_text(
+              f'{digest}  LIFEGEN-source.zip\n', encoding='utf-8'
+          )
+          selected = os.environ.get('PACKAGE_PATHS', '').splitlines()
+          manifest = {
+              'format': 'lifegen-source-v1',
+              'source_branch': os.environ['PACKAGE_BRANCH'],
+              'source_commit': os.environ['PACKAGE_COMMIT'],
+              'mode': 'selected-files' if selected else 'full-source',
+              'selected_paths': selected,
+              'archive_file': archive.name,
+              'sha256': digest,
+          }
+          Path('dist/PACKAGE-MANIFEST.json').write_text(
+              json.dumps(manifest, indent=2) + '\n', encoding='utf-8'
+          )
+          print('SHA256:', digest)
+          PY
+          cd dist
+          sha256sum -c SHA256SUMS.txt
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: lifegen-source-${{ github.ref_name }}
-          path: dist/LIFEGEN-source.zip
+          path: |
+            dist/LIFEGEN-source.zip
+            dist/SHA256SUMS.txt
+            dist/PACKAGE-MANIFEST.json
           retention-days: 7

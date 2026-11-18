@@ -1568,3 +1568,156 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
   .people-directory .person-cell { min-width: 0; }
   .people-directory .person-cell > div { min-width: 0; }
 }
+
+/* LifeIDE: embedded full two-pane editor inside the admin Dev navigation. */
+.admin-lifeide{display:flex;flex-direction:column;gap:12px;min-width:0;width:100%}
+.admin-lifeide__header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.admin-lifeide__header h1{margin:0;font-size:1.35rem}
+.admin-lifeide__header p{margin:4px 0 0}
+.admin-lifeide__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.admin-lifeide__frame{display:block;width:100%;height:max(600px,calc(100dvh - 230px));min-height:520px;border:1px solid var(--ink-200,#e2e8f0);border-radius:10px;background:#fff}
+@media(max-width:700px){
+ .admin-lifeide__frame{height:calc(100dvh - 230px);min-height:420px;border-radius:6px}
+ .admin-lifeide__header h1{font-size:1.15rem}
+ .admin-lifeide__actions{width:100%}
+}
+
+/* Full-workspace LifeIDE: no Admin page padding, frame, card or extra header. */
+.main.main--lifeide{max-width:none;padding:0!important;margin:0;min-width:0;height:calc(100dvh - 60px);overflow:hidden}
+.main.main--lifeide > *{max-width:none;margin:0}
+.main.main--lifeide .admin-lifeide{display:block;min-width:0;width:100%;height:100%;margin:0;padding:0;gap:0}
+.main.main--lifeide .admin-lifeide__frame{display:block;width:100%;height:100%;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:#fff}
+@media(min-width:1024px){
+ .main.main--lifeide{margin-left:var(--sidebar-w);height:100dvh}
+}
+@media(max-width:1023px){
+ .main.main--lifeide{height:calc(100dvh - 60px)}
+}
+
+
+/* LIFEGEN developer Git console. Uses the existing Admin design tokens. */
+.devgit{display:flex;flex-direction:column;gap:20px;min-width:0}
+.devgit__section{min-width:0;overflow:hidden}
+.devgit__section .card__body>p{margin:0 0 12px}
+.devgit__buttons{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0 10px}
+.devgit__buttons>.btn{min-height:40px}
+.devgit__buttons label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650}
+.devgit__buttons select{min-width:140px;max-width:250px}
+.devgit__status{background:var(--bg,#f8fafc);border:1px solid var(--border,#dfe5eb);border-radius:9px;padding:12px;min-height:75px;max-height:360px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+.devgit__file{display:flex;justify-content:space-between;align-items:center;gap:12px;overflow-wrap:anywhere;padding:7px 0;border-top:1px solid var(--border,#dfe5eb)}
+.devgit__file>span:first-child{min-width:0}
+.devgit__history{border:1px solid var(--border,#dfe5eb);border-radius:9px;max-height:540px;overflow:auto}
+.devgit__commit{display:flex;justify-content:space-between;gap:16px;padding:15px 18px;border-bottom:1px solid var(--border,#dfe5eb);align-items:center}
+.devgit__commit:last-child{border-bottom:0}
+.devgit__detail{min-width:0;overflow-wrap:anywhere}
+.devgit__detail>a{font:700 12px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent,#087e8b)}
+.devgit__detail p{margin:5px 0 4px;font:500 13px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+.devgit__commit-buttons{display:flex;gap:8px;flex-shrink:0}
+.devgit__commit-buttons .btn{white-space:nowrap}
+@media(max-width:650px){
+ .devgit__buttons{align-items:stretch}
+ .devgit__buttons>*{flex:1 1 135px}
+ .devgit__buttons label{flex-direction:column;align-items:stretch}
+ .devgit__commit{align-items:flex-start}
+ .devgit__commit-buttons{flex-direction:column}
+}
+
+/* Read-only Git comparison, matching the developer console's file review. */
+.devgit__patch{max-height:420px;min-height:100px;overflow:auto;padding:14px;border:1px solid var(--ink-200,#d9e3dc);border-radius:8px;background:#f7faf8;color:#1b3124;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre;tab-size:4}
+.devgit__file{gap:8px;flex-wrap:wrap}
+.devgit__file .devgit__view-diff,.devgit__file .devgit__open-file{flex:none}
+
+/* TransferBuilder-style commit inspector: expandable read-only file patches. */
+#gitCommitDetail{margin-top:18px;padding-top:14px;border-top:1px solid var(--ink-200,#d9e3dc)}
+.devgit__commit-file{margin:8px 0;border:1px solid var(--ink-200,#d9e3dc);border-radius:8px;padding:10px;background:#fbfdfb;min-width:0}
+.devgit__commit-file summary{cursor:pointer;overflow-wrap:anywhere;font:600 12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.devgit__commit-file .devgit__patch{margin-top:10px}
+
+/* People directory: focused, responsive record management */
+.people-directory{margin-bottom:16px;border:1px solid var(--ink-200,#e1e7e3);border-radius:16px;background:var(--surface,#fff);overflow:hidden}
+.people-directory__intro{padding:22px 24px 18px;display:flex;justify-content:space-between;align-items:center;gap:22px}
+.people-directory__intro h2{font-size:1.22rem;margin:4px 0 5px}
+.people-directory__intro p{color:var(--muted);font-size:.88rem;margin:0}
+.people-directory__eyebrow{text-transform:uppercase;font-size:.68rem;letter-spacing:.12em;font-weight:700;color:var(--green-700,#35734f)}
+.people-directory__result{display:flex;flex-direction:column;align-items:flex-end;gap:2px;white-space:nowrap;color:var(--muted);font-size:.76rem}
+.people-directory__result strong{font-size:1.55rem;font-weight:750;color:var(--text,#1d3027);font-variant-numeric:tabular-nums}
+.people-directory__controls{padding:0 24px 18px;display:flex;gap:12px;align-items:stretch}
+.people-directory__search{display:flex;align-items:center;gap:10px;flex:1;min-width:0;padding:0 12px;border:1px solid var(--ink-200,#dce5e0);border-radius:10px;background:var(--surface,#fff)}
+.people-directory__search:focus-within{outline:2px solid var(--green-500,#448c68);outline-offset:1px}
+.people-directory__search input{min-width:0;flex:1;width:100%;border:0!important;outline:0!important;background:transparent;box-shadow:none!important;padding:12px 0}
+.people-directory__clear{border:0;background:transparent;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:4px 8px}
+.people-directory__clear[hidden]{display:none}
+.people-directory__sort{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:.8rem;white-space:nowrap}
+.people-directory__sort select{min-height:42px;border:1px solid var(--ink-200,#dce5e0);border-radius:9px;background:var(--surface,#fff);padding:0 10px;color:inherit}
+.people-directory__tabs{display:flex;gap:5px;overflow-x:auto;padding:0 20px;border-bottom:1px solid var(--ink-100,#e8eeea)}
+.people-directory__tab{position:relative;flex:none;border:0;background:transparent;padding:12px 14px;color:var(--muted);font-weight:600;font-size:.84rem;cursor:pointer;border-radius:8px 8px 0 0}
+.people-directory__tab:hover{background:var(--ink-50,#f5f8f6)}
+.people-directory__tab.is-active{color:var(--green-700,#286d48)}
+.people-directory__tab.is-active:after{content:'';position:absolute;bottom:0;left:12px;right:12px;height:3px;border-radius:4px;background:currentColor}
+.people-directory__tab:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
+.people-directory__summary{display:flex;justify-content:space-between;gap:12px;padding:12px 24px;font-size:.79rem;color:var(--muted)}
+.people-directory__table .table td{vertical-align:middle}
+.people-directory__table .table tr:hover{background:var(--ink-50,#f7faf8)}
+.people-directory__contact{font-size:.83rem;overflow-wrap:anywhere}
+.people-directory__view{white-space:nowrap}
+@media(max-width:740px){.people-directory__intro{padding:18px;align-items:flex-start}.people-directory__controls{padding:0 18px 16px;flex-direction:column}.people-directory__sort{justify-content:space-between}.people-directory__sort select{flex:1}.people-directory__tabs{padding:0 10px}.people-directory__summary{padding:12px 18px}.people-directory__hint{display:none}.people-directory__result strong{font-size:1.25rem}.people-directory__intro h2{font-size:1.05rem}}
+
+.people-profile__tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.people-profile__tab{display:inline-flex;align-items:center;padding:9px 14px;border:1px solid var(--ink-200,#dce5e0);border-radius:9px;background:var(--surface,#fff);color:var(--text,#25352c);font-size:.85rem;font-weight:600;text-decoration:none}
+.people-profile__tab:hover,.people-profile__tab:focus-visible{border-color:var(--green-500,#448c68);color:var(--green-700,#286d48)}
+#personDetails,#personAttendance{scroll-margin-top:90px}
+
+/* Progressive person registration: essential fields first, details on demand. */
+.people-form__heading{display:flex;align-items:flex-start;gap:13px}
+.people-form__heading h3{margin:0 0 5px}
+.people-form__step{display:inline-grid;place-items:center;flex:none;width:34px;height:34px;border-radius:11px;background:var(--ink-100,#edf5ee);color:var(--green-700,#226a41);font-size:.75rem;font-weight:800}
+.people-form__optional{padding:0!important;overflow:visible}
+.people-form__optional-summary{list-style:none;display:flex;align-items:center;gap:13px;cursor:pointer;padding:22px 24px}
+.people-form__optional-summary::-webkit-details-marker{display:none}
+.people-form__optional-summary>span:nth-child(2){flex:1;min-width:0}
+.people-form__optional-summary strong{display:block;font-size:1rem}
+.people-form__optional-summary small{display:block;margin-top:3px;font-size:.8rem;color:var(--muted)}
+.people-form__expand{font-size:.75rem;color:var(--muted);font-weight:600}
+.people-form__optional[open] .people-form__optional-summary{border-bottom:1px solid var(--ink-100,#e8eee8)}
+.people-form__optional-content{padding:20px 24px}
+.people-form__optional-summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-4px;border-radius:8px}
+@media(max-width:640px){.people-form__optional-summary{padding:16px;gap:10px}.people-form__optional-content{padding:16px}.people-form__expand{display:none}}
+
+/* LifeGroups directory: a simple alternative to the interactive network map. */
+.lifegroups-page__viewbar{display:flex;align-items:center;gap:6px;margin:16px 0 12px;padding:5px;border:1px solid var(--ink-200,#dae5df);background:var(--surface,#fff);border-radius:12px;flex-wrap:wrap}
+.lifegroups-page__view{border:0;border-radius:8px;background:transparent;padding:10px 16px;color:var(--muted);font-size:.85rem;font-weight:650;cursor:pointer}
+.lifegroups-page__view.is-active{background:var(--ink-100,#e9f3ed);color:var(--green-700,#276d49)}
+.lifegroups-page__view:focus-visible{outline:2px solid var(--green-500,#3f9062);outline-offset:2px}
+.lifegroups-page__viewhint{margin-left:auto;color:var(--muted);font-size:.77rem;padding:0 10px}
+.lifegroups-page__directory[hidden],#treeCanvas[hidden]{display:none!important}
+.lifegroups-page__directory-head{margin:18px 0 14px}
+.lifegroups-page__directory-head h2{font-size:1.16rem;margin:0 0 4px}
+.lifegroups-page__directory-head p{margin:0}
+.lifegroups-page__directory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.lifegroups-page__network-card{min-width:0;height:100%}
+.lifegroups-page__network-title{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.lifegroups-page__network-title h3{margin:3px 0 5px;overflow-wrap:anywhere}
+.lifegroups-page__network-title p{margin:0}
+.lifegroups-page__network-count{font-size:.82rem;font-weight:650;margin:16px 0 10px;color:var(--muted)}
+.lifegroups-page__cell-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__cell-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ink-100,#e9edea)}
+.lifegroups-page__cell-list li>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+.lifegroups-page__cell-list li span{font-size:.78rem;color:var(--muted)}
+.lifegroups-page__cell-list .btn{flex-shrink:0}
+@media(max-width:650px){.lifegroups-page__viewhint{width:100%;margin-left:0;padding:4px 10px}.lifegroups-page__cell-list li{align-items:flex-start}}
+
+/* Focused Cell member management: compact search, no extra navigation bar. */
+.lifegroup-detail__members-head{align-items:center}
+.lifegroup-detail__members-head p{margin:4px 0 0}
+.lifegroup-detail__member-search{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--ink-100,#e8eee9)}
+.lifegroup-detail__member-search input{flex:1;min-width:0;width:100%;border:1px solid var(--ink-200,#dce5df);border-radius:9px;padding:9px 12px}
+.lifegroup-detail__member-search span{white-space:nowrap}
+.lifegroup-detail__person[hidden]{display:none!important}
+@media(max-width:600px){.lifegroup-detail__member-search{padding:12px}.lifegroup-detail__member-search span{font-size:.7rem}}
+
+/* LifeGroups: directory-first navigation and understandable category filters. */
+.lifegroups-page .lg-gender-filter__button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:64px;padding-inline:10px}
+.lifegroups-page .lg-gender-filter__button span{font-size:.76rem;font-weight:650}
+.lifegroups-page__viewbar{margin-top:12px}
+.lifegroups-page__directory{min-height:160px}
+@media(max-width:560px){.lifegroups-page .lg-gender-filter__button{min-width:60px}.lifegroups-page__viewhint{display:none}}

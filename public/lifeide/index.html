@@ -11,24 +11,63 @@
     <a class="brand" href="/admin" title="Back to LIFEGEN admin"><span class="brandmark">L</span><span>Life<span class="accent">IDE</span></span></a>
     <span class="project-tag" id="modeLabel">LOCAL WORKSPACE</span><button type="button" id="repositoryMode" title="Connect to project source files">Repository</button>
     <div class="top-actions"><button id="newFile" type="button">▣ <span>New File</span></button><button id="newFolder" type="button">▰ <span>New Folder</span></button></div>
+    <label class="explorer-search-label" for="explorerSearch"><span class="sr-only">Search files and folders</span><input id="explorerSearch" type="search" placeholder="Search files…" autocomplete="off" aria-label="Search files and folders"></label>
   </header>
   <div class="workspace">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-title"><span>EXPLORER</span><button type="button" id="collapse" aria-label="Toggle sidebar">☰</button></div>
       <div class="sortbar"><span id="projectLabel">LIFEGEN</span><div class="sort-toggle"><button id="sortName" class="active" type="button">Name</button><button id="sortDate" type="button">Date</button></div></div>
+      <button id="workspaceRoot" class="workspace-root" type="button" aria-pressed="true" title="Create new files and folders at the workspace root">⌂ Workspace root</button>
       <div id="tree" class="filetree" aria-label="Files and folders"></div>
       <div class="sidebar-footer" id="storageInfo">Files are saved in this browser only.</div>
     </aside>
+    <div class="ide-panel-resizer" id="explorerResizer" role="separator" aria-label="Resize file explorer" aria-orientation="vertical" tabindex="0"></div>
     <main class="main">
       <div class="editor-toolbar">
         <span class="editor-heading">Editor</span><div class="file-title" id="fileTitle">No file selected</div>
-        <div class="editor-tools"><button id="renameFile" type="button" disabled title="Rename selected browser-local file">Rename</button><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button><button id="refresh" type="button" title="Reload saved workspace">↻</button><button id="gitChanges" type="button" title="View local Git changes">Git Changes</button><button id="commit" type="button" disabled title="Select files in Git Changes to commit">⇩ Commit</button></div>
+        <div class="editor-tools"><button id="saveFile" type="button" disabled title="Save the current file (Ctrl+S)">Save</button><button id="editGithub" type="button" hidden title="Edit a GitHub source file in a draft">Edit source</button><button id="saveGithubDraft" type="button" hidden disabled title="Save a draft of your source changes in this browser">Save draft</button><button id="githubNative" type="button" hidden title="Open branch-based GitHub workflow when secure developer writes are configured">GitHub</button><button id="renameFile" type="button" disabled title="Rename selected browser-local file">Rename</button><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button><button id="refresh" type="button" title="Reload saved workspace">↻</button><button id="gitChanges" type="button" title="View local Git changes">Git Changes</button><button id="commit" type="button" disabled title="Select files in Git Changes to commit">⇩ Commit</button></div>
       </div>
+      <section id="githubWorkflow" class="github-workflow" aria-label="GitHub branch and commit workflow" hidden>
+        <strong>Commit to a development branch</strong><button id="closeGithubWorkflow" type="button" title="Close GitHub workflow" aria-label="Close GitHub workflow">×</button>
+        <p id="githubWorkflowHelp">Only feature/* and fix/* branches are supported. Production main stays protected.</p><div class="github-handoff"><button id="publishGithub" type="button" hidden disabled title="Continue this change on GitHub in a feature branch">Commit via GitHub ↗</button></div>
+        <div class="github-workflow-fields"><label>Branch <input id="githubBranch" value="feature/lifeide-change" autocomplete="off" spellcheck="false"></label><button id="createGithubBranch" type="button">Create branch</button><label>Commit message <input id="githubCommitMessage" placeholder="fix: describe the source change" maxlength="160"></label><button id="commitGithubDraft" type="button">Commit to branch</button></div>
+        <div class="github-workflow-fields"><label>Pull request title <input id="githubPrTitle" placeholder="Describe the changes for review" maxlength="120"></label><button id="submitGithubPr" type="button">Create draft PR</button></div>
+        <p id="githubWorkflowStatus" role="status" aria-live="polite"></p>
+      </section>
       <div class="tabs" id="tabs"></div>
       <div class="editor-wrap" id="editorWrap"><div id="lineNumbers" class="lines" aria-hidden="true">1<br>2</div><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code editor" disabled># Welcome to LifeIDE!
 # Create or select a file to begin.</textarea></div>
       <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
     </main>
+    <div class="ide-panel-resizer" id="toolsResizer" role="separator" aria-label="Resize project tools" aria-orientation="vertical" tabindex="0"></div>
+    <aside class="project-tools" id="projectTools" aria-label="LifeIDE project tools">
+      <div class="project-tools__header"><strong>Project Tools</strong><button id="toggleProjectTools" type="button" aria-expanded="true" aria-controls="projectToolsBody" title="Collapse project tools">›</button></div>
+      <div class="project-tools__body" id="projectToolsBody">
+        <section class="project-tools__section" aria-label="Active file">
+          <h3>Active File</h3>
+          <p id="toolsActiveFile">No file selected</p>
+          <p class="project-tools__subtle" id="toolsWorkspaceMode">Local workspace</p>
+          <button id="toolsCopyFile" type="button" disabled>Copy File Path</button>
+        </section>
+        <section class="project-tools__section" aria-label="Version control tools">
+          <h3>Version Control</h3>
+          <p class="project-tools__subtle">Review branches, Git status, commits and pull requests.</p>
+          <a href="/admin#/dev/git" target="_parent" class="project-tools__link">Open Git Version Control</a>
+          <button type="button" id="toolsShowGitChanges">Review Local Git Changes</button>
+        </section>
+        <section class="project-tools__section" aria-label="Packaging tools">
+          <h3>Packaging</h3>
+          <p class="project-tools__subtle">Build validated ZIP artifacts from development branches.</p>
+          <a href="/admin#/dev/packaging" target="_parent" class="project-tools__link">Open Packaging</a>
+        </section>
+        <section class="project-tools__section" aria-label="Editing shortcuts">
+          <h3>Editor Actions</h3>
+          <button type="button" id="toolsScrollTop">Scroll to Top</button>
+          <button type="button" id="toolsScrollBottom">Scroll to Bottom</button>
+          <p class="project-tools__subtle">Ctrl+S saves the active file. GitHub source drafts remain local until committed through an authorized development branch.</p>
+        </section>
+      </div>
+    </aside>
   </div>
 </div>
 <div id="dialog" class="modal" hidden><form id="dialogForm" class="dialog"><h2 id="dialogTitle">New File</h2><label for="dialogInput" id="dialogLabel">Name</label><input id="dialogInput" maxlength="120" required autocomplete="off"><p class="error" id="dialogError" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary" id="confirm">Create</button></div></form></div>

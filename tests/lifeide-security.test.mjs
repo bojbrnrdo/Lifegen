@@ -48,7 +48,7 @@ test('commit button is disabled while a commit request is pending',()=>{
 test('repository save captures path and content before awaiting and preserves new edits',()=>{
  assert.match(client,/const path=current,f=repoFiles\.get\(path\)/);
  assert.match(client,/if\(current===path&&\$\('editor'\)\.value===content\)/);
- assert.match(client,/finally\{saveBusy=false;\}/);
+ assert.match(client,/finally\{saveBusy=false;/);
 });
 
 test('repository navigation blocks file and workspace switches while a save is in flight',()=>{
@@ -58,7 +58,7 @@ test('repository navigation blocks file and workspace switches while a save is i
 
 test('repository refresh and entry creation refuse pending saves',()=>{
  assert.match(client,/if\(repoMode\)\{if\(saveBusy\|\|commitBusy\)/);
- assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(saveBusy\|\|commitBusy\)/);
+ assert.match(client,/async function createRepoEntry\(type,name\)\{\s*if\(githubMode\).*?if\(saveBusy\|\|commitBusy\)/s);
 });
 
 test('Git commit waits for an active repository save',()=>{
@@ -79,4 +79,34 @@ test('repository operations are rate-limited and avoid following file symlinks',
  assert.match(server,/expressRateLimit\(/);
  assert.match(server,/O_NOFOLLOW/);
  assert.match(server,/handle\.stat\(\)/);
+});
+
+test('GitHub source drafts have an explicit GitHub handoff and stay browser-local',()=>{
+ assert.match(client,/lifegen\.lifeide\.github-draft\.v1:/);
+ assert.match(client,/localStorage\.setItem\(draftKey\(file\)/);
+ assert.match(client,/navigator\.clipboard\.writeText\(content\)/);
+ assert.match(client,/window\.open\(url,'_blank','noopener,noreferrer'\)/);
+ assert.match(client,/githubMode\|\|!current/);
+ assert.match(client,/!repoMode\|\|githubMode\|\|!/);
+ const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
+ assert.match(html,/id="editGithub"[^>]*hidden/);
+ assert.match(html,/id="saveGithubDraft"[^>]*hidden/);
+ assert.match(html,/id="publishGithub"[^>]*hidden/);
+});
+
+test('native branch, commit and PR controls use the existing protected developer API',()=>{
+ const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
+ const dev=readFileSync(new URL('../src/dev-workspace.js',import.meta.url),'utf8');
+ assert.match(html,/id="githubNative"[^>]*hidden/);
+ assert.match(html,/id="githubWorkflow"[^>]*hidden/);
+ assert.match(html,/id="createGithubBranch"/);
+ assert.match(html,/id="commitGithubDraft"/);
+ assert.match(html,/id="submitGithubPr"/);
+ assert.match(client,/devWriteAvailable=Boolean\(info\.writesEnabled\)/);
+ assert.match(client,/devRequest\('branch',\{method:'POST'/);
+ assert.match(client,/devRequest\('file',\{method:'PUT'/);
+ assert.match(client,/devRequest\('pull-request',\{method:'POST'/);
+ assert.match(dev,/VERCEL_ENV!=='production'/);
+ assert.match(dev,/LIFEGEN_DEV_DATABASE_ISOLATED==='true'/);
+ assert.match(dev,/checkOrigin\(req\);checkCsrf\(req\)/);
 });

@@ -1,8 +1,38 @@
 import {requireStaff,checkOrigin,checkCsrf} from './auth.js';
+import crypto from 'node:crypto';
 
 const repository='bojbrnrdo/Lifegen';
 const apiRoot='https://api.github.com/repos/'+repository;
-const token=()=>process.env.LIFEGEN_GITHUB_DEV_TOKEN||'';
+const productionAppConfigured=(env=process.env)=>Boolean(
+ env.VERCEL_ENV==='production' &&
+ env.LIFEGEN_GITHUB_APP_ID &&
+ env.LIFEGEN_GITHUB_APP_INSTALLATION_ID &&
+ env.LIFEGEN_GITHUB_APP_PRIVATE_KEY?.includes('PRIVATE KEY')
+);
+const productionAppWritesEnabled=(env=process.env)=>
+ productionAppConfigured(env)&&env.LIFEGEN_GITHUB_PROD_WRITES_ENABLED==='true';
+let installationToken={token:'',expires:0};
+async function githubToken(){
+ if(process.env.VERCEL_ENV!=='production')return process.env.LIFEGEN_GITHUB_DEV_TOKEN||'';
+ if(!productionAppConfigured())return '';
+ if(installationToken.expires>Date.now()+60000)return installationToken.token;
+ const now=Math.floor(Date.now()/1000);
+ const encoded=obj=>Buffer.from(JSON.stringify(obj)).toString('base64url');
+ const input=encoded({alg:'RS256',typ:'JWT'})+'.'+encoded({iat:now-60,exp:now+480,iss:String(process.env.LIFEGEN_GITHUB_APP_ID)});
+ const privateKey=process.env.LIFEGEN_GITHUB_APP_PRIVATE_KEY.replace(/\\n/g,'\n');
+ const signature=crypto.sign('RSA-SHA256',Buffer.from(input),privateKey).toString('base64url');
+ const response=await fetch('https://api.github.com/app/installations/'+encodeURIComponent(process.env.LIFEGEN_GITHUB_APP_INSTALLATION_ID)+'/access_tokens',{
+  method:'POST',
+  headers:{authorization:'Bearer '+input+'.'+signature,accept:'application/vnd.github+json','x-github-api-version':'2022-11-28'},
+  body:JSON.stringify({repositories:['Lifegen'],permissions:{contents:'write',pull_requests:'write'}}),
+  signal:AbortSignal.timeout(15000)
+ });
+ if(!response.ok)throw Object.assign(new Error('GitHub App installation credentials or repository permissions need configuration.'),{status:503});
+ const result=await response.json();
+ if(typeof result.token!=='string'||!result.expires_at)throw Object.assign(new Error('GitHub App did not return a usable installation token.'),{status:503});
+ installationToken={token:result.token,expires:Date.parse(result.expires_at)};
+ return installationToken.token;
+}
 export const allowedBranch=b=>/^(develop|feature\/[a-zA-Z0-9._-]{1,90}|fix\/[a-zA-Z0-9._-]{1,90})$/.test(b||'');
 export const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
   !p.startsWith('/')&&!p.includes('..')&&!p.includes('\\')&&
@@ -13,21 +43,23 @@ export const allowedPath=p=>typeof p==='string'&&p.length>0&&p.length<=200&&
 export const editableBranch=b=>/^(feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(b||'');
 export const editablePath=p=>allowedPath(p)&&!/(^|\/)\.github(\/|$)/i.test(p)&&
  !/^(src\/(auth|db|deployment|dev-workspace)\.js|vercel\.json|package(-lock)?\.json)$/i.test(p);
-const enabled=()=>Boolean(token());
-let connectionCache={token:'',expires:0,connected:false};
+const enabled=()=>process.env.VERCEL_ENV==='production'?productionAppConfigured():Boolean(process.env.LIFEGEN_GITHUB_DEV_TOKEN);
+let connectionCache={mode:'',expires:0,connected:false};
 const verified=async()=>{
- const key=token();if(!key)return false;
- if(connectionCache.token===key&&Date.now()<connectionCache.expires)return connectionCache.connected;
- try{const ref=await request(apiRoot+'/git/ref/heads/develop');
-  connectionCache={token:key,expires:Date.now()+60000,connected:Boolean(ref.object?.sha)};
- }catch{connectionCache={token:key,expires:Date.now()+15000,connected:false};}
+ if(!enabled())return false;
+ const mode=process.env.VERCEL_ENV==='production'?'app':'preview';
+ if(connectionCache.mode===mode&&Date.now()<connectionCache.expires)return connectionCache.connected;
+ try{
+  const ref=await request(apiRoot+'/git/ref/heads/develop');
+  connectionCache={mode,expires:Date.now()+60000,connected:Boolean(ref.object?.sha)};
+ }catch{connectionCache={mode,expires:Date.now()+15000,connected:false};}
  return connectionCache.connected;
 };
 const request=async(url,opts={})=>{
  const response=await fetch(url,{
   ...opts,
   headers:{accept:'application/vnd.github+json',
-   authorization:'Bearer '+token(),
+   authorization:'Bearer '+await githubToken(),
    'x-github-api-version':'2022-11-28',
    ...(opts.headers||{})},
   signal:AbortSignal.timeout(15000)
@@ -52,11 +84,15 @@ const wrap=fn=>async(req,res,next)=>{try{await fn(req,res);}catch(e){next(e);}};
 const ensureAdmin=(req,res,next)=>req.actor?.role_id==='admin'?next():res.status(403).json({error:'Administrator access required'});
 const ensureEnabled=async(req,res,next)=>{try{
  if(await verified())return next();
- return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side integration token.'});
+ return res.status(503).json({error:'GitHub repository access is unavailable. Check the server-side GitHub App or preview integration.'});
  }catch(e){next(e);}};
-export const writesAllowed=(env=process.env)=>env.VERCEL_ENV!=='production'&&env.NODE_ENV!=='production'&&env.LIFEGEN_DEV_WRITES_ENABLED==='true'&&env.LIFEGEN_DEV_DATABASE_ISOLATED==='true'&&env.VERCEL_ENV==='preview';
+export const writesAllowed=(env=process.env)=>{
+ if(env.VERCEL_ENV==='production')return productionAppWritesEnabled(env);
+ return env.NODE_ENV!=='production'&&env.LIFEGEN_DEV_WRITES_ENABLED==='true'&&
+  env.LIFEGEN_DEV_DATABASE_ISOLATED==='true'&&env.VERCEL_ENV==='preview';
+};
 const checkWrite=(req,res,next)=>{try{
- if(!writesAllowed())return res.status(403).json({error:'Developer Git writes are disabled on this environment. Enable them only in an isolated development deployment.'});
+ if(!writesAllowed())return res.status(403).json({error:'GitHub writes are disabled. Configure a repository-scoped GitHub App and enable protected branch writes, or use an isolated development preview.'});
  checkOrigin(req);checkCsrf(req);next();
  }catch(e){next(e);}};
 const deny=(res)=>res.status(400).json({error:'Only safe development branches and source-file paths are allowed.'});
@@ -79,18 +115,19 @@ export function registerDevWorkspace(app){
   const configured=enabled();
   const connected=configured?await verified():false;
   const isPreview=process.env.VERCEL_ENV==='preview'&&process.env.NODE_ENV!=='production';
+  const isProductionApp=productionAppConfigured();
   const explicitWrites=process.env.LIFEGEN_DEV_WRITES_ENABLED==='true';
   const isolatedDbAcknowledged=process.env.LIFEGEN_DEV_DATABASE_ISOLATED==='true';
   res.set('Cache-Control','no-store').json({
    checks:[
-    {id:'preview',label:'Isolated Vercel preview environment',ready:isPreview},
-    {id:'token',label:'Server-side GitHub token configured',ready:configured},
+    {id:'preview',label:'Isolated preview or configured production GitHub App',ready:isPreview||isProductionApp},
+    {id:'token',label:'Server-side GitHub App or preview credential configured',ready:configured},
     {id:'repository',label:'GitHub develop branch accessible',ready:connected},
-    {id:'database',label:'Isolated preview database acknowledged by administrator',ready:isolatedDbAcknowledged&&isPreview},
-    {id:'writes',label:'Developer writes explicitly enabled',ready:explicitWrites&&isPreview&&isolatedDbAcknowledged}
+    {id:'database',label:'Preview database isolated (not required for GitHub-only production writes)',ready:isProductionApp||(isolatedDbAcknowledged&&isPreview)},
+    {id:'writes',label:'Protected GitHub branch writes explicitly enabled',ready:writesAllowed()}
    ],
    canBrowse:connected,canWrite:connected&&writesAllowed(),
-   note:'The isolation flag is an administrator acknowledgment, not proof of database isolation. Database isolation and GitHub write permissions require separate verification. This check does not modify GitHub or Supabase.'
+   note:'In production, configure a GitHub App scoped to LIFEGEN and an explicit write flag. Only feature/fix branches and draft PRs are writable; main stays protected.'
   });
  }));
  app.post('/api/admin/dev/branch',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
@@ -155,6 +192,82 @@ export function registerDevWorkspace(app){
   });
   res.json({ok:true,commit:data.commit?.sha,sha:data.content?.sha});
  }));
+ // Read-only branch status and history for the Git console. These endpoints
+ // never execute git locally or modify the remote repository.
+ app.get('/api/admin/dev/branches',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const list=await request(apiRoot+'/branches?per_page=100');
+  const branches=list.filter(b=>allowedBranch(b.name)).map(b=>({
+   name:b.name,sha:b.commit?.sha||'',protected:Boolean(b.protected)
+  }));
+  res.set('Cache-Control','no-store').json({branches,base:'develop'});
+ }));
+ app.get('/api/admin/dev/branch-status',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||'develop');
+  if(!allowedBranch(branch))return deny(res);
+  const result=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+  res.set('Cache-Control','no-store').json({
+   branch,base:'develop',ahead:result.ahead_by||0,behind:result.behind_by||0,
+   status:result.status||'identical',truncated:(result.files||[]).length>=100,
+   files:(result.files||[]).slice(0,100).filter(f=>allowedPath(f.filename)).map(f=>({
+    path:f.filename,status:f.status,additions:f.additions||0,deletions:f.deletions||0
+   }))
+  });
+ }));
+ // Read-only file patch from the same branch comparison shown in Git status.
+ // Never fetch arbitrary URLs or expose unapproved/sensitive file paths.
+ app.get('/api/admin/dev/file-diff',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||''),file=String(req.query.path||'');
+  if(!allowedBranch(branch)||!allowedPath(file))return deny(res);
+  const comparison=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+  if((comparison.files||[]).length>=100)return res.status(409).json({error:'Comparison is too large to verify this file. Review it on GitHub.'});
+  const entry=(comparison.files||[]).find(item=>item.filename===file);
+  if(!entry)return res.status(404).json({error:'This file is not changed on the selected branch.'});
+  const patch=typeof entry.patch==='string'?entry.patch:'';
+  res.set('Cache-Control','no-store').json({
+   branch,base:'develop',path:file,status:entry.status,
+   additions:entry.additions||0,deletions:entry.deletions||0,
+   patch:patch.slice(0,120000),truncated:patch.length>120000,
+   unavailable:!patch
+  });
+ }));
+ app.get('/api/admin/dev/history',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||'develop');
+  if(!allowedBranch(branch))return deny(res);
+  const commits=await request(apiRoot+'/commits?sha='+encodeURIComponent(branch)+'&per_page=25');
+  res.set('Cache-Control','no-store').json({branch,commits:commits.map(c=>({
+   sha:c.sha,subject:String(c.commit?.message||'').split('\n')[0].slice(0,200),
+   author:c.commit?.author?.name||'Unknown',date:c.commit?.author?.date||'',
+   url:c.html_url
+  }))});
+ }));
+ // Inspect only commits present in the selected branch's recent history.
+ // This is read-only and avoids accepting arbitrary repository SHA queries.
+ app.get('/api/admin/dev/commit-detail',requireStaff,ensureAdmin,wrap(async(req,res)=>{
+  if(!await verified())return res.status(503).json({error:'GitHub connection is unavailable.'});
+  const branch=String(req.query.branch||''),sha=String(req.query.sha||'');
+  if(!allowedBranch(branch)||!/^[a-f0-9]{40}$/.test(sha))return deny(res);
+  const recent=await request(apiRoot+'/commits?sha='+encodeURIComponent(branch)+'&per_page=25');
+  if(!recent.some(item=>item.sha===sha))return res.status(404).json({error:'Commit is not in the most recent 25 commits on this branch.'});
+  const commit=await request(apiRoot+'/commits/'+sha);
+  const files=(commit.files||[]).filter(item=>allowedPath(item.filename));
+  let remaining=90000;
+  res.set('Cache-Control','no-store').json({
+   branch,sha,subject:String(commit.commit?.message||'').split('\n')[0].slice(0,200),
+   truncated:files.length>30||(commit.files||[]).length>=300,
+   files:files.slice(0,30).map(item=>{
+    const patch=typeof item.patch==='string'?item.patch:'';
+    const snippet=patch.slice(0,Math.min(16000,remaining));
+    remaining-=snippet.length;
+    return {path:item.filename,status:item.status,additions:item.additions||0,
+     deletions:item.deletions||0,patch:snippet,unavailable:!patch,
+     truncated:snippet.length<patch.length};
+   })
+  });
+ }));
  app.get('/api/admin/dev/pull-requests',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
   const branch=String(req.query.branch||'').trim();
   if(branch&&!editableBranch(branch))return deny(res);
@@ -189,16 +302,48 @@ export function registerDevWorkspace(app){
    url:run.html_url,created_at:run.created_at
   }))});
  }));
+ // Read-only artifact metadata for a recent packaging workflow run.
+ // Restrict IDs to those listed by our specific packaging workflow.
+ app.get('/api/admin/dev/package-artifacts',requireStaff,ensureAdmin,ensureEnabled,wrap(async(req,res)=>{
+  const id=String(req.query.run_id||'');
+  if(!/^[1-9][0-9]{0,17}$/.test(id))return res.status(400).json({error:'Choose a valid package run.'});
+  const listing=await request(apiRoot+'/actions/workflows/lifegen-package.yml/runs?per_page=15');
+  const run=(listing.workflow_runs||[]).find(item=>String(item.id)===id);
+  if(!run)return res.status(404).json({error:'This package run is no longer in the recent history. View it on GitHub.'});
+  const result=await request(apiRoot+'/actions/runs/'+id+'/artifacts?per_page=30');
+  res.set('Cache-Control','no-store').json({
+   run_id:run.id,branch:run.head_branch,status:run.status,conclusion:run.conclusion,
+   url:run.html_url,artifacts:(result.artifacts||[]).slice(0,30).map(item=>({
+    name:String(item.name||'').slice(0,150),size_in_bytes:item.size_in_bytes||0,
+    expired:Boolean(item.expired),expires_at:item.expires_at||'',
+    created_at:item.created_at||''
+   }))
+  });
+ }));
  app.post('/api/admin/dev/package',requireStaff,ensureAdmin,ensureEnabled,checkWrite,wrap(async(req,res)=>{
+  if(process.env.VERCEL_ENV==='production')return res.status(403).json({error:'Package workflow dispatch is limited to isolated previews.'});
   const branch=String(req.body?.branch||'develop');
   if(!allowedBranch(branch))return deny(res);
+  const paths=req.body?.paths;
+  if(paths!==undefined&&(!Array.isArray(paths)||paths.length<1||paths.length>40||
+     new Set(paths).size!==paths.length||
+     paths.some(path=>!allowedPath(path)||path.length>200)))
+   return res.status(400).json({error:'Select 1–40 unique, permitted source files for a staged package.'});
+  if(paths){
+   // Only package actual changed files on the chosen remote branch; never trust
+   // the browser-provided list without verifying the GitHub comparison.
+   const diff=await request(apiRoot+'/compare/'+encodeURIComponent('develop')+'...'+encodeURIComponent(branch)+'?per_page=100');
+   if((diff.files||[]).length>=100)return res.status(409).json({error:'Too many changed files to verify a staged package. Use the full-source package.'});
+   const eligible=new Set((diff.files||[]).filter(item=>item.status!=='removed'&&allowedPath(item.filename)).map(item=>item.filename));
+   if(paths.some(path=>!eligible.has(path)))return res.status(409).json({error:'The selected files are not all current changed source files. Refresh staging before packaging.'});
+  }
   const now=Date.now(),last=packageRequests.get(branch)||0;
   if(now-last<60000)return res.status(429).json({error:'A package build was recently requested for this branch. Wait one minute before retrying.'});
   packageRequests.set(branch,now);
   try{
    await request(apiRoot+'/actions/workflows/lifegen-package.yml/dispatches',{
     method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({ref:branch})
+    body:JSON.stringify({ref:branch,inputs:{paths:paths?paths.join('\n'):''}})
    });
   }catch(error){packageRequests.delete(branch);throw error;}
   res.status(202).json({ok:true,message:'Packaging workflow requested. Check GitHub Actions for the result.'});

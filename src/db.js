@@ -64,7 +64,36 @@ export function connectionHint(error) {
  if(/enetunreach|ehostunreach|eai_again|getaddrinfo/.test(text)) return 'Network: this runtime cannot reach the database host, which is often the IPv6-only direct Supabase host. Use the Supabase Session Pooler URL on port 5432 for DATABASE_DIRECT_URL and the pooler URL for DATABASE_URL.';
  return null;
 }
-export function getPool() { return pool ||= new Pool({...connectionOptions(process.env.DATABASE_URL),max:3,idleTimeoutMillis:10000,allowExitOnIdle:true}); }
+// Keep serverless instances from monopolizing Supavisor session-pool slots.
+// Each warm Vercel instance maintains its own Pool; a large per-instance limit
+// multiplies against Supabase's relatively small session-pool capacity.
+export function applicationPoolOptions({serverless=Boolean(process.env.VERCEL)}={}) {
+ return {max:serverless?1:3,idleTimeoutMillis:serverless?1000:10000,allowExitOnIdle:true};
+}
+// Supavisor session mode on port 5432 caps active clients to the DB pool size.
+// In Vercel, share a smaller number of backend connections using Supavisor
+// transaction mode (6543). Only rewrite a verified project-qualified Supabase
+// pooler URL; never rewrite arbitrary Postgres or direct DB URLs.
+// The original session/direct URL remains untouched for maintenance clients.
+export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCEL),mode=process.env.LIFEGEN_DB_POOL_MODE}={}) {
+ if(!url||!serverless||mode==='session')return url;
+ const u=new URL(url);
+ const pooler=/(^|\.)pooler\.supabase\.com$/i.test(u.hostname);
+ if(!pooler||u.port!=='5432'||!decodeURIComponent(u.username).includes('.'))return url;
+ u.port='6543';
+ return u.toString();
+}
+export function getPool() {
+ if(!pool) {
+  const instance=new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()});
+  // pg emits errors from idle clients on the Pool itself. Without a listener, Node
+  // treats them as uncaught exceptions and can terminate the running API process.
+  // Never include connection strings or credentials in the error output.
+  instance.on('error',(error)=>console.error('Idle database connection error:',String(error?.code||'UNKNOWN')));
+  pool=instance;
+ }
+ return pool;
+}
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
  if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}

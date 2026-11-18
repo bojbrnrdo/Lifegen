@@ -51,7 +51,7 @@ test('Group overview focuses on people and leadership, without optional logistic
     assert.doesNotMatch(groupPage, new RegExp('<dt>' + key + '</dt>'));
   }
   assert.match(groupPage, /Former members/);
-  assert.match(groupPage, /<details class="card mt-2">/);
+  assert.match(groupPage, /<details class="card mt-2"[^>]*>/);
   assert.match(groupPage, /renderProgressCard\(/);
 });
 
@@ -63,4 +63,15 @@ test('Existing schedule, venue and notes are preserved by server-side update sem
   assert.match(server, /notes: stringField\(src\.notes/);
   assert.match(networkPage, /renderNetworkCalendar\(/);
   assert.doesNotMatch(networkPage, /\$\{n\.notes \? html/);
+});
+
+test('Cell profile keeps members primary and offers a compact search for larger Cells',()=>{
+ assert.match(groupPage,/id="membersCard"/);
+ assert.match(groupPage,/id="cellMemberSearch"/);
+ assert.match(groupPage,/g\.members\.length>5/);
+ assert.match(groupPage,/memberSearch\.addEventListener\('input'/);
+ assert.match(groupPage,/row\.hidden=!matched/);
+ assert.doesNotMatch(groupPage,/lifegroup-detail__nav/);
+ assert.match(groupPage,/id="progressDisclosure"/);
+ assert.match(groupPage,/<h2>Network & leadership<\/h2>/);
 });

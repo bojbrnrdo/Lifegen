@@ -237,6 +237,16 @@
         if (deckObserver) deckObserver.observe(card);
     });
 
+    // The circular photo carousel (circular-carousel.js) replaces the deck
+    // visually but reuses these cards as its data source; selecting a photo in
+    // the ring opens this lightbox at the matching full-size shot.
+    const deckWrap = document.querySelector("#photoDeck")?.closest(".deck-wrap");
+    if (deckWrap) {
+        deckWrap.addEventListener("lifegen:open-photo", (e) => {
+            if (typeof e.detail?.index === "number") openLightbox(e.detail.index);
+        });
+    }
+
     // ---- Lightbox (full-size photo view) ------------------------------
     const lightbox = document.getElementById("lightbox");
     const lbImg = document.getElementById("lbImg");

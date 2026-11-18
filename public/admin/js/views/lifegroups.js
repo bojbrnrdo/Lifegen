@@ -316,13 +316,19 @@ export async function renderLifegroups({main, query}) {
  <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Your networks, leaders and members at a glance.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew">${icon('plus')} Add New</button><button class="btn" id="removeFromLifegroups">${icon('trash',16)} Remove</button>`:''}</div></div>
  <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Find a network or leader…" aria-label="Search Networks and Cell Leaders" /></div>
- <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)}</button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)}</button></div>
+ <div class="lg-gender-filter" role="group" aria-label="Network category"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="All networks" title="All networks">${icon('group',18)} <span>All</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Boys networks" title="Boys networks">${icon('mars',18)} <span>Boys</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Girls networks" title="Girls networks">${icon('venus',18)} <span>Girls</span></button></div>
  <select id="treeStatus" aria-label="Activity"><option value="active">Active</option><option value="all">All</option><option value="inactive">Inactive</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Refresh lifegroups" aria-label="Refresh lifegroups">${icon('undo',17)} <span>Refresh</span></button></div>
+ <div class="lifegroups-page__viewbar" role="group" aria-label="Lifegroups view">
+  <button type="button" class="lifegroups-page__view" id="showGroupMap" aria-pressed="false">Network map</button>
+  <button type="button" class="lifegroups-page__view is-active" id="showGroupDirectory" aria-pressed="true">Directory</button>
+  <span class="lifegroups-page__viewhint">Browse Cells in a list or explore relationships on the map.</span>
+ </div>
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
  <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
- <div id="treeCanvas"><div class="loading">Loading discipleship tree…</div></div>
+ <div id="treeCanvas" hidden><div class="loading">Loading discipleship tree…</div></div>
+ <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
  <div class="lifegroups-page__extras">
  <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>All People</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>People to connect</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
@@ -335,7 +341,48 @@ export async function renderLifegroups({main, query}) {
  const syncGender=()=>genderButtons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.genderFilter===filters.gender)));
  syncGender();
  main.querySelector('#treeStatus').value=filters.status;
- const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');let cache=null,sequence=0;
+ const canvas=main.querySelector('#treeCanvas'),notice=main.querySelector('#treeNotice');
+ const directory=main.querySelector('#lifegroupsDirectory');
+ const mapButton=main.querySelector('#showGroupMap'),directoryButton=main.querySelector('#showGroupDirectory');
+ let view='directory',cache=null,sequence=0;
+ const switchView=next=>{
+  view=next==='directory'?'directory':'map';
+  canvas.hidden=view!=='map';directory.hidden=view!=='directory';
+  mapButton.classList.toggle('is-active',view==='map');directoryButton.classList.toggle('is-active',view==='directory');
+  mapButton.setAttribute('aria-pressed',String(view==='map'));directoryButton.setAttribute('aria-pressed',String(view==='directory'));
+ };
+ mapButton.onclick=()=>switchView('map');
+ directoryButton.onclick=()=>switchView('directory');
+ const renderDirectory=()=>{
+  if(!cache)return;
+  const q=filters.q.toLowerCase();
+  const nets=cache.nets.filter(n=>
+   (!filters.gender||n.gender===filters.gender)&&
+   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:Boolean(n.is_active))));
+  const netIds=new Set(nets.map(n=>String(n.id)));
+  const groups=cache.groups.filter(g=>netIds.has(String(g.network_id))&&!g.leads_network&&
+   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
+  const matchingNets=nets.filter(n=>!q||String(n.name||'').toLowerCase().includes(q)||
+   String(n.leader_name||'').toLowerCase().includes(q)||
+   groups.some(g=>String(g.network_id)===String(n.id)&&
+    (String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q))));
+  directory.innerHTML=matchingNets.length?html`<div class="lifegroups-page__directory-head"><h2>Network directory</h2><p class="small muted">${matchingNets.length} matching networks. Open any Cell to manage members and attendance.</p></div>
+   <div class="lifegroups-page__directory-grid">${matchingNets.map(n=>{
+    const cells=groups.filter(g=>String(g.network_id)===String(n.id)&&(!q||
+      String(g.name||'').toLowerCase().includes(q)||String(g.leader_name||'').toLowerCase().includes(q)||
+      String(n.name||'').toLowerCase().includes(q)||String(n.leader_name||'').toLowerCase().includes(q)));
+    return html`<section class="card lifegroups-page__network-card"><div class="card__body">
+     <div class="lifegroups-page__network-title"><div><span class="small muted">Network</span><h3>${n.name||'Unnamed network'}</h3><p class="small muted">Leader: ${n.leader_name||'Not assigned'}</p></div><span class="badge">${n.is_active?'Active':'Inactive'}</span></div>
+     <div class="lifegroups-page__network-count">${cells.length} ${cells.length===1?'Cell':'Cells'} · ${cells.reduce((sum,g)=>sum+Number(g.member_count||0),0)} members</div>
+     ${cells.length?html`<ul class="lifegroups-page__cell-list">${cells.map(g=>html`<li><div><strong>${g.name||'Unnamed Cell'}</strong><span>${g.leader_name||'No leader'} · ${Number(g.member_count||0)} members</span></div><a class="btn btn--sm" href="#/lifegroups/${g.id}" aria-label="Open Cell ${g.name||g.id}">Open Cell</a></li>`)}</ul>`:html`<p class="small muted">No matching Cells in this network.</p>`}
+    </div></section>`;
+   })}</div>`:html`<div class="card"><div class="card__body"><h3>No matching networks</h3><p class="muted">Try another search term or filter.</p><button type="button" class="btn" id="clearLifegroupFilters">Clear filters</button></div></div>`;
+  directory.querySelector('#clearLifegroupFilters')?.addEventListener('click',()=>{
+   filters.q='';filters.gender='';filters.status='active';
+   main.querySelector('#treeQ').value='';main.querySelector('#treeStatus').value='active';syncGender();load();
+  });
+ };
+
  function afterRemove(){
   // Both the legacy SVG cache and the React data model must reload.
   canvas.__lifegenTree?.members.clear();
@@ -398,6 +445,7 @@ export async function renderLifegroups({main, query}) {
   if(seq!==sequence||!main.contains(canvas))return;
   history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
+  renderDirectory();
   const summary=main.querySelector('#treeSummary');
   const visibleNetworks=cache.nets.filter(n =>
    (!filters.gender||n.gender===filters.gender) &&
@@ -641,7 +689,8 @@ export async function renderLifegroup({ main }, id) {
             <div class="card__footer small muted">${dotsKey()}</div>` : html`<div class="empty" style="padding:28px"><p>No cell leaders yet.${manage ? raw(' Use <b>Add member</b> to add up to 12 cell leaders.') : ''}</p></div>`}
         </div>
       </div>` : html`<div class="card lifegroup-detail__members">
-        <div class="card__header"><h2>${icon('people',18)} Members</h2><span class="hint">${g.member_count} / 12</span></div>
+        <div class="card__header lifegroup-detail__members-head"><div><h2>${icon('people',18)} Members</h2><p class="small muted">Find a member or open their profile to see more details.</p></div><span class="hint">${g.member_count} / 12</span></div>
+        ${g.members.length>5?html`<div class="lifegroup-detail__member-search"><label for="cellMemberSearch" class="sr-only">Find a Cell member</label>${icon('search',16)} <input type="search" id="cellMemberSearch" placeholder="Find a member…" autocomplete="off" /><span id="cellMemberCount" class="small muted">${g.members.length} members</span></div>`:''}
         <div class="card__body card__body--flush" id="membersCard">
           ${g.members.length ? html`<div class="lifegroup-detail__people">${g.members.map(m=>html`
             <div class="lifegroup-detail__person">
@@ -659,7 +708,7 @@ export async function renderLifegroup({ main }, id) {
             </div>`)}</div>` : html`<div class="lifegroup-detail__empty">${icon('people',25)}<p>No members yet.</p>${manage ? raw('<p class="small muted">Select Add member to get started.</p>') : ''}</div>`}
         </div>
       </div>`}
-      <details class="card lifegroup-detail__info">
+      <details class="card lifegroup-detail__info" id="leadershipSection">
         <summary class="card__header">${icon('link',18)} <h2>Network & leadership</h2>${icon('chevR',16)}</summary>
         <div class="card__body"><dl class="dl">
           <div><dt>Leader</dt>${g.leader_person_id ? html`<dd><a href="#/people/${g.leader_person_id}">${g.leader_name}</a>${g.leader_contact ? html` <span class="small muted">· ${g.leader_contact}</span>` : ''}</dd>` : g.leader_name ? html`<dd>${g.leader_name} <span class="small muted">(not registered)</span></dd>` : raw('<dd class="none">—</dd>')}</div>
@@ -669,11 +718,25 @@ export async function renderLifegroup({ main }, id) {
       </details>
     </div>
     <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>Attendance &amp; progress</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
-    ${g.former.length ? html`<details class="card mt-2"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
+    ${g.former.length ? html`<details class="card mt-2" id="formerMembersSection"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
       <div class="card__body"><ul class="small" style="margin:0 0 0 18px;columns:2;column-gap:24px">${g.former.map((f) => html`<li><a href="#/people/${f.id}">${fullName(f)}</a> <span class="muted">· ${fmtDate(f.joined_at, { short: true })} → ${fmtDate(f.left_at, { short: true })}</span></li>`)}</ul></div></details>` : ''}
     ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}
   </section>`;
 
+  const memberSearch=main.querySelector('#cellMemberSearch');
+  if(memberSearch){
+    const rows=[...main.querySelectorAll('.lifegroup-detail__people .lifegroup-detail__person')];
+    const count=main.querySelector('#cellMemberCount');
+    memberSearch.addEventListener('input',()=>{
+      const term=memberSearch.value.trim().toLocaleLowerCase();
+      let shown=0;
+      rows.forEach(row=>{
+        const matched=row.querySelector('.lifegroup-detail__person-info strong')?.textContent?.toLocaleLowerCase().includes(term);
+        row.hidden=!matched;if(matched)shown++;
+      });
+      count.textContent=shown+' of '+rows.length+' members';
+    });
+  }
   const progressDisclosure=main.querySelector('#progressDisclosure');
   progressDisclosure.addEventListener('toggle',()=>{
     if(!progressDisclosure.open||progressDisclosure.dataset.loaded)return;
