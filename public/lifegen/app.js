@@ -511,20 +511,14 @@ qsa("[data-story]").forEach(b => b.addEventListener("click", e => {
     "Escape" === e.key && (modals.forEach(m => m.classList.remove("open")), closeMM(), document.body.style.overflow = "")
 });
 function syncVipDashboardState() {
-    const choice = $("reg-choice"),
-        signup = $("vip-signup-form-container"),
-        regular = $("regular-registration"),
-        success = $("reg-success"),
-        dash = $("vip-attendance-dashboard");
+    const dash = $("vip-attendance-dashboard");
     // Public is unlimited: never auto-open the personal dashboard. That view
     // (attendance count / prize progress) is admin-only; the presentation
     // screen stays sourced from vip_registrations per-Sunday.
     if (dash) dash.hidden = true;
-    if (success && !success.hidden) {
-        choice.hidden = !0, signup.hidden = !0, regular.hidden = !0;
-        return;
-    }
-    choice.hidden = !1, signup.hidden = !0, regular.hidden = !0, clearLiveValidation("vip-signup-form")
+    // This callback also runs during background VIP-session refreshes. Do not
+    // reset the registration chooser here: doing so hides an in-progress VIP or
+    // regular registration form every time the existing VIP session is polled.
 }
 function validateVipForm() {
     const nameInput = $("vip-name"),
