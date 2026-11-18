@@ -157,10 +157,42 @@ export async function changePassword(actor,current,next) {
   await logAction(client,actor,'staff_users',u.id,'password_changed');return {};
  });
 }
+// Staff-account CRUD predates this optional identity link, so older schemas must remain usable.
+const STAFF_PERSON_LINK_MIGRATION='database/011_staff_people_link.sql';
+const STAFF_PERSON_LINK_UNAVAILABLE=`Staff account People linking is unavailable until ${STAFF_PERSON_LINK_MIGRATION} is applied.`;
+export async function staffPersonLinkColumnAvailable(db) {
+ const {rows}=await db.query(`SELECT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='staff_users' AND column_name='person_id'
+ ) AS available`);
+ return rows[0]?.available===true;
+}
+export async function listStaffAccounts(db) {
+ const hasPersonLink=await staffPersonLinkColumnAvailable(db);
+ const personIdColumn=hasPersonLink?'person_id':'NULL::bigint AS person_id';
+ const {rows}=await db.query(`SELECT id,username,display_name,role_id,${personIdColumn},is_active,created_at,last_login_at FROM staff_users ORDER BY id`);
+ return rows.map(u=>({...u,role_name:u.role_id}));
+}
+export async function insertStaffAccountRow(client,{hasPersonLink,username,display,roleId,hash,personId}) {
+ if(!hasPersonLink) {
+  if(personId!==undefined&&personId!==null)throw httpError(503,STAFF_PERSON_LINK_UNAVAILABLE);
+  return (await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash) VALUES($1,$2,$3,$4) RETURNING *',[username,display,roleId,hash])).rows[0];
+ }
+ await assertLinkablePerson(client,personId);
+ return (await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash,person_id) VALUES($1,$2,$3,$4,$5) RETURNING *',[username,display,roleId,hash,personId??null])).rows[0];
+}
+export async function updateStaffAccountRow(client,{hasPersonLink,current,username,display,roleId,active,hash,personId}) {
+ if(!hasPersonLink) {
+  if(personId!==undefined&&personId!==null)throw httpError(503,STAFF_PERSON_LINK_UNAVAILABLE);
+  return (await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash) WHERE id=$6 RETURNING *',[username,display,roleId,active,hash,current.id])).rows[0];
+ }
+ await assertLinkablePerson(client,personId,current.id);
+ return (await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash),person_id=$7 WHERE id=$6 RETURNING *',[username,display,roleId,active,hash,current.id,personId])).rows[0];
+}
 export async function userAccounts(actor,method,args) {
  requirePermission(actor,'users:manage');
  if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:({admin:'Admin',staff:'Attendance Staff',viewer:'Viewer / Leader',youth_welfare_admin:'Youth Welfare Admin (portal-only)',youth_welfare_staff:'Youth Welfare Staff (portal-only)',youth_welfare_viewer:'Youth Welfare Viewer (portal-only)'})[id]||id,permissions}));
- if(method==='users')return (await query('SELECT id,username,display_name,role_id,person_id,is_active,created_at,last_login_at FROM staff_users ORDER BY id')).rows.map(u=>({...u,role_name:u.role_id}));
+ if(method==='users')return listStaffAccounts({query});
  const [idOrBody,bodyMaybe]=args;const editing=method==='updateUser';const body=editing?bodyMaybe:idOrBody;
  if(!body||!PERMISSIONS[body.role_id])throw httpError(400,'Choose a valid staff role.');
  const username=String(body.username||'').trim().toLowerCase();const display=String(body.display_name||'').trim();
@@ -168,18 +200,17 @@ export async function userAccounts(actor,method,args) {
  const hash=body.password?await passwordHash(body.password):null;if(!editing&&!hash)throw httpError(400,'A password is required.');
  return transaction(async client=>{
   let u;
+  const hasPersonLink=await staffPersonLinkColumnAvailable(client);
   const requestedPersonId=normalizeLinkedPersonId(body.person_id);
   if(editing) {
    const current=(await client.query('SELECT * FROM staff_users WHERE id=$1 FOR UPDATE',[Number(idOrBody)])).rows[0];if(!current)throw httpError(404,'User not found.');
    const active=body.is_active===undefined?current.is_active:Boolean(body.is_active);
    const linkedPersonId=requestedPersonId===undefined?current.person_id:requestedPersonId;
-   await assertLinkablePerson(client,linkedPersonId,current.id);
    if(current.role_id==='admin'&&current.is_active&&(!active||body.role_id!=='admin')&&(await client.query('SELECT id FROM staff_users WHERE role_id=\'admin\' AND is_active=true')).rows.length===1)throw httpError(409,'The last active administrator cannot be disabled or demoted.');
-   u=(await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash),person_id=$7 WHERE id=$6 RETURNING *',[username,display,body.role_id,active,hash,current.id,linkedPersonId])).rows[0];
+   u=await updateStaffAccountRow(client,{hasPersonLink,current,username,display,roleId:body.role_id,active,hash,personId:linkedPersonId});
    await client.query('DELETE FROM staff_sessions WHERE user_id=$1 AND token_hash<>$2',[u.id,actor.session_hash]);
   }else {
-   await assertLinkablePerson(client,requestedPersonId);
-   u=(await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash,person_id) VALUES($1,$2,$3,$4,$5) RETURNING *',[username,display,body.role_id,hash,requestedPersonId??null])).rows[0];
+   u=await insertStaffAccountRow(client,{hasPersonLink,username,display,roleId:body.role_id,hash,personId:requestedPersonId});
   }
   await logAction(client,actor,'staff_users',u.id,editing?'update':'create',{role:u.role_id});return publicUser(u);
  });
