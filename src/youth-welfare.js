@@ -850,33 +850,35 @@ function normalizeWelfarePatch(body,allowed){
   const patch={};
   for(const [key,value] of Object.entries(body)){
     switch(key){
-      case 'messenger_facebook_name': patch[key]=cleanString(value,200,'Messenger/Facebook name');break;
-      case 'complete_address': patch[key]=cleanString(value,500,'complete address');break;
+      case 'messenger_facebook_name': patch.messenger_facebook_name=cleanString(value,200,'Messenger/Facebook name');break;
+      case 'complete_address': patch.complete_address=cleanString(value,500,'complete address');break;
       case 'contact_number':
       case 'parent_guardian_contact':{
         const phone=cleanString(value,40,key==='contact_number'?'contact number':'parent/guardian contact number');
         if(phone&&phone.replace(/\D/g,'').length<7)throw httpError(400,`Enter a valid ${key==='contact_number'?'contact number':'parent/guardian contact number'}.`);
-        patch[key]=phone;break;
+        if(key==='contact_number')patch.contact_number=phone;
+        else patch.parent_guardian_contact=phone;
+        break;
       }
-      case 'parent_guardian_name': patch[key]=cleanString(value,200,'parent/guardian name');break;
-      case 'cell_leader_manual_name': patch[key]=cleanString(value,200,'Cell Leader name');break;
-      case 'cell_leader_person_id': patch[key]=value==null||value===''?null:validId(value,'Cell Leader');break;
-      case 'education_status': patch[key]=selectWelfareChoice(value,YOUTH_EDUCATION_STATUSES,'education status');break;
-      case 'grade_year_level': patch[key]=selectWelfareChoice(value,YOUTH_GRADE_YEAR_LEVELS,'grade/year level');break;
-      case 'school_stop_period': patch[key]=selectWelfareChoice(value,YOUTH_SCHOOL_STOP_PERIODS,'school-stop period');break;
-      case 'continue_studies': patch[key]=selectWelfareChoice(value,YOUTH_CONTINUATION_CHOICES,'continuation answer');break;
-      case 'church_invited_at': patch[key]=validDate(value,'church invitation date',{optional:true});break;
+      case 'parent_guardian_name': patch.parent_guardian_name=cleanString(value,200,'parent/guardian name');break;
+      case 'cell_leader_manual_name': patch.cell_leader_manual_name=cleanString(value,200,'Cell Leader name');break;
+      case 'cell_leader_person_id': patch.cell_leader_person_id=value==null||value===''?null:validId(value,'Cell Leader');break;
+      case 'education_status': patch.education_status=selectWelfareChoice(value,YOUTH_EDUCATION_STATUSES,'education status');break;
+      case 'grade_year_level': patch.grade_year_level=selectWelfareChoice(value,YOUTH_GRADE_YEAR_LEVELS,'grade/year level');break;
+      case 'school_stop_period': patch.school_stop_period=selectWelfareChoice(value,YOUTH_SCHOOL_STOP_PERIODS,'school-stop period');break;
+      case 'continue_studies': patch.continue_studies=selectWelfareChoice(value,YOUTH_CONTINUATION_CHOICES,'continuation answer');break;
+      case 'church_invited_at': patch.church_invited_at=validDate(value,'church invitation date',{optional:true});break;
       case 'lcsol_enrolled':
         if(value!==null&&typeof value!=='boolean')throw httpError(400,'Choose Yes or No for LCSOL enrollment.');
-        patch[key]=value;break;
-      case 'lcsol_status': patch[key]=selectWelfareChoice(value,YOUTH_LCSOL_STATUSES,'LCSOL status');break;
-      case 'care_status': patch[key]=selectWelfareChoice(value,YOUTH_CARE_STATUSES,'Care Status');break;
+        patch.lcsol_enrolled=value;break;
+      case 'lcsol_status': patch.lcsol_status=selectWelfareChoice(value,YOUTH_LCSOL_STATUSES,'LCSOL status');break;
+      case 'care_status': patch.care_status=selectWelfareChoice(value,YOUTH_CARE_STATUSES,'Care Status');break;
       case 'school_stop_reasons':{
-        if(value==null){patch[key]=[];break;}
+        if(value==null){patch.school_stop_reasons=[];break;}
         if(!Array.isArray(value))throw httpError(400,'Select one or more school-stop reasons.');
         const reasons=[...new Set(value.map(item=>String(item??'').trim()).filter(Boolean))];
         if(reasons.some(item=>!Object.hasOwn(YOUTH_SCHOOL_STOP_REASONS,item)))throw httpError(400,'Choose valid school-stop reasons.');
-        patch[key]=reasons;break;
+        patch.school_stop_reasons=reasons;break;
       }
       default: throw httpError(400,'Unsupported Youth Welfare field.');
     }
