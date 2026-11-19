@@ -382,6 +382,10 @@ try {
  await evaluate("window.prompt=()=> 'Verify browser commit';window.confirm=()=>true;document.getElementById('commit').click()");
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
+ // The Git write may finish before its HTTP response clears commitBusy.
+ const commitSettled="(/Created local commit|before reviewing Git changes/.test(document.getElementById('status').textContent))";
+ for(let i=0;i<50;i++){if(await evaluate(commitSettled))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate(commitSettled),true,'Wait for the commit handler before starting file and Git review races');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
  // A slow Git status response must not replace a file selected after review began.
  await evaluate("window.__statusFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/git/status')?new Promise(resolve=>setTimeout(()=>resolve(window.__statusFetch(url,opts)),350)):window.__statusFetch(url,opts)");
@@ -516,6 +520,12 @@ try {
  await evaluate("localStorage.setItem("+JSON.stringify(recoveryKey)+","+JSON.stringify(recovery)+")");
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 44;','Reopening must recover edits that were never explicitly saved');
+ await evaluate("window.__draftSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw new Error('Test storage failure');};document.getElementById('editor').value='retain this text';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ assert.match(await evaluate("document.getElementById('status').textContent"),/Browser recovery unavailable/);
+ await evaluate("document.getElementById('saveFile').click()");
+ assert.match(await evaluate("document.getElementById('status').textContent"),/Unable to save draft: Test storage failure/);
+ assert.equal(await evaluate("document.getElementById('editor').value"),'retain this text');
+ await evaluate("Storage.prototype.setItem=window.__draftSetItem");
  console.log('PASS LifeIDE simplified editor: editable on open; Save and Ctrl+S preserve safe GitHub drafts');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
 
