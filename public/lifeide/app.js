@@ -562,7 +562,6 @@ async function saveActiveFile(){
 $('saveFile').addEventListener('click',saveActiveFile);
 document.addEventListener('keydown',e=>{
  if(!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
- if(!repoMode)return; // Browser-local workspace retains existing autosave.
  e.preventDefault();
  saveActiveFile();
 },true);

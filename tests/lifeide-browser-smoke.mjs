@@ -129,6 +129,10 @@ try {
   await new Promise(r=>setTimeout(r,100));
  }
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1,'New file tab should become visible after creation');
+ for(const modifier of ['ctrlKey','metaKey']){
+  const shortcutHandled=await evaluate("!document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',"+modifier+":true,bubbles:true,cancelable:true}))");
+  assert.equal(shortcutHandled,true,'Local Workspace must handle '+modifier+'+S instead of invoking browser Save Page');
+ }
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
