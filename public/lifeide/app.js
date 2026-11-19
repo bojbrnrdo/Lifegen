@@ -94,6 +94,13 @@ $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy)
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
+// Prevent accidental tab refresh/close from discarding in-flight saves or
+// unsaved repository edits. Browser-local files already autosave on input.
+window.addEventListener('beforeunload',event=>{
+ if(!repoMode||(!repoDirty&&!saveBusy&&!commitBusy))return;
+ event.preventDefault();
+ event.returnValue='';
+});
 const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
 // Keep the original GitHub SHA when a browser draft survives a remote update.
 // Repeated Ctrl+S must not falsely claim that old work is based on new main.
