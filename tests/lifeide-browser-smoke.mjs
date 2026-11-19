@@ -504,6 +504,15 @@ try {
  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Reopening after save must retain upstream-change warning');
+ // Leaving the page with unsaved edits must retain the exact text as a browser draft.
+ await evaluate("document.getElementById('editor').value='export const example = 44;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));window.dispatchEvent(new Event('pagehide'))");
+ const recoveryDraft=await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js'))");
+ assert.equal(recoveryDraft.content,'export const example = 44;');
+ assert.equal(recoveryDraft.base,'old-github-sha','Recovery must preserve the original GitHub revision');
+ assert.equal(recoveryDraft.recoveredOnUnload,true);
+ await evaluate("window.confirm=()=>true;document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 44;','Reopening must recover edits that were never explicitly saved');
  console.log('PASS LifeIDE simplified editor: editable on open; Save and Ctrl+S preserve safe GitHub drafts');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
 

@@ -101,15 +101,20 @@ window.addEventListener('beforeunload',event=>{
  event.preventDefault();
  event.returnValue='';
 });
+// Keep a browser draft if the page actually closes or reloads.
+window.addEventListener('pagehide',()=>{
+ if(!githubMode||!repoDirty||!current)return;
+ try{persistGithubDraft(current,$('editor').value,true);}catch{}
+});
 const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
 // Keep the original GitHub SHA when a browser draft survives a remote update.
 // Repeated Ctrl+S must not falsely claim that old work is based on new main.
-function persistGithubDraft(path,content){
+function persistGithubDraft(path,content,recoveredOnUnload=false){
  const key=draftKey(path),version=repoFiles.get(path)?.version;
  let old=null;
  try{old=JSON.parse(localStorage.getItem(key)||'null');}catch{}
  const base=typeof old?.base==='string'&&old.base?old.base:version;
- localStorage.setItem(key,JSON.stringify({content,base,updated:Date.now()}));
+ localStorage.setItem(key,JSON.stringify({content,base,updated:Date.now(),recoveredOnUnload}));
  return {stale:Boolean(base&&version&&base!==version)};
 }
 function githubEditControls(open=false){
@@ -420,7 +425,7 @@ async function openRepoFile(rel){
  repoFiles.set(rel,file);current=rel;repoDirty=false;
  githubEditing=githubMode;githubEditControls(true);
  $('editor').disabled=false;$('editor').value=file.content;
- let recoveredDraft=false,staleDraft=false;
+ let recoveredDraft=false,staleDraft=false,recoveredOnUnload=false;
  if(githubMode){
   try{
    const saved=JSON.parse(localStorage.getItem(draftKey(rel))||'null');
@@ -428,6 +433,7 @@ async function openRepoFile(rel){
     // Preserve drafts even when main moved forward. A stale draft must never
     // appear to be the latest GitHub source or silently replace it.
     recoveredDraft=true;staleDraft=saved.base!==file.version;
+    recoveredOnUnload=saved.recoveredOnUnload===true;
     githubEditing=true;$('editor').disabled=false;$('editor').value=saved.content;
     githubEditControls(true);
    }
@@ -437,6 +443,7 @@ async function openRepoFile(rel){
  $('tabs').replaceChildren();updateLines();
  $('status').textContent=staleDraft
   ?'Recovered an older browser draft. GitHub source has changed; compare with the latest file before committing. Ctrl+S saves only this browser copy.'
+  :recoveredOnUnload?'Recovered edits from the previous page · stored in this browser only'
   :recoveredDraft?'Recovered saved browser draft · Ctrl+S updates this browser copy, not GitHub'
   :githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
  return true;
