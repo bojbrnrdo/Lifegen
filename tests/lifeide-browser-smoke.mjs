@@ -106,18 +106,16 @@ try {
  assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE event listeners must be initialized before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
 
- // Keep the command surface quiet until a user opens a menu.
- assert.equal(await evaluate("Boolean(document.getElementById('editorMore')&&document.getElementById('editorFormat'))"),true,'Compact editor menus exist');
- assert.equal(await evaluate("document.getElementById('editorMore').open"),false,'More menu is collapsed by default');
- assert.equal(await evaluate("document.getElementById('editorFormat').open"),false,'Format menu is collapsed by default');
- await evaluate("document.querySelector('#editorMore summary').click()");
- assert.equal(await evaluate("document.getElementById('editorMore').open"),true,'More menu expands');
- assert.equal(await evaluate("Boolean(document.getElementById('gitChanges'))"),true,'Git action is retained inside menu');
- await evaluate("document.querySelector('#editorMore summary').click()");
- await evaluate("document.querySelector('#editorFormat summary').click()");
- assert.equal(await evaluate("document.getElementById('editorFormat').open"),true,'Format menu expands');
- await evaluate("document.querySelector('#editorFormat summary').click()");
- console.log('PASS LifeIDE compact toolbar: collapsed by default, both menus open, existing actions retained');
+ // MerchIDE-style actions are in one top-level menu.
+ assert.equal(await evaluate("Boolean(document.getElementById('editorActions'))"),true,'Editor Actions menu exists');
+ assert.equal(await evaluate("document.getElementById('editorActions').open"),false,'Editor Actions collapsed by default');
+ await evaluate("document.querySelector('#editorActions summary').click()");
+ assert.equal(await evaluate("document.getElementById('editorActions').open"),true,'Editor Actions opens');
+ assert.equal(await evaluate("Boolean(document.getElementById('formatTabs')&&document.getElementById('gitChanges')&&document.getElementById('goToLine'))"),true,'Actions include MerchIDE formatting and Git tools');
+ await evaluate("document.querySelector('#editorActions summary').click()");
+ assert.equal(await evaluate("Boolean(document.getElementById('smaller')&&document.getElementById('larger')&&document.getElementById('saveFile'))"),true,'Editor header has font controls and save');
+ assert.equal(await evaluate("Boolean(document.getElementById('copyEditorOverlay')&&document.getElementById('scrollEditorTop')&&document.getElementById('scrollEditorBottom'))"),true,'Editor overlays available');
+ console.log('PASS LifeIDE MerchIDE-style toolbar: Editor Actions, font controls, save and overlays');
 
  // TransferBuilder-inspired IDE layout: explorer, editor and project tools.
  assert.equal(await evaluate("Boolean(document.getElementById('projectTools'))"),true,'Project tools panel is present');
@@ -160,10 +158,19 @@ try {
  await evaluate("document.getElementById('formatLongLine').click()");
  assert.match(await evaluate("document.getElementById('formatMessage').textContent"),/Line 2 has 85 characters/);
  await evaluate("document.getElementById('formatWrap').click()");
- assert.equal(await evaluate("document.getElementById('formatWrap').getAttribute('aria-pressed')"),'true');
+ assert.equal(await evaluate("document.getElementById('formatWrap').getAttribute('aria-pressed')"),'false');
  await evaluate("document.getElementById('formatLint').click()");
  assert.equal(await evaluate("document.getElementById('editor').value.includes('    const name')"),true,'Syntax checking must not edit file content');
+ // MerchIDE navigation and font limits must retain expected controls.
+ await evaluate("window.prompt=()=> '2';document.getElementById('goToLine').click()");
+ assert.equal(await evaluate("window.lifeideCodeMirror.state.doc.lineAt(window.lifeideCodeMirror.state.selection.main.head).number"),2,'Go To Line selects the requested line');
+ for(let i=0;i<12;i++)await evaluate("document.getElementById('smaller').click()");
+ assert.equal(await evaluate("document.getElementById('editor').style.fontSize"),'8px','MerchIDE minimum editor font is 8px');
+ for(let i=0;i<35;i++)await evaluate("document.getElementById('larger').click()");
+ assert.equal(await evaluate("document.getElementById('editor').style.fontSize"),'32px','MerchIDE maximum editor font is 32px');
+ for(let i=0;i<16;i++)await evaluate("document.getElementById('smaller').click()");
  await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ console.log('PASS LifeIDE MerchIDE navigation: Go To Line and 8–32px font limits');
  console.log('PASS LifeIDE browser: formatting buttons, save path, line length, wrapping, diagnostics');
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  await evaluate("document.getElementById('newFile').click()");

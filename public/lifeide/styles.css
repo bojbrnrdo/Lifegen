@@ -246,3 +246,62 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 }
 /* Keep dropdowns inside the narrow viewport rather than stretching the page. */
 @media(max-width:680px){.formatbar .editor-menu-panel{left:auto;right:0;width:min(225px,calc(100vw - 14px))}}
+
+/* MerchIDE-inspired arrangement; original TransferBuilder assets and source are not copied. */
+.topbar{gap:10px;min-width:0;padding:0 14px;background:#f7faf8;color:#244330;border-bottom:1px solid #d1ded4}
+.topbar .brand{color:#1f4630}
+.topbar .project-tag{border-color:#d8e3d8;color:#698274}
+.topbar .top-actions{margin-left:auto;display:flex;gap:6px;flex:none}
+.topbar .top-actions button,.merch-action-cluster>button{font-size:12px;min-height:33px;border-radius:5px;background:#fff;border:1px solid #bfd5c4;color:#235637;padding:6px 10px}
+.topbar .top-actions button:hover,.merch-action-cluster>button:hover{background:#eaf4eb}
+.topbar .merch-action-cluster{display:flex;align-items:center;gap:7px;flex:none}
+.topbar .editor-menu>summary{border:1px solid #bfd5c4;background:#fff;color:#235637;min-height:33px;padding:7px 10px}
+.topbar .editor-menu>summary:hover{background:#eaf4eb}
+.topbar .editor-menu-panel{max-height:min(80vh,560px);overflow:auto;right:0;top:calc(100% + 6px)}
+.topbar .editor-menu-panel .menu-divider{height:1px;background:#485264;margin:6px 4px}
+.topbar .explorer-search-label{min-width:90px;width:min(195px,18vw);flex:none;margin:0}
+.editor-toolbar{height:47px;min-height:47px;background:#f7faf8;border-bottom:1px solid #d5e1d8;padding:0 12px}
+.editor-toolbar .editor-heading{font-size:16px;text-transform:none;letter-spacing:normal;color:#284a34}
+.editor-toolbar .file-title{color:#61746a;font-size:12px}
+.editor-toolbar .editor-tools{display:flex;gap:8px}
+.editor-toolbar .font-controls{display:flex;gap:4px;padding-right:8px;border-right:1px solid #d3dfd6}
+.editor-toolbar .font-controls button,.editor-toolbar #refresh{font-size:12px;padding:6px 9px;min-height:31px;color:#2d553c;background:#fff;border:1px solid #c5d6c9}
+.editor-toolbar .editor-primary-save{min-height:31px;background:#2d7753;color:white;border-color:#2d7753;padding:6px 13px}
+.editor-toolbar .editor-primary-save:hover:not(:disabled){background:#245b40}
+.tabs{min-height:37px;background:#f6faf6;border-bottom:1px solid #cedccf}
+.tabs .tab{background:#eaf1ea;color:#49644e;border-right:1px solid #d0ded2;padding:9px 12px}
+.tabs .tab.active{background:#fff;color:#24523a;border-top:2px solid #31a674;padding-top:7px}
+.tabs .tab .close{color:#627b69}
+.editor-wrap{background:#fff}
+.editor-overlays{position:absolute;right:20px;top:142px;z-index:6;display:flex;gap:4px;opacity:.64;transition:opacity .12s}
+.editor-overlays:hover,.editor-overlays:focus-within{opacity:1}
+.editor-overlays button{width:28px;height:28px;border-radius:5px;font-size:14px;background:#edf4ee;color:#355944;border:1px solid #c3d8c8;box-shadow:0 1px 3px #0002}
+.main{position:relative}
+.format-feedback{height:0;position:relative;z-index:4}
+.format-feedback #formatMessage{display:block;position:absolute;right:8px;bottom:4px;max-width:60%;background:#214231;color:#f7fff9;font-size:11px;border-radius:4px;padding:3px 8px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.format-feedback #formatMessage:empty{display:none}
+.statusbar{background:#e6f0e7;color:#315a40;border-top:1px solid #cbdacc}
+.cm-host .cm-editor{font-size:16px;line-height:1.5}
+.cm-host .cm-scroller{line-height:1.5}
+.cm-host .cm-content{padding:10px 0 25px;line-height:1.5}
+.cm-host .cm-line{padding-left:9px;padding-right:8px}
+.cm-host .cm-gutters{min-width:50px}
+@media(max-width:1000px){.topbar .brand{font-size:16px}.topbar .explorer-search-label{width:110px}}
+@media(max-width:680px){
+ .topbar{padding:0 7px;gap:5px}
+ .topbar .brand{font-size:14px}
+ .topbar .top-actions{gap:3px}
+ .topbar .top-actions button{font-size:11px;padding:6px}
+ .topbar .merch-action-cluster{gap:3px}
+ .topbar .editor-menu>summary{padding:5px 7px;min-height:29px;font-size:11px}
+ .topbar .editor-menu>summary span{display:none}
+ .topbar .merch-action-cluster>button{padding:5px 7px;min-height:29px}
+ .topbar .explorer-search-label{display:none}
+ .editor-toolbar{min-height:43px;height:43px;padding:0 7px}
+ .editor-toolbar .editor-heading{font-size:13px;display:block}
+ .editor-toolbar .font-controls{gap:2px;padding-right:4px}
+ .editor-toolbar .font-controls button,.editor-toolbar #refresh{padding:5px;min-height:27px}
+ .editor-toolbar .editor-primary-save{padding:5px 9px;min-height:28px}
+ .editor-overlays{top:128px;right:6px;gap:2px}
+ .editor-overlays button{width:24px;height:24px}
+}

@@ -6,7 +6,7 @@ const initial=[
 {id:'examples',parent:null,name:'examples',type:'folder',modified:Date.now()},
 {id:'sample',parent:'examples',name:'hello.js',type:'file',content:'// LifeIDE example\nconsole.log("Hello LIFEGEN!");\n',modified:Date.now()}];
 const $=id=>document.getElementById(id);
-let items=load(),current=null,opened=[],sort='name',size=14,expanded=new Set(['examples']),selectedFolder=null,dialogAction=null;
+let items=load(),current=null,opened=[],sort='name',size=16,expanded=new Set(['examples']),selectedFolder=null,dialogAction=null;
 function load(){try{const data=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(data)&&data.every(x=>typeof x.id==='string'&&typeof x.name==='string'&&['file','folder'].includes(x.type)))return data;}catch{}return structuredClone(initial);}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(items));$('status').textContent='Saved locally';}catch{$('status').textContent='Storage full — copy your changes';}}
 function node(id){return items.find(x=>x.id===id);}
@@ -41,6 +41,19 @@ $('tree').addEventListener('keydown',e=>{
 });
 function select(id){const f=node(id);if(!f||f.type!=='file')return;current=id;$('saveFile').disabled=false;selectedFolder=f.parent;$('renameFile').disabled=repoMode;if(!opened.includes(id))opened.push(id);$('editor').disabled=false;$('editor').value=f.content||'';$('fileTitle').textContent=pathOf(f);$('language').textContent=(f.name.split('.').pop()||'txt').toUpperCase();renderTabs();renderTree();if(document.activeElement===document.body||document.activeElement===$('tree')){const target=[...$('tree').querySelectorAll('button.node')].find(b=>b.dataset.entryId===id);target?.focus();}updateLines();}
 function renderTabs(){const container=$('tabs');container.replaceChildren();for(const id of opened){const f=node(id);if(!f)continue;const tab=document.createElement('div');tab.className='tab'+(id===current?' active':'');const open=document.createElement('button');open.type='button';open.className='tab-open';open.textContent=f.name;open.addEventListener('click',()=>select(id));const close=document.createElement('button');close.type='button';close.className='close';close.textContent='×';close.setAttribute('aria-label','Close '+f.name);close.addEventListener('click',e=>{e.stopPropagation();opened=opened.filter(x=>x!==id);if(id===current){current=null;if(opened.length)select(opened[opened.length-1]);else emptyEditor();}renderTabs();renderTree();});tab.append(open,close);container.append(tab);}}
+window.lifeideCloseAllTabs=()=>{
+ if(repoMode){
+  if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save before closing tabs.';return false;}
+  if(!confirmRepositoryDiscard('Close repository tabs and discard unsaved changes?'))return false;
+  ++githubOpenSequence;repoDirty=false;githubEditing=false;
+  $('tabs').replaceChildren();current=null;emptyEditor();githubEditControls(false);
+ }else{
+  opened=[];current=null;emptyEditor();renderTabs();renderTree();
+ }
+ $('editorActions').open=false;
+ $('status').textContent='All editor tabs closed.';
+ return true;
+};
 function emptyEditor(){$('saveFile').disabled=true;$('renameFile').disabled=true;$('editor').value='# Welcome to LifeIDE!\n# Select a file to begin.';$('editor').disabled=true;$('fileTitle').textContent='No file selected';$('language').textContent='Plain text';updateLines();}
 function updateLines(){const el=$('editor'),lines=el.value.split('\n').length;$('lineNumbers').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');const pos=el.selectionStart,preceding=el.value.slice(0,pos).split('\n');$('position').textContent='Ln '+preceding.length+', Col '+(preceding.at(-1).length+1);$('lineNumbers').scrollTop=el.scrollTop;window.lifeideHighlight?.();}
 function openDialog(title,label,action,prefill=''){dialogAction=action;$('dialogTitle').textContent=title;$('dialogLabel').textContent=label;$('dialogInput').value=prefill;$('dialogError').textContent='';$('dialog').hidden=false;$('dialogInput').focus();}
@@ -87,8 +100,8 @@ $('explorerSearch').addEventListener('input',()=>{if(repoMode)filterRepoTree();e
 $('sortName').addEventListener('click',()=>{sort='name';$('sortName').classList.add('active');$('sortDate').classList.remove('active');if(!repoMode)renderTree();});
 $('sortDate').addEventListener('click',()=>{sort='date';$('sortDate').classList.add('active');$('sortName').classList.remove('active');if(!repoMode)renderTree();});
 $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collapsed'));
-$('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
-$('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
+$('smaller').addEventListener('click',()=>{size=Math.max(8,size-1);setSize();});
+$('larger').addEventListener('click',()=>{size=Math.min(32,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';window.lifeideHighlight?.();}
 $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(!confirmRepositoryDiscard('Discard unsaved changes and reload repository?'))return;++githubOpenSequence;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;resetGithubFiles();}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
