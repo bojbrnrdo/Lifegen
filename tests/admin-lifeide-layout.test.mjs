@@ -10,7 +10,7 @@ const standalone=await readFile(new URL('../public/lifeide/index.html',import.me
 test('Admin LifeIDE route embeds the full Explorer and editor workspace',()=>{
  assert.ok(routes.includes('view: renderDevIDE'), 'Admin router must use the embedded LifeIDE view');
  assert.match(view,/export async function renderDevIDE\(/);
- assert.match(view,/iframe class="admin-lifeide__frame"[^>]+src="\/lifeide\/\?source=github"/);
+ assert.match(view,/iframe class="admin-lifeide__frame"[^>]+src="\/lifeide\/\?\$\{esc\(params\.toString\(\)\)\}"/);
  assert.match(standalone,/id="tree"/);
  assert.match(standalone,/id="editor"/);
  assert.match(css,/\.admin-lifeide__frame\s*\{/);
@@ -20,8 +20,8 @@ test('Admin LifeIDE route embeds the full Explorer and editor workspace',()=>{
  assert.match(css,/\.main\.main--lifeide \.admin-lifeide__frame\s*\{/);
 });
 
-test('Admin LifeIDE keeps the existing GitHub editor available separately',()=>{
- assert.match(view,/if\(query\.path\)return renderDevIDEGitHub/);
- assert.match(view,/async function renderDevIDEGitHub\(/);
- assert.match(view,/GitHub integration is not yet configured on the server/);
+test('Git branch file links open in the same CodeMirror LifeIDE iframe',()=>{
+ assert.match(view,/params\.set\('path',query\.path\)/);
+ assert.match(view,/params\.set\('branch',query\.branch\|\|'develop'\)/);
+ assert.doesNotMatch(view,/if\(query\.path\)return renderDevIDEGitHub/);
 });
