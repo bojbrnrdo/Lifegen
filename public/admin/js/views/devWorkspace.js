@@ -6,15 +6,22 @@ const api=devRequest;
 const heading=(title,subtitle)=>`<div class="page-header"><div><h1>${esc(title)}</h1><p class="sub">${esc(subtitle)}</p></div></div>`;
 const offline=(data)=>!data.connected?'<div class="alert alert--info">GitHub integration is not yet configured on the server. Ask the administrator to configure LIFEGEN_GITHUB_DEV_TOKEN with repository Contents and Actions permissions. Never enter tokens in this page.</div>':'';
 const writeNotice=data=>data.connected&&!data.writesEnabled?'<div class="alert alert--info">GitHub is connected read-only. Git writes require an isolated development deployment and LIFEGEN_DEV_WRITES_ENABLED=true. Production always blocks Git writes.</div>':'';
-const field=`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="develop" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
+const safeBranch=name=>/^(?:develop|(?:feature|fix)\/[A-Za-z0-9._-]{1,90})$/.test(String(name||''))?String(name):'develop';
+const devLink=(tab,branch)=>'#/dev/'+tab+(branch?'?branch='+encodeURIComponent(branch):'');
+const devTabs=(current,branch='develop')=>`<nav class="dev-tabs" aria-label="Developer workspace sections">
+ <a class="dev-tabs__link ${current==='ide'?'is-active':''}" href="#/dev/ide" ${current==='ide'?'aria-current="page"':''}>LifeIDE</a>
+ <a class="dev-tabs__link ${current==='git'?'is-active':''}" href="${devLink('git',branch)}" ${current==='git'?'aria-current="page"':''}>Git</a>
+ <a class="dev-tabs__link ${current==='packaging'?'is-active':''}" href="${devLink('packaging',branch)}" ${current==='packaging'?'aria-current="page"':''}>Packaging</a>
+ </nav>`;
+const field=branch=>`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="${esc(safeBranch(branch))}" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
 
-export async function renderDevGit({main}){
+export async function renderDevGit({main,query={}}){
  const repoUrl='https://github.com/bojbrnrdo/Lifegen';
  main.innerHTML=heading('Git Version Control','LIFEGEN repository management')+'<div class="card"><div class="card__body">Loading GitHub connection…</div></div>';
  let info;
  try{info=await api('status');}catch(e){main.innerHTML='<div class="alert alert--info">'+esc(e.message)+'</div>';return;}
  const connected=Boolean(info.connected),writable=Boolean(info.writesEnabled);
- main.innerHTML=heading('Git Version Control','Manage source control and development branches')+
+ main.innerHTML=heading('Git Version Control','Manage source control and development branches')+devTabs('git',safeBranch(query.branch))+
  `<div class="devgit">
   <section class="card devgit__section"><div class="card__header"><h2>GitHub Cloud Sync</h2></div><div class="card__body">
    <p><b>Remote Repository:</b> <a href="${repoUrl}" rel="noopener noreferrer" target="_blank">${repoUrl}</a></p>
@@ -23,8 +30,9 @@ export async function renderDevGit({main}){
    <div class="devgit__buttons">
     <button class="btn" id="gitPull" ${connected?'':'disabled'}>↻ Refresh Remote</button>
     <button class="btn" id="gitOpenBranchFile" ${connected?'':'disabled'}>Open Branch File</button>
-    <button class="btn" id="gitPush" ${writable?'':'disabled'}>Open IDE to Commit</button>
+    <button class="btn" id="gitPush" ${connected?'':'disabled'}>Open LifeIDE</button>
     <button class="btn" id="gitCreateBranch" ${writable?'':'disabled'}>Create Branch</button>
+    <a class="btn" id="gitPackageBranch" href="${devLink('packaging',safeBranch(query.branch))}">Package This Branch</a>
     <label>Change Branch <select class="input" id="gitBranchSelect" ${connected?'':'disabled'}><option>develop</option></select></label>
     <button class="btn" id="gitCreatePr" ${writable?'':'disabled'}>Create Pull Request</button>
    </div>
@@ -163,7 +171,7 @@ export async function renderDevGit({main}){
   }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
-  branch=value;revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
+  branch=value;el('gitPackageBranch').href=devLink('packaging',value);revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
   return Promise.all([check(),loadHistory()]);
  };
  el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
@@ -177,7 +185,7 @@ export async function renderDevGit({main}){
   const file=path.trim();
   openBranchFile(selected,file);
  };
- el('gitPush').onclick=()=>{if(!writable)return;note('Opening LifeIDE. Saving a draft does not push to GitHub; publishing requires the protected branch workflow.');window.location.hash='#/dev/ide';};
+ el('gitPush').onclick=()=>{if(!connected)return;note('Opening the CodeMirror editor. GitHub source changes are drafts until explicitly committed on an authorized development branch.');window.location.hash='#/dev/ide';};
  el('gitCreateBranch').onclick=async()=>{
   if(!writable)return;
   const proposed=window.prompt('Create development branch from develop (feature/name or fix/name)','feature/my-change');
@@ -215,7 +223,8 @@ export async function renderDevGit({main}){
   for(const item of result.branches){
    const option=document.createElement('option');option.value=item.name;option.textContent=item.name;el('gitBranchSelect').append(option);
   }
-  el('gitBranchSelect').value='develop';await choose('develop');
+  const initial=result.branches.some(b=>b.name===safeBranch(query.branch))?safeBranch(query.branch):'develop';
+  el('gitBranchSelect').value=initial;await choose(initial);
  }catch(e){note('Cannot load GitHub branches: '+e.message);}
 }
 
@@ -300,12 +309,13 @@ async function renderDevIDEGitHub({main,query={}}){
  return ()=>{window.removeEventListener('beforeunload',beforeUnload);delete window.__lifegenCanLeaveEditor;};
 }
 
-export async function renderDevPackaging({main}){
+export async function renderDevPackaging({main,query={}}){
  main.innerHTML=heading('Packaging','Build and package a development branch')+'<div class="card"><div class="card__body">Loading…</div></div>';
  const data=await api('status');
- main.innerHTML=heading('Packaging','Review changed files and export validated ZIP archives through GitHub Actions')+offline(data)+
+ main.innerHTML=heading('Packaging','Review changed files and export validated ZIP archives through GitHub Actions')+devTabs('packaging',safeBranch(query.branch))+offline(data)+
  `<div class="card"><div class="card__body stack">
- <div class="field">${field}</div>
+ <div class="field">${field(query.branch)}</div>
+ <div class="row"><a class="btn" id="packageReviewGit" href="${devLink('git',safeBranch(query.branch))}">Review Branch in Git</a><a class="btn" href="#/dev/ide">Open LifeIDE</a></div>
  <div class="row"><button type="button" class="btn" id="findPackageFiles" ${data.connected?'':'disabled'}>Find Changed Files</button>
  <label><input type="checkbox" id="packageSelectedOnly" disabled> Export selected files only</label></div>
  <p class="small muted">Compare a feature/fix branch with develop to stage its changed files. A full-source package remains available without staging.</p>
@@ -384,7 +394,7 @@ export async function renderDevPackaging({main}){
   if(!valid)selectedOnly.checked=false;
   if(valid)stageStatus.textContent=selected().length+' of '+count+' changed files selected for export (maximum 40).';
  };
- branchInput.addEventListener('input',()=>{stageSequence++;stagedBranch='';stage.replaceChildren();selectedOnly.checked=false;selectedOnly.disabled=true;stageStatus.textContent='Branch changed. Find Changed Files again before exporting selected files.';});
+ branchInput.addEventListener('input',()=>{el('packageReviewGit').href=devLink('git',safeBranch(branchInput.value.trim()));stageSequence++;stagedBranch='';stage.replaceChildren();selectedOnly.checked=false;selectedOnly.disabled=true;stageStatus.textContent='Branch changed. Find Changed Files again before exporting selected files.';});
  el('findPackageFiles').onclick=async()=>{
   const branch=branchInput.value.trim(),seq=++stageSequence;
   stagedBranch='';stage.replaceChildren();selectedOnly.checked=false;selectedOnly.disabled=true;

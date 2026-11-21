@@ -1721,3 +1721,11 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__viewbar{margin-top:12px}
 .lifegroups-page__directory{min-height:160px}
 @media(max-width:560px){.lifegroups-page .lg-gender-filter__button{min-width:60px}.lifegroups-page__viewhint{display:none}}
+
+/* Connected LIFEGEN Dev workspace tabs (Git ↔ Packaging ↔ LifeIDE). */
+.dev-tabs{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:0 0 16px;padding:5px;background:var(--surface,#f0f5f0);border:1px solid #d5e2d8;border-radius:10px;max-width:max-content}
+.dev-tabs__link{display:inline-flex;align-items:center;padding:9px 16px;color:#335743;font-size:13px;font-weight:650;text-decoration:none;border-radius:7px;border:1px solid transparent}
+.dev-tabs__link:hover{background:#e2ede4;color:#183e2a}
+.dev-tabs__link.is-active{background:#fff;color:#165331;border-color:#bcd2c4;box-shadow:0 1px 3px #0000000c}
+.dev-tabs__link:focus-visible{outline:2px solid #247d4c;outline-offset:2px}
+@media(max-width:600px){.dev-tabs{width:100%;max-width:none}.dev-tabs__link{flex:1;justify-content:center;padding:8px 7px;font-size:12px}}
