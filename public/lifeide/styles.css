@@ -178,3 +178,71 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .formatbar button:disabled{opacity:.5}
 #formatMessage{margin-left:auto;min-width:0;color:#97bfca;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:680px){.formatbar{padding:4px 6px;gap:4px}.formatbar button{font-size:10px;padding:5px 6px}#formatMessage{display:none}}
+
+/* Clean VS Code-inspired LifeIDE: concise chrome, more reading room, progressive menus. */
+.main{background:#fff;min-width:0}
+.editor-toolbar{height:54px;min-height:54px;padding:0 14px;gap:10px;background:#20242d;border-bottom:1px solid #303540;position:relative;z-index:8}
+.editor-toolbar .editor-heading{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#b7c2d2;font-weight:700}
+.editor-toolbar .file-title{font-size:12px;color:#d8e1ed;min-width:0;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+.editor-tools{gap:7px;margin-left:auto;align-items:center}
+.editor-tools .editor-primary-save{background:#2677b9;color:#fff;border:1px solid #3691d3;border-radius:5px;font-weight:700;font-size:12px;padding:7px 12px;min-height:32px}
+.editor-tools .editor-primary-save:hover:not(:disabled){background:#328bd0}
+.editor-tools .shortcut-hint{font-size:10px;margin-left:7px;font-weight:500;color:#d2e8f9}
+.editor-menu{position:relative;flex:none;z-index:12}
+.editor-menu>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;user-select:none;border:1px solid #3f4755;border-radius:5px;padding:7px 10px;min-height:32px;font-size:12px;font-weight:600;color:#d6deea;background:#292f3b}
+.editor-menu>summary::-webkit-details-marker{display:none}
+.editor-menu>summary:focus-visible{outline:2px solid #5aa9e8;outline-offset:2px}
+.editor-menu[open]>summary,.editor-menu>summary:hover{background:#353e4d}
+.editor-menu-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:230px;max-height:min(70vh,420px);overflow-y:auto;border:1px solid #495469;border-radius:8px;background:#242a36;color:#e0e8f4;padding:7px;box-shadow:0 14px 32px #0009;display:flex;flex-direction:column;gap:2px}
+.editor-menu-panel .menu-label{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#95a5ba;font-weight:750;padding:10px 8px 4px}
+.editor-tools .editor-menu-panel button,.formatbar .editor-menu-panel button{width:100%;display:block;text-align:left;background:transparent;color:#e5ebf2;border:0;border-radius:5px;padding:9px 10px;min-height:33px;font-size:12px;font-weight:500;margin:0}
+.editor-tools .editor-menu-panel button:hover:not(:disabled),.formatbar .editor-menu-panel button:hover:not(:disabled){background:#364557;color:#fff}
+.editor-menu-panel button[hidden]{display:none!important}
+.editor-tools .editor-menu-panel .menu-buttons{display:flex;gap:5px}
+.editor-tools .editor-menu-panel .menu-buttons button{text-align:center;width:50%;border:1px solid #485263}
+.editor-tools #refresh,.editor-tools #commit{margin-left:0}
+.tabs{min-height:34px;background:#20242d;border-bottom:1px solid #343b48}
+.tabs .tab{padding:7px 10px;background:#242a34;border-right:1px solid #384252;border-top:0;color:#b6c2d1;gap:6px}
+.tabs .tab.active{background:#171b22;color:#fff;border-top:2px solid #4da6dc;padding-top:5px}
+.tabs .tab .tab-open{font-size:12px;min-width:0}
+.tabs .tab .close{font-size:14px;opacity:.75}
+.editor-wrap{background:#171b22}
+.editor-wrap .cm-host{background:#171b22}
+.cm-host .cm-editor{font-size:14px;line-height:26px}
+.cm-host .cm-scroller{line-height:26px}
+.cm-host .cm-content{padding:18px 0 30px;line-height:26px}
+.cm-host .cm-line{padding-left:15px;padding-right:18px}
+.cm-host .cm-gutters{background:#171b22;color:#718195;border-right:1px solid #293442;min-width:48px}
+.cm-host .cm-activeLine{background:#ffffff0a}
+.cm-host .cm-activeLineGutter{background:#273241}
+.cm-host .cm-cursor{border-left-color:#d8e8f5}
+.formatbar{height:34px;min-height:34px;padding:3px 10px;gap:8px;background:#1e242e;border-top:1px solid #303a48;overflow:visible;position:relative;z-index:7}
+.formatbar .format-menu>summary{font-size:11px;min-height:26px;padding:4px 9px}
+.formatbar #formatWrap{font-size:11px;min-height:26px;padding:4px 9px;border-radius:5px;border:1px solid #3b4758;background:#293441;color:#c8d7e8}
+.formatbar #formatWrap[aria-pressed="true"]{border-color:#6e9cca;background:#314d69}
+.formatbar #formatMessage{margin-left:4px;color:#92aebf;font-size:11px}
+.formatbar .editor-menu-panel{left:0;right:auto;bottom:calc(100% + 6px);top:auto;width:225px}
+.statusbar{background:#1a2736;border-top:1px solid #35516e;color:#c4d1df;padding:5px 11px;font-size:11px}
+@media(max-width:680px){
+ .editor-toolbar{height:48px;min-height:48px;padding:0 8px}
+ .editor-toolbar .editor-heading{font-size:11px}
+ .editor-toolbar .file-title{display:none}
+ .editor-tools .editor-primary-save{font-size:11px;padding:6px 8px}
+ .editor-tools .shortcut-hint{display:none}
+ .editor-menu>summary{padding:6px 8px;font-size:11px}
+ .editor-menu-panel{width:min(230px,85vw)}
+ .formatbar{padding:2px 6px;gap:5px}
+ .formatbar #formatMessage{display:none}
+ .cm-host .cm-line{padding-left:8px}
+ .cm-host .cm-gutters{min-width:38px}
+}
+@media(max-width:680px){
+ .editor-toolbar .editor-heading{display:none}
+ .editor-toolbar{min-width:0;gap:0}
+ .editor-tools{min-width:0;max-width:100%}
+ .editor-menu-panel{max-width:calc(100vw - 18px)}
+ .formatbar{min-width:0}
+ .formatbar>button{min-width:0}
+}
+/* Keep dropdowns inside the narrow viewport rather than stretching the page. */
+@media(max-width:680px){.formatbar .editor-menu-panel{left:auto;right:0;width:min(225px,calc(100vw - 14px))}}

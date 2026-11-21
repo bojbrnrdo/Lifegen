@@ -105,6 +105,20 @@ try {
  }
  assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE event listeners must be initialized before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
+
+ // Keep the command surface quiet until a user opens a menu.
+ assert.equal(await evaluate("Boolean(document.getElementById('editorMore')&&document.getElementById('editorFormat'))"),true,'Compact editor menus exist');
+ assert.equal(await evaluate("document.getElementById('editorMore').open"),false,'More menu is collapsed by default');
+ assert.equal(await evaluate("document.getElementById('editorFormat').open"),false,'Format menu is collapsed by default');
+ await evaluate("document.querySelector('#editorMore summary').click()");
+ assert.equal(await evaluate("document.getElementById('editorMore').open"),true,'More menu expands');
+ assert.equal(await evaluate("Boolean(document.getElementById('gitChanges'))"),true,'Git action is retained inside menu');
+ await evaluate("document.querySelector('#editorMore summary').click()");
+ await evaluate("document.querySelector('#editorFormat summary').click()");
+ assert.equal(await evaluate("document.getElementById('editorFormat').open"),true,'Format menu expands');
+ await evaluate("document.querySelector('#editorFormat summary').click()");
+ console.log('PASS LifeIDE compact toolbar: collapsed by default, both menus open, existing actions retained');
+
  // TransferBuilder-inspired IDE layout: explorer, editor and project tools.
  assert.equal(await evaluate("Boolean(document.getElementById('projectTools'))"),true,'Project tools panel is present');
  assert.equal(await evaluate("Boolean(document.getElementById('explorerResizer')&&document.getElementById('toolsResizer'))"),true,'Both IDE panel resizers are present');

@@ -25,7 +25,25 @@
     <main class="main">
       <div class="editor-toolbar">
         <span class="editor-heading">Editor</span><div class="file-title" id="fileTitle">No file selected</div>
-        <div class="editor-tools"><button id="saveFile" type="button" disabled title="Save the current file (Ctrl+S)">Save</button><button id="editGithub" type="button" hidden title="Edit a GitHub source file in a draft">Edit source</button><button id="saveGithubDraft" type="button" hidden disabled title="Save a draft of your source changes in this browser">Save draft</button><button id="githubNative" type="button" hidden title="Open branch-based GitHub workflow when secure developer writes are configured">GitHub</button><button id="renameFile" type="button" disabled title="Rename selected browser-local file">Rename</button><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button><button id="refresh" type="button" title="Reload saved workspace">↻</button><button id="gitChanges" type="button" title="View local Git changes">Git Changes</button><button id="commit" type="button" disabled title="Select files in Git Changes to commit">⇩ Commit</button></div>
+        <div class="editor-tools">
+          <button id="saveFile" class="editor-primary-save" type="button" disabled title="Save active file (Ctrl+S / Cmd+S)">Save <span class="shortcut-hint">⌘S</span></button>
+          <details class="editor-menu" id="editorMore">
+            <summary aria-label="More editor actions">More <span aria-hidden="true">⋯</span></summary>
+            <div class="editor-menu-panel" role="group" aria-label="Additional editor actions">
+              <span class="menu-label">File actions</span>
+              <button id="editGithub" type="button" hidden title="Edit a GitHub source file in a draft">Edit source</button>
+              <button id="saveGithubDraft" type="button" hidden disabled title="Save a draft of your source changes in this browser">Save draft</button>
+              <button id="githubNative" type="button" hidden title="Open branch-based GitHub workflow">GitHub</button>
+              <button id="renameFile" type="button" disabled>Rename file</button>
+              <button id="refresh" type="button" title="Reload saved workspace">Refresh workspace</button>
+              <span class="menu-label">Display</span>
+              <div class="menu-buttons"><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button></div>
+              <span class="menu-label">Version control</span>
+              <button id="gitChanges" type="button">Git Changes</button>
+              <button id="commit" type="button" disabled>Commit selected changes</button>
+            </div>
+          </details>
+        </div>
       </div>
       <section id="githubWorkflow" class="github-workflow" aria-label="GitHub branch and commit workflow" hidden>
         <strong>Commit to a development branch</strong><button id="closeGithubWorkflow" type="button" title="Close GitHub workflow" aria-label="Close GitHub workflow">×</button>
@@ -37,7 +55,18 @@
       <div class="tabs" id="tabs"></div>
       <div class="editor-wrap" id="editorWrap"><div id="lineNumbers" class="lines" aria-hidden="true">1<br>2</div><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code editor" disabled># Welcome to LifeIDE!
 # Create or select a file to begin.</textarea></div>
-      <div class="formatbar" role="toolbar" aria-label="Code formatting"><span class="formatbar-title">FORMAT</span><button id="formatTabs" type="button" title="Convert leading tab indentation to four spaces">Tabs → 4 Spaces</button><button id="formatLongLine" type="button" title="Go to next line longer than 80 characters">Next Long Line (80)</button><button id="formatLint" type="button" title="Check current file for syntax errors">Check Syntax</button><button id="formatWrap" type="button" aria-pressed="false" title="Wrap long code lines">Wrap: Off</button><span id="formatMessage" role="status" aria-live="polite"></span></div>
+      <div class="formatbar" role="toolbar" aria-label="Code formatting">
+        <details class="editor-menu format-menu" id="editorFormat">
+          <summary aria-label="Code formatting actions">Format <span aria-hidden="true">⌄</span></summary>
+          <div class="editor-menu-panel" role="group" aria-label="Formatting commands">
+            <button id="formatTabs" type="button" title="Convert leading tabs to four spaces">Tabs → 4 spaces</button>
+            <button id="formatLongLine" type="button" title="Go to next line longer than 80 characters">Find long line (80)</button>
+            <button id="formatLint" type="button" title="Check current file for syntax errors">Check syntax</button>
+          </div>
+        </details>
+        <button id="formatWrap" type="button" aria-pressed="false" title="Toggle wrapping of long code lines">Wrap: Off</button>
+        <span id="formatMessage" role="status" aria-live="polite"></span>
+      </div>
       <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
     </main>
     <div class="ide-panel-resizer" id="toolsResizer" role="separator" aria-label="Resize project tools" aria-orientation="vertical" tabindex="0"></div>
