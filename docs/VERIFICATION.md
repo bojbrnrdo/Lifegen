@@ -50,7 +50,3 @@ The certificate and key in `tests/fixtures/` are a throwaway loopback pair gener
 ## Supabase setup
 
 Follow [`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) to run the SQL files in Supabase SQL Editor, set server-only connection variables, deploy, and verify a public signup reaches **Admin → Lifegroup Tracker → Needs Lifegroup**.
-
-## LifeIDE production write verification
-
-On 2026-11-19, this documentation-only change was committed from live LifeIDE on lifegen-five to a dedicated fix branch.
