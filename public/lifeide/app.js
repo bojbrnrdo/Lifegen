@@ -248,9 +248,9 @@ async function commitActiveGithubFile(){
   try{localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));}catch{}
   const unchanged=current===file&&$('editor').value===content;
   if(unchanged){clearGithubRecovery(file);repoDirty=false;}
-  const message='Committed to '+branch+' ('+String(result.commit||'').slice(0,8)+').';
-  nativeStatus(message);
-  $('status').textContent=message+(unchanged?'':' Newer edits remain unsaved.');
+  const successMessage='Committed to '+branch+' ('+String(result.commit||'').slice(0,8)+').';
+  nativeStatus(successMessage);
+  $('status').textContent=successMessage+(unchanged?'':' Newer edits remain unsaved.');
  }catch(error){nativeStatus('Commit failed: '+error.message);}
  finally{devBusy=false;$('commitGithubDraft').disabled=false;}
 }
