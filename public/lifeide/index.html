@@ -37,6 +37,7 @@
       <div class="tabs" id="tabs"></div>
       <div class="editor-wrap" id="editorWrap"><div id="lineNumbers" class="lines" aria-hidden="true">1<br>2</div><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code editor" disabled># Welcome to LifeIDE!
 # Create or select a file to begin.</textarea></div>
+      <div class="formatbar" role="toolbar" aria-label="Code formatting"><span class="formatbar-title">FORMAT</span><button id="formatTabs" type="button" title="Convert leading tab indentation to four spaces">Tabs → 4 Spaces</button><button id="formatLongLine" type="button" title="Go to next line longer than 80 characters">Next Long Line (80)</button><button id="formatLint" type="button" title="Check current file for syntax errors">Check Syntax</button><button id="formatWrap" type="button" aria-pressed="false" title="Wrap long code lines">Wrap: Off</button><span id="formatMessage" role="status" aria-live="polite"></span></div>
       <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
     </main>
     <div class="ide-panel-resizer" id="toolsResizer" role="separator" aria-label="Resize project tools" aria-orientation="vertical" tabindex="0"></div>

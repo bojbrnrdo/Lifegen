@@ -1,7 +1,7 @@
 import {EditorState,Compartment} from '@codemirror/state';
 import {EditorView,keymap,lineNumbers,highlightActiveLine,highlightActiveLineGutter,drawSelection,highlightSpecialChars} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap,indentWithTab} from '@codemirror/commands';
-import {indentOnInput,bracketMatching,foldGutter,foldKeymap,syntaxHighlighting,defaultHighlightStyle} from '@codemirror/language';
+import {indentOnInput,indentUnit,syntaxTree,bracketMatching,foldGutter,foldKeymap,syntaxHighlighting,defaultHighlightStyle} from '@codemirror/language';
 import {closeBrackets,closeBracketsKeymap,autocompletion,completionKeymap} from '@codemirror/autocomplete';
 import {searchKeymap,highlightSelectionMatches} from '@codemirror/search';
 import {javascript} from '@codemirror/lang-javascript';
@@ -15,6 +15,8 @@ import {xml} from '@codemirror/lang-xml';
 import {yaml} from '@codemirror/lang-yaml';
 import {php} from '@codemirror/lang-php';
 import {oneDark,oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
+import {linter,lintGutter,openLintPanel} from '@codemirror/lint';
+import {convertLeadingTabs,longLines,jsonDiagnostic} from './formatting.js';
 
 // Bridge CodeMirror 6 to LifeIDE's existing save, draft and file APIs.
 // The hidden textarea remains the compatibility data source, never the UI.
@@ -23,7 +25,8 @@ const fileTitle=document.getElementById('fileTitle');
 const wrap=document.getElementById('editorWrap');
 if(textarea&&fileTitle&&wrap){
  const originalValue=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
- const editable=new Compartment(),language=new Compartment();
+ const editable=new Compartment(),language=new Compartment(),wrapping=new Compartment();
+ let wrapEnabled=false,lastLongLine=0;
  let syncing=false;
  const extensionFor=name=>{
   const ext=String(name||'').split('/').pop().split('.').pop().toLowerCase();
@@ -52,10 +55,21 @@ if(textarea&&fileTitle&&wrap){
   state:EditorState.create({
    doc:textarea.value,
    extensions:[
-    lineNumbers(),highlightActiveLineGutter(),highlightSpecialChars(),history(),foldGutter(),drawSelection(),
+    lineNumbers(),highlightActiveLineGutter(),highlightSpecialChars(),history(),foldGutter(),drawSelection(),lintGutter(),indentUnit.of('    '),
     indentOnInput(),bracketMatching(),closeBrackets(),autocompletion(),highlightActiveLine(),highlightSelectionMatches(),
     syntaxHighlighting(defaultHighlightStyle,{fallback:true}),syntaxHighlighting(oneDarkHighlightStyle),
-    editable.of(EditorView.editable.of(!textarea.disabled)),language.of(extensionFor(fileTitle.textContent)),oneDark,
+    editable.of(EditorView.editable.of(!textarea.disabled)),language.of(extensionFor(fileTitle.textContent)),wrapping.of([]),oneDark,
+    linter(v=>{
+     const name=fileTitle.textContent.toLowerCase(),doc=v.state.doc.toString();
+     if(/\.(?:json|jsonc)$/.test(name)){
+      const issue=jsonDiagnostic(doc);
+      return issue?[{from:0,to:Math.min(1,doc.length),severity:'error',message:issue.message}]:[];
+     }
+     if(!/\.(?:js|jsx|mjs|cjs|ts|tsx|css|html|htm|xml|svg|py|php|sql|yml|yaml)$/.test(name))return [];
+     const problems=[];const tree=syntaxTree(v.state);
+     tree.iterate({enter(node){if(node.type.isError&&problems.length<20){const from=Math.min(node.from,doc.length),to=Math.max(from,Math.min(node.to,doc.length));problems.push({from,to,severity:'error',message:'Syntax parser found an unexpected token or incomplete construct.'});}}});
+     return problems;
+    },{delay:450}),
     EditorView.updateListener.of(update=>{
      if(syncing)return;
      if(update.docChanged){
@@ -112,6 +126,40 @@ if(textarea&&fileTitle&&wrap){
  if(lines)lines.style.display='none';
  wrap.classList.add('cm-active');
  syncEditable();syncLanguage();
+ const report=message=>{const el=document.getElementById('formatMessage');if(el)el.textContent=message;};
+ const canEdit=()=>!textarea.disabled&&view.state.readOnly===false;
+ const tabAction=document.getElementById('formatTabs');
+ tabAction?.addEventListener('click',()=>{
+  if(!canEdit()){report('Open an editable file first.');return;}
+  const result=convertLeadingTabs(view.state.doc.toString(),4);
+  if(result.changed){view.dispatch({changes:{from:0,to:view.state.doc.length,insert:result.content}});report('Converted tabs on '+result.changed+' line(s). Save to keep the changes.');}
+  else report('No leading tabs to convert.');
+  view.focus();
+ });
+ document.getElementById('formatLongLine')?.addEventListener('click',()=>{
+  const lines=longLines(view.state.doc.toString(),80);
+  if(!lines.length){report('No lines over 80 characters.');return;}
+  const next=lines.find(x=>x.line>lastLongLine)||lines[0];lastLongLine=next.line;
+  const line=view.state.doc.line(next.line);
+  view.dispatch({selection:{anchor:line.from,head:line.to},scrollIntoView:true});view.focus();
+  report('Line '+next.line+' has '+next.length+' characters (80 recommended).');
+ });
+ document.getElementById('formatLint')?.addEventListener('click',()=>{
+  openLintPanel(view);report('Syntax diagnostics are shown in the editor.');view.focus();
+ });
+ document.getElementById('formatWrap')?.addEventListener('click',event=>{
+  wrapEnabled=!wrapEnabled;
+  view.dispatch({effects:wrapping.reconfigure(wrapEnabled?EditorView.lineWrapping:[])});
+  event.currentTarget.textContent='Wrap: '+(wrapEnabled?'On':'Off');
+  event.currentTarget.setAttribute('aria-pressed',String(wrapEnabled));
+  report(wrapEnabled?'Long lines are wrapped.':'Long lines are not wrapped.');view.focus();
+ });
+ const formatButtons=['formatTabs','formatLongLine','formatLint','formatWrap'].map(id=>document.getElementById(id));
+ const updateControls=()=>{formatButtons.forEach(btn=>{if(btn)btn.disabled=textarea.disabled;});};
+ updateControls();
+ const controlObserver=new MutationObserver(updateControls);
+ controlObserver.observe(textarea,{attributes:true,attributeFilter:['disabled']});
+ window.lifeideFormatting={convertLeadingTabs,longLines};
  window.lifeideCodeMirror=view;
  window.lifeideHighlight=()=>{};
 }
