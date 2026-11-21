@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { findUnassignedGroups, filterTrackerView } from './hierarchy.js';
+import { findUnassignedGroups, filterTrackerView, lifegroupHeadline } from './hierarchy.js';
 
 import { filterPeople, rankPeople, relationshipLine } from './lifegroupSearch.js';
 import { simplifyNetworkDetail } from './networkDetailUI.js';
@@ -308,32 +308,15 @@ export async function renderLifegroups({main, query}) {
  const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
  main.innerHTML=html`
  <section class="lifegroups-page">
- <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Who meets with whom, and how each small group is doing.</p></div>
+ <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Who meets with whom, and how each Cell is doing.</p></div>
  <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew" title="Create a Network, a Cell Leader or a member">${icon('plus')} Add New</button><button class="btn" id="removeFromLifegroups" title="Remove someone from a group, keeping their record and history">${icon('trash',16)} Remove</button>`:''}</div></div>
- <details class="lifegroups-page__help" id="lifegroupsHelp"><summary>${icon('info',16)} <span>New here? Read this first</span></summary>
-  <div class="lifegroups-page__help-body">
-   <p><b>A Lifegroup is a small group of people who meet every week.</b> Each one has a <b>Cell Leader</b> who looks after it.</p>
-   <ul>
-    <li><b>Network</b> — a group of Lifegroups, all boys or all girls. It has a Network Leader.</li>
-    <li><b>Cell</b> (also called a Lifegroup) — one weekly small group with its own Cell Leader.</li>
-    <li><b>Member</b> — one person in a Cell.</li>
-   </ul>
-   <p><b>Three things you will do most:</b></p>
-   <ol>
-    <li><b>Look someone up</b> — type their name in “Find a person” below. You will see their Cell and Network.</li>
-    <li><b>Add someone</b> — press <b>Add New</b>, then choose what you are adding (a person, a Cell Leader, or a whole Network).</li>
-    <li><b>Report a meeting</b> — open a Cell and press <b>Report a meeting</b>. Mark who came, then save.</li>
-   </ol>
-   <p class="small muted">Nothing here is deleted when someone leaves: their record and attendance stay, and the person moves to <b>Former members</b>.</p>
-  </div>
- </details>
- <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search a Network or a Cell Leader by name…" aria-label="Search Networks and Cell Leaders" /></div>
+ <div id="treeSummary" class="lifegroups-page__summary lifegroups-page__numbers is-loading" aria-live="polite"><div class="lifegroups-page__number">Loading the numbers…</div></div>
+ <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search a Network or a Cell Leader…" aria-label="Search Networks and Cell Leaders" /></div>
  <div class="lg-gender-filter" role="group" aria-label="Show only boys or only girls"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="Show all Networks" title="Show all Networks">${icon('group',18)} <span>Everyone</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Show only boys' Networks" title="Show only boys' Networks">${icon('mars',18)} <span>Boys</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Show only girls' Networks" title="Show only girls' Networks">${icon('venus',18)} <span>Girls</span></button></div>
  <select id="treeStatus" aria-label="Show which groups"><option value="active">Active only</option><option value="all">Everything</option><option value="inactive">Removed only</option></select>
  <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Reload the latest numbers" aria-label="Reload the latest numbers">${icon('undo',17)} <span>Refresh</span></button></div>
 
  <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
- <div id="treeSummary" class="lifegroups-page__summary" aria-live="polite"></div>
  <div id="treeNotice" aria-live="polite"></div>
  <div id="findPersonPanel" class="lifegroups-page__find"></div>
  <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
@@ -341,6 +324,14 @@ export async function renderLifegroups({main, query}) {
  <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>Everyone registered</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
  <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>Not in a Cell yet</span><span class="small muted lifegroups-page__extra-hint">people waiting for a group</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
  <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>How groups are doing</span><span class="small muted lifegroups-page__extra-hint">meetings held in the last weeks</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
+ <details class="card" id="lifegroupsHelp"><summary class="lifegroups-page__extra-head">${icon('info',18)} <span>The three words you need</span><span class="small muted lifegroups-page__extra-hint">Network · Cell · Member</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body lifegroups-page__help-body">
+   <ul>
+    <li><b>Network</b> — a group of Cells, all boys or all girls. A Network Leader looks after it.</li>
+    <li><b>Cell</b> (also called a Lifegroup) — one weekly small group, with its own Cell Leader.</li>
+    <li><b>Member</b> — one person in a Cell.</li>
+   </ul>
+   <p class="small muted">Nothing is deleted when someone leaves. Their record and attendance stay, and they move to <b>Former members</b>.</p>
+  </div></details>
  </div></section>`;
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>{
   // A new Cell or member changes the find-person index too.
@@ -405,7 +396,7 @@ export async function renderLifegroups({main, query}) {
   };
   const totalCells = matchingNets.reduce((t, n) => t + groups.filter(g => String(g.network_id) === String(n.id)).length, 0);
   const totalPeople = matchingNets.reduce((t, n) => t + groups.filter(g => String(g.network_id) === String(n.id)).reduce((sum, g) => sum + Number(g.member_count || 0), 0), 0);
-  directory.innerHTML = (shownPastors.length || shownLoose.length) ? html`<div class="lifegroups-page__directory-head"><h2>Who leads whom</h2><p class="small muted">${shownPastors.length ? 'Tap a pastor to see the Network Leaders under them. Tap a Network Leader to see their Cells.' : 'Tap a Network to see its Cells.'} ${totalCells} ${totalCells === 1 ? 'Cell' : 'Cells'} · ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'}.</p></div>
+  directory.innerHTML = (shownPastors.length || shownLoose.length) ? html`<div class="lifegroups-page__directory-head"><h2>Who leads whom</h2><p class="small muted">${totalCells} ${totalCells === 1 ? 'Cell' : 'Cells'} · ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'}${shownPastors.length ? ' · tap a pastor to see the Network Leaders under them' : ''}</p></div>
    ${shownPastors.map(p => {
      const kids = childrenOf(p);
      const leaders = (cache.groups || []).filter(g => String(g.network_id) === String(p.id) && g.leads_network);
@@ -461,7 +452,7 @@ export async function renderLifegroups({main, query}) {
   findPanel.innerHTML=html`<section class="card lifegroups-page__find-card" aria-labelledby="findPersonHeading">
    <div class="card__body">
     <div class="lifegroups-page__find-head"><div><h2 id="findPersonHeading">Find a person</h2>
-     <p class="small muted">Type someone's name to see their Cell, their Cell Leader and their Network. Person IDs, Cell names and Network names work too.</p></div>
+     <p class="small muted">Their Cell, Cell Leader and Network — or search a Cell or Network name.</p></div>
      ${ready?html`<span class="small muted nowrap" id="findPersonCount">${peopleIndex.length} people in Cells</span>`:''}</div>
     <div class="lifegroups-page__find-input gsearch">${icon('search',17)}
      <input id="findPersonQ" type="search" autocomplete="off" placeholder="Type a name, e.g. Maria…" aria-label="Find a person in any Cell" aria-controls="findPersonResults" />
@@ -478,7 +469,7 @@ export async function renderLifegroups({main, query}) {
    }
    if(!Array.isArray(peopleIndex)){results.innerHTML='<div class="loading">Loading people…</div>';return;}
    if(q.length<2){
-    results.innerHTML=html`<p class="small muted lifegroups-page__find-hint">Type at least two letters of a name. Tap a result to open that person.</p>`;
+    results.innerHTML=html`<p class="small muted lifegroups-page__find-hint">Two letters is enough. Tap a result to open that person.</p>`;
     return;
    }
    const rows=rankPeople(filterPeople(peopleIndex,q),q).slice(0,40);
@@ -572,14 +563,25 @@ export async function renderLifegroups({main, query}) {
   renderDirectory();
   repaintFind?.();
   const summary=main.querySelector('#treeSummary');
-  const visibleNetworks=cache.nets.filter(n =>
-   (!filters.gender||n.gender===filters.gender) &&
-   (filters.status==='all'||(filters.status==='inactive'?!n.is_active:Boolean(n.is_active))));
-  const networkIds=new Set(visibleNetworks.map(n=>String(n.id)));
-  const visibleCells=cache.groups.filter(g=>networkIds.has(String(g.network_id))&&!g.leads_network&&
-   (filters.status==='all'||(filters.status==='inactive'?!g.is_active:Boolean(g.is_active))));
+  // Headline numbers: what a leader wants to know before scrolling. "Needs attention"
+  // is shown as an actionable number, not buried in a table further down.
+  const headline=lifegroupHeadline(cache.nets,cache.groups,filters);
+  const {pastors:pastorCount,members:memberTotal,cellLeaders,attention,withoutLeader,unconnected,looseNetworks:looseCount}=headline;
+  const num=(value,label,{tone='',href='',title=''}={})=>{
+   const inner=html`<span class="lifegroups-page__number-value">${value}</span><span class="lifegroups-page__number-label">${label}</span>`;
+   return href?html`<a class="lifegroups-page__number ${tone}" href="${href}" title="${title}">${inner}</a>`
+     :html`<div class="lifegroups-page__number ${tone}" title="${title}">${inner}</div>`;
+  };
   summary.hidden=Boolean(filters.q);
-  summary.innerHTML=html`<span>${icon('group',16)} <b>${visibleNetworks.length}</b> ${visibleNetworks.length===1?'Network':'Networks'}</span><span>${icon('user',16)} <b>${visibleCells.length}</b> ${visibleCells.length===1?'Cell Leader':'Cell Leaders'}</span><span>${icon('people',16)} <b>${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)}</b> ${visibleCells.reduce((t,g)=>t+Number(g.member_count||0),0)===1?'Member':'Members'}</span>`;
+  summary.classList.remove('is-loading');
+  summary.innerHTML=html`
+   ${num(pastorCount||'—',pastorCount===1?'Bishop / Pastora':'Bishops / Pastoras',{title:'The pastors at the top of the structure'})}
+   ${num(cellLeaders,cellLeaders===1?'Cell Leader':'Cell Leaders',{title:'Cells currently meeting, each with its own Cell Leader'})}
+   ${num(memberTotal,memberTotal===1?'Person in a Cell':'People in Cells',{title:'Everyone meeting in a Cell'})}
+   ${attention
+     ? num(attention,attention===1?'Needs attention':'Need attention',{tone:'is-attention',title:`${withoutLeader} Network${withoutLeader===1?'':'s'} without a leader · ${unconnected} Cell${unconnected===1?'':'s'} not connected to a Network — both listed below`})
+     : num('0','Nothing to fix',{tone:'is-ok',title:'Every Cell is connected and every Network has a leader'})}
+   ${looseCount?num(looseCount,'Not under a pastor',{tone:'is-warn',title:'Networks with no pastor above them'}):''}`;
  }
 
  let peopleSearchSeq=0;

@@ -21,6 +21,38 @@ export function findUnassignedGroups(networks,groups,filters={}){
   (g.network_id==null||!ids.has(String(g.network_id)))
  );
 }
+/**
+ * The headline numbers at the top of the Lifegroups page.
+ *
+ * Kept pure so the "needs attention" count can be pinned by tests: a leader
+ * opening the page should see what is wrong as a number, not have to read a
+ * page to discover it. `attention` counts Networks with nobody leading them
+ * plus Cells that do not sit under any Network.
+ */
+export function lifegroupHeadline(networks,groups,filters={}){
+ const {networks:nets}=filterTrackerView(networks,groups,filters);
+ // Counted straight from the Cell list, not from the Networks above them:
+ //  - a Cell with no Network still holds people who meet every week, so it counts
+ //  - a leader-team Cell (Network Leaders in their pastor's Cell, Cell Leaders in
+ //    their Network Leader's) holds real people too — leaving those out would
+ //    understate the church by everyone who leads it
+ const cells=(groups||[]).filter(g=>
+  (!filters.gender||g.gender===filters.gender)&&
+  ((filters.status||'active')==='all'||((filters.status||'active')==='inactive'?!isActiveRecord(g):isActiveRecord(g))));
+ const memberTotal=cells.reduce((total,g)=>total+Number(g.member_count||0),0);
+ // A leader-team Cell is the pastor's or Network Leader's own Cell; it is not a
+ // Cell Leader's Cell, so it must not inflate the "Cell Leaders" number.
+ const cellLeaders=cells.filter(g=>!g.leads_network).length;
+ const pastors=nets.filter(n=>n.parent_network_id==null&&nets.some(c=>String(c.parent_network_id)===String(n.id)));
+ const loose=nets.filter(n=>n.parent_network_id==null&&!pastors.includes(n));
+ const withoutLeader=nets.filter(n=>!n.leader_name).length;
+ const unconnected=findUnassignedGroups(networks,groups,filters).length;
+ return {
+  pastors:pastors.length, networks:nets.length, cells:cells.length, cellLeaders,
+  members:memberTotal, looseNetworks:loose.length,
+  withoutLeader, unconnected, attention:withoutLeader+unconnected,
+ };
+}
 const isActiveRecord=record=>record.is_active!==false&&record.is_active!==0;
 /**
  * Networks and Cells visible for a status filter. An inactive Cell Leader can

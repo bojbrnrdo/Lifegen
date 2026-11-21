@@ -79,6 +79,70 @@ preview database, and the seven browser suites on a clean reset:
 **180 checks, all passed** — plus a live end-to-end walk of
 Bishop → Roxxane Network → Kai Cell → member with no JavaScript errors.
 
+## Lifegroups: numbers first, clutter last (this revision)
+
+The Lifegroups landing page was reorganised so the state of the church is the
+first thing on the screen, not a control the reader has to operate first.
+
+**Page order, top to bottom**
+
+1. Title, one-line summary, `Add New` / `Remove` in the header.
+2. A strip of headline numbers: **Bishops / Pastoras**, **Cell Leaders**,
+   **People in Cells**, and the one number that matters —
+   **Needs attention** (0 shows as "Nothing to fix"). Networks with no pastor
+   appear as a separate number only when one exists.
+3. Search, Everyone / Boys / Girls, status and Refresh.
+4. Find a person, then the directory of who leads whom.
+5. Optional detail: Everyone registered, Not in a Cell yet, How groups are
+   doing, and the three-word glossary (moved here from the top of the page).
+
+The numbers respond to the Boys / Girls and status filters, so the figures
+always describe what is actually listed.
+
+**Counting rules (pinned by tests, `lifegroupHeadline`)**
+
+| Number | What it counts |
+| --- | --- |
+| Bishops / Pastoras | root Networks that have child Networks |
+| Cell Leaders | Cells that are not a leader-team Cell |
+| People in Cells | every person in any active Cell — including leader-team Cells |
+| Needs attention | Networks with no Network Leader + Cells with no Network |
+
+Two counting defects were found and fixed while wiring this up:
+
+- Cells with no Network were missing from the people total, understating the
+  church by everyone meeting in a Cell that had not been connected yet.
+- Leader-team Cells were then excluded, dropping the known crowd of **132**
+  to **108**. Every leader is a person in a Cell, so they now count: the
+  figure reconciles to 132, and Boys 66 + Girls 66 = 132.
+
+**Also fixed in this revision**
+
+`npm run build` failed on a clean checkout. `frontend/depth-carousel` is still
+React, but the map-removal commit had dropped `react` and `react-dom` from
+`devDependencies`; the build only worked because stale `node_modules` still held
+them. Both are restored at `^19.3.1`, and the rebuilt
+`public/lifegen/depth-carousel.js` is byte-identical to the committed bundle.
+`tests/lifegroups-minimal-ui.test.mjs` used to assert `react` was absent; it now
+asserts the map's own dependencies (`@xyflow/react`, `dagre`) are gone and that
+React stays for the carousel.
+
+**Verification**
+
+- `npm test` — **438 / 438 pass**, including 6 new tests for the headline
+  numbers (filter awareness, attention counting, leader-team ordinary Cells)
+  and one pinning the page order.
+- `npm run build` — passes; 77 JavaScript files checked.
+- Live database (`preview-db` + `seed-pastoral-hierarchy.mjs`), numbers
+  rendered through the same `lifegroupHeadline` the page uses:
+  active 2 pastors / 18 Cell Leaders / 132 people / 26 Cells / 0 attention;
+  Boys and Girls 9 / 66 / 13 each.
+- `/admin/`, `/admin/styles.css` and the view modules serve 200 from the
+  running app; admin and youth logins verified.
+- **Not verified visually:** no headless browser is available in this
+  workspace, and jsdom cannot execute ES modules. Layout and colour were
+  reviewed from the CSS and markup, not from a screenshot.
+
 ## Lifegroups: plain language for non-technical staff (this revision)
 
 Church staff with no technical background use the Lifegroups pages, so the

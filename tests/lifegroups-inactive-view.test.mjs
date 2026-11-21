@@ -59,7 +59,7 @@ test('Cells without a Network are left to the Unassigned notice, not the directo
 });
 
 test('the Lifegroups directory uses the shared view filter and marks removed Cells',()=>{
- assert.match(view,/import \{ findUnassignedGroups, filterTrackerView \} from '\.\/hierarchy\.js';/);
+ assert.match(view,/import \{ findUnassignedGroups, filterTrackerView, lifegroupHeadline \} from '\.\/hierarchy\.js';/);
  const start=view.indexOf('const renderDirectory=()=>{');
  const stop=view.indexOf('function afterRemove()',start);
  const block=view.slice(start,stop);

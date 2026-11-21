@@ -1705,12 +1705,9 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__cell-row-go{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:.8rem;font-weight:650;color:var(--green-700,#276d49)}
 .lifegroups-page__cell-row.is-inactive{align-items:flex-start;padding:12px 6px}
 /* "New here? Read this first" — the whole orientation in one tap. */
-.lifegroups-page__help{margin:0 0 14px;border:1px solid var(--ink-200,#dbe6df);border-radius:12px;background:var(--surface,#fff)}
-.lifegroups-page__help>summary{cursor:pointer;padding:12px 16px;font-weight:650;color:var(--green-700,#276d49);display:flex;align-items:center;gap:8px;list-style:none}
-.lifegroups-page__help>summary::-webkit-details-marker{display:none}
-.lifegroups-page__help>summary:focus-visible{outline:2px solid var(--green-500,#438b62);outline-offset:-2px;border-radius:10px}
 .lifegroups-page__help-body{padding:0 18px 16px;border-top:1px solid var(--ink-100,#e9edea)}
-.lifegroups-page__help-body p{margin:12px 0 8px}
+.lifegroups-page__help-body ul{margin:12px 0 8px;padding-left:20px;display:grid;gap:6px;font-size:.88rem;line-height:1.45}
+.lifegroups-page__help-body p{margin:12px 0 0}
 .lifegroups-page__help-body ul,.lifegroups-page__help-body ol{margin:0 0 10px 20px;display:grid;gap:5px}
 .lifegroups-page__help-body li{font-size:.92rem}
 .lifegroups-page__extra-hint{font-weight:400;margin-left:6px}
@@ -1779,4 +1776,54 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 @media(max-width:600px){
  .lifegroups-page__pastor-card{border-left-width:3px}
  .lifegroups-page__loose-net summary{font-size:.95rem}
+}
+
+/* ==========================================================================
+   Lifegroups — numbers first
+   The figures a leader needs sit at the top of the page, above the tools and
+   the directory. Anything wrong is a number you can read in one glance, not a
+   paragraph you have to find.
+   ========================================================================== */
+.lifegroups-page__numbers{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+ gap:1px;padding:0;min-height:0;overflow:hidden;
+ background:#e2ebe4;border:1px solid #dbe7de;border-radius:14px;
+}
+.lifegroups-page__numbers.is-loading{padding:18px;background:#fff}
+.lifegroups-page__numbers .lifegroups-page__number{
+ display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+ padding:15px 18px;background:#fff;color:inherit;text-decoration:none!important;
+ transition:background .15s;
+}
+a.lifegroups-page__number:hover{background:#f5faf6}
+.lifegroups-page__number-value{
+ font-size:1.72rem;font-weight:750;line-height:1.05;letter-spacing:-.03em;
+ font-variant-numeric:tabular-nums;color:#14372a;
+}
+.lifegroups-page__number-label{
+ font-size:.76rem;font-weight:650;letter-spacing:.02em;color:#647a6c;
+ display:block;
+}
+/* Attention is loud enough to notice, quiet enough to live with. */
+.lifegroups-page__number.is-attention{background:#fffdf6}
+.lifegroups-page__number.is-attention .lifegroups-page__number-value{color:#a15c07}
+.lifegroups-page__number.is-attention .lifegroups-page__number-label{color:#8a6a2e}
+.lifegroups-page__number.is-ok .lifegroups-page__number-value{color:#2f7d52}
+.lifegroups-page__number.is-warn .lifegroups-page__number-value{color:#7a6a48}
+.lifegroups-page__number.is-warn .lifegroups-page__number-label{color:#8a8068}
+@media(max-width:640px){
+ .lifegroups-page__numbers{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .lifegroups-page__numbers .lifegroups-page__number{padding:13px 14px}
+ .lifegroups-page__number-value{font-size:1.5rem}
+ .lifegroups-page__number-label{font-size:.72rem}
+}
+
+/* The page itself: fewer separate rows, the same information. */
+.lifegroups-page{gap:12px}
+.lifegroups-page__header .sub{font-size:.86rem}
+/* The toolbar and the numbers are one block, so the eye reads top-down once. */
+.lifegroups-page .lg-tree-toolbar{padding:8px;border-radius:12px}
+@media(min-width:1024px){
+ .lifegroups-page__numbers .lifegroups-page__number{padding:17px 20px}
+ .lifegroups-page__directory-head{margin:16px 0 12px}
 }
