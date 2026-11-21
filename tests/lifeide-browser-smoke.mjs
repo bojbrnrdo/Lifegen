@@ -120,6 +120,10 @@ try {
  await evaluate("document.getElementById('dialogInput').value='browser-smoke.js';document.getElementById('dialogForm').requestSubmit()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-smoke.js'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
+ assert.equal(await evaluate("Boolean(window.lifeideCodeMirror&&document.querySelector('.cm-editor'))"),true,'CodeMirror 6 must be mounted');
+ await evaluate("(()=>{const v=window.lifeideCodeMirror;v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'const fromCodeMirror = 77;'}})})()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const fromCodeMirror = 77;','CodeMirror edits must update the original LifeIDE save source');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const fromCodeMirror = 77;','CodeMirror typing must persist through existing local save handler');
  await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  // The dialog submit and editor opening may settle on separate browser tasks.
@@ -432,14 +436,14 @@ try {
 
 
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:390,height:844,deviceScaleFactor:3,mobile:true}}));});
- const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:document.getElementById('editor').getBoundingClientRect().width})");
+ const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:(document.querySelector('.cm-editor')||document.getElementById('editor')).getBoundingClientRect().width})");
  assert.equal(mobile.viewport,390);
  assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
  assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
  assert.equal(await evaluate("[...document.querySelectorAll('.explorer-entry')].every(el=>el.scrollWidth<=el.clientWidth+1)"),true,'Explorer entries must not overflow their own width');
  console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:320,height:700,deviceScaleFactor:2,mobile:true}}));});
- const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:document.getElementById('editor').getBoundingClientRect().width})");
+ const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:(document.querySelector('.cm-editor')||document.getElementById('editor')).getBoundingClientRect().width})");
  assert.equal(narrow.width,320,'Small phones must use their real viewport width');
  assert.equal(narrow.overflow,false,'Small phones must not overflow horizontally');
  assert.ok(narrow.editor>80,'Editor must remain visible on small phones');

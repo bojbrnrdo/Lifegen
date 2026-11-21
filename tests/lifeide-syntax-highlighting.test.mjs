@@ -1,38 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url);
-const syntax=require('../public/lifeide/syntax.js');
+import {readFileSync,statSync} from 'node:fs';
 const html=readFileSync(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
+const js=readFileSync(new URL('../frontend/lifeide/codemirror.js',import.meta.url),'utf8');
+const css=readFileSync(new URL('../public/lifeide/styles.css',import.meta.url),'utf8');
 const app=readFileSync(new URL('../public/lifeide/app.js',import.meta.url),'utf8');
-const css=readFileSync(new URL('../public/lifeide/syntax.css',import.meta.url),'utf8');
-
-test('code highlights keywords, strings, comments and numbers',()=>{
- const result=syntax.highlight('const answer = 42; // note\nconsole.log("hello");','example.js');
- for(const role of ['keyword','number','comment','string','function'])assert.match(result,new RegExp('syn-'+role));
+test('LifeIDE now loads a compiled CodeMirror 6 editor',()=>{
+ assert.match(html,/\/lifeide\/codemirror\.bundle\.js/);
+ assert.doesNotMatch(html,/<script src="\/lifeide\/syntax\.js"/);
+ assert.ok(statSync(new URL('../public/lifeide/codemirror.bundle.js',import.meta.url)).size>100000);
+ assert.match(js,/@codemirror\/view/);
+ assert.match(js,/@codemirror\/state/);
 });
-test('HTML source is safely escaped, not executed as markup',()=>{
- const result=syntax.highlight('<script>alert("x")</script>','index.html');
- assert.ok(!result.includes('<script>'));
- assert.match(result,/&lt;script&gt;/);
- assert.match(result,/syn-tag/);
- assert.equal(syntax.escapeHTML('<img src=x onerror="boom">'),'&lt;img src=x onerror=&quot;boom&quot;&gt;');
+test('CodeMirror provides real language grammars rather than a regex coloring layer',()=>{
+ for(const lang of ['lang-javascript','lang-css','lang-html','lang-json','lang-python','lang-markdown','lang-sql','lang-xml','lang-yaml','lang-php'])assert.ok(js.includes('@codemirror/'+lang),lang);
+ assert.match(js,/autocompletion\(\)/);
+ assert.match(js,/history\(\)/);
+ assert.match(js,/oneDark/);
 });
-test('supports common file formats and leaves plain text untouched',()=>{
- assert.equal(syntax.language('src/a.tsx'),'code');
- assert.equal(syntax.language('README.md'),'markdown');
- assert.equal(syntax.language('styles.css'),'css');
- assert.equal(syntax.language('main.py'),'python');
- assert.match(syntax.highlight('# heading','README.md'),/syn-keyword/);
- assert.match(syntax.highlight('# comment\nprint(3)','main.py'),/syn-comment/);
- assert.equal(syntax.highlight('one < two','notes.txt'),'one &lt; two');
-});
-test('LifeIDE mounts syntax mirror without replacing actual textarea editor',()=>{
- assert.match(html,/\/lifeide\/syntax\.css/);
- assert.match(html,/\/lifeide\/syntax\.js/);
+test('Existing file opening and saving bridge preserves textarea value contracts',()=>{
+ assert.match(js,/Object\.defineProperty\(textarea,'value'/);
+ assert.match(js,/originalValue\.set\.call\(textarea,update\.state\.doc\.toString\(\)\)/);
+ assert.match(js,/textarea\.dispatchEvent\(new Event\('input'/);
+ assert.match(js,/textarea\.disabled/);
+ assert.match(js,/fileTitle\.textContent/);
+ assert.match(js,/key:'Mod-s'/);
  assert.match(html,/id="editor"/);
- assert.match(app,/window\.lifeideHighlight\?\.\(\)/);
- assert.match(css,/caret-color/);
- assert.match(css,/pointer-events:none/);
+ assert.match(app,/\$\('saveFile'\)\.addEventListener\('click',saveActiveFile\)/);
+});
+test('Old textarea remains a fallback if CodeMirror cannot load',()=>{
+ assert.match(css,/\.editor-wrap\.cm-active textarea#editor\{display:none\}/);
+ assert.match(js,/wrap\.classList\.add\('cm-active'\)/);
+ assert.match(js,/window\.lifeideCodeMirror=view/);
 });
