@@ -54,5 +54,3 @@ Follow [`SUPABASE-SETUP.md`](SUPABASE-SETUP.md) to run the SQL files in Supabase
 ## LifeIDE production write verification
 
 On 2026-11-19, this documentation-only change was committed from live LifeIDE on lifegen-five to a dedicated fix branch.
-
-<!-- LifeIDE Ctrl+S production verification 2026-11-21 -->
