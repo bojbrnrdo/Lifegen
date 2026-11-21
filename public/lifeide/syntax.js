@@ -9,6 +9,7 @@ function language(path){const name=String(path||'').toLowerCase().split('/').pop
 const color=(role,part)=>'<span class="syn-'+role+'">'+escapeHTML(part)+'</span>';
 function tokenize(text,kind){
  let pattern=/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\[\s\S]|[^"\\])*"?|'(?:\\[\s\S]|[^'\\])*'?|\x60(?:\\[\s\S]|[^\x60\\])*\x60?|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b|\b[A-Za-z_$][\w$]*\b/g;
+ if(kind==='code'&&/^(?:def|class|import|from|print)/m.test(text))pattern=/#([^\n]*)|"(?:\\[\s\S]|[^"\\])*"?|'(?:\\[\s\S]|[^'\\])*'?|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b|\b[A-Za-z_$][\w$]*\b/g;
  if(kind==='json')pattern=/"(?:\\[\s\S]|[^"\\])*"?|\b(?:true|false|null|\d+(?:\.\d+)?)\b/g;
  if(kind==='sql')pattern=/--[^\n]*|'(?:''|[^'])*'?|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b/g;
  if(kind==='config')pattern=/#[^\n]*|"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b/g;
