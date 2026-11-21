@@ -231,12 +231,17 @@ export async function renderDevGit({main,query={}}){
 // Show the full IDE inside the existing Admin navigation. The legacy GitHub
 // editor remains accessible separately and retains its original write guards.
 export async function renderDevIDE({main,query={}}){
- // Deep links from the Git page must still open the requested repository file.
- if(query.path)return renderDevIDEGitHub({main,query});
+ // Route Git branch-file links into the same full CodeMirror workspace.
+ // No separate textarea editor; the backend still enforces branch permissions.
  // Keep Admin navigation visible, but let the IDE consume every remaining pixel.
  main.classList.add('main--lifeide');
+ const params=new URLSearchParams({source:'github'});
+ if(query.path){
+  params.set('path',query.path);
+  params.set('branch',query.branch||'develop');
+ }
  main.innerHTML=`<section class="admin-lifeide" aria-label="LifeIDE developer workspace">
-  <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/?source=github"></iframe>
+  <iframe class="admin-lifeide__frame" title="LifeIDE file explorer and code editor" src="/lifeide/?${esc(params.toString())}"></iframe>
  </section>`;
  return ()=>{main.classList.remove('main--lifeide');};
 }

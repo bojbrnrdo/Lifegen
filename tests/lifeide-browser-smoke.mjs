@@ -70,6 +70,13 @@ if(realAuth){
  app.get('/api/auth/status',(req,res)=>res.json({user:{role_id:'admin'},csrf_token:'test-csrf'}));
  app.use('/api/lifeide',createLifeIdeRouter({workspace,access:(req,res,next)=>next(),authenticate:(req,res,next)=>{req.actor={role_id:'admin',csrf_token:'test-csrf'};next();},origin:(req)=>{},csrf:(req)=>{if(req.get('x-csrf-token')!=='test-csrf')throw Error('Missing test CSRF');}}));
 }
+if(!realAuth){
+ app.get('/api/admin/dev/file',(req,res)=>{
+  if(req.query.branch!=='feature/browser-acceptance'||req.query.path!=='src/components/Example.js')
+   return res.status(403).json({error:'Branch file not available'});
+  res.json({path:req.query.path,branch:req.query.branch,sha:'branch-source-sha',content:'export const branchSpecific = true;',editable:true});
+ });
+}
 app.use('/lifeide',express.static(new URL('../public/lifeide/',import.meta.url).pathname));
 app.use((err,req,res,next)=>res.status(err.status||500).json({message:err.message}));
 const server=app.listen(0,'127.0.0.1');
@@ -618,6 +625,35 @@ try {
  await evaluate("Storage.prototype.setItem=window.__draftSetItem");
  console.log('PASS LifeIDE GitHub saving: Ctrl+S and Cmd+S save drafts; explicit GitHub action commits; recovery preserves edits');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
+
+ if(!realAuth){
+  // Git -> branch file MUST use CodeMirror, not the old plain textarea editor.
+  await evaluate("location.href='/lifeide/?source=github&branch=feature%2Fbrowser-acceptance&path=src%2Fcomponents%2FExample.js'");
+  for(let i=0;i<80;i++){
+   if(await evaluate("document.getElementById('editor')?.value==='export const branchSpecific = true;'"))break;
+   await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(await evaluate("document.getElementById('editor').value"),'export const branchSpecific = true;','Deep link must read the requested feature branch, not main');
+  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'GITHUB · FEATURE/BROWSER-ACCEPTANCE');
+  assert.equal(await evaluate("Boolean(window.lifeideCodeMirror&&document.querySelector('.cm-editor'))"),true);
+  assert.equal(await evaluate("document.getElementById('githubBranch').value"),'feature/browser-acceptance');
+  await evaluate("document.getElementById('editor').value='export const branchSpecific = 42;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('saveFile').click()");
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:feature/browser-acceptance:src/components/Example.js')).content"),'export const branchSpecific = 42;','Feature draft must be namespaced by branch');
+  assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Branch Save never opens a commit form');
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Main source draft must stay isolated');
+  await evaluate("location.href='/lifeide/?source=github&branch=feature%2Fbrowser-acceptance&path=src%2Fcomponents%2FExample.js'");
+  for(let i=0;i<80;i++){
+   if(await evaluate("document.getElementById('editor')?.value==='export const branchSpecific = 42;'"))break;
+   await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(await evaluate("document.getElementById('editor').value"),'export const branchSpecific = 42;','Feature draft must survive refresh');
+  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+  for(let i=0;i<40;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='README.md'"))break;await new Promise(r=>setTimeout(r,100));}
+  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'GITHUB · MAIN','Explorer switch must clearly return to main');
+  assert.equal(await evaluate("document.getElementById('editor').value"),'# LIFEGEN source');
+  console.log('PASS LifeIDE Git branch deep link: correct source, CodeMirror editor, isolated draft, refresh and return to main');
+ }
+
 
 
 

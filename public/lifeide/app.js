@@ -107,6 +107,7 @@ $('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy|
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
+let currentGithubBranch='main'; // active file's source branch; never inferred from editable draft content.
 // Prevent accidental tab refresh/close from discarding in-flight saves or
 // unsaved repository edits. Browser-local files already autosave on input.
 window.addEventListener('beforeunload',event=>{
@@ -114,8 +115,8 @@ window.addEventListener('beforeunload',event=>{
  event.preventDefault();
  event.returnValue='';
 });
-const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+path;
-const recoveryKey=path=>'lifegen.lifeide.github-recovery.v1:'+path;
+const draftKey=path=>'lifegen.lifeide.github-draft.v1:'+(currentGithubBranch==='main'?'':currentGithubBranch+':')+path;
+const recoveryKey=path=>'lifegen.lifeide.github-recovery.v1:'+(currentGithubBranch==='main'?'':currentGithubBranch+':')+path;
 function readBrowserDraft(key){
  try{return JSON.parse(localStorage.getItem(key)||'null');}catch{return null;}
 }
@@ -211,6 +212,7 @@ async function openGithubWorkflow(){
  if(!githubMode||!githubEditing||!current||devBusy)return;
  const file=current;
  devBusy=true;
+ if(currentGithubBranch!=='main'&&validWorkingBranch(currentGithubBranch))$('githubBranch').value=currentGithubBranch;
  $('githubWorkflow').hidden=false;
  $('githubWorkflow').setAttribute('aria-modal','true');
  nativeStatus('Checking whether isolated GitHub developer writes are enabled...');
@@ -256,7 +258,7 @@ async function commitActiveGithubFile(){
   const remote=await devRequest('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(file));
   if(!remote.editable)throw Error('This path or branch is protected and cannot be edited.');
   if(content===remote.content)throw Error('No changes compared with the target branch.');
-  if(remote.content!==repoFiles.get(file)?.content&&!confirm('This branch has different content from main. Commit your draft over the current branch version?'))return;
+  if(remote.content!==repoFiles.get(file)?.content&&!confirm('The target branch has changed since this file was opened. Review differences before overwriting its latest content?'))return;
   if(file!==current)throw Error('File selection changed while preparing the commit.');
   const result=await devRequest('file',{method:'PUT',body:{branch,path:file,sha:remote.sha,content,message}});
   if(!result.ok)throw Error('GitHub did not acknowledge the commit.');
@@ -440,6 +442,9 @@ async function createRepoEntry(type,name){
 async function openRepoFile(rel){
  if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save or commit before changing files.';return false;}
  if(repoMode&&!confirmRepositoryDiscard('Discard unsaved changes to the current repository file?'))return false;
+ // Regular Explorer file selections browse main. Branch-specific files are opened
+ // separately from validated Git links and keep their own draft namespace.
+ if(githubMode)currentGithubBranch='main';
  // Invalidate all prior file-opening requests, including local repository mode.
  const sequence=++githubOpenSequence;
  if(githubMode){
@@ -473,6 +478,7 @@ async function openRepoFile(rel){
    }
   }catch{}
  }
+ if(githubMode){$('modeLabel').textContent='GITHUB · '+currentGithubBranch.toUpperCase();$('storageInfo').textContent='bojbrnrdo/Lifegen · '+currentGithubBranch+' · '+(currentGithubBranch==='main'?'read-only source':'branch source');}
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
  $('status').textContent=staleDraft
@@ -481,6 +487,50 @@ async function openRepoFile(rel){
   :recoveredDraft?'Recovered saved browser draft · Ctrl+S updates this browser copy, not GitHub'
   :githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
  return true;
+}
+// Git → LifeIDE deep link: use the authenticated branch API, not the main
+// repository endpoint. Reject unsupported branches/paths and never fall back
+// to the similarly named main file on errors.
+async function openLinkedBranchFile(){
+ const params=new URLSearchParams(location.search);
+ const branch=params.get('branch')||'develop',path=params.get('path');
+ if(!path)return;
+ if(!/^(?:develop|(?:feature|fix)\/[A-Za-z0-9._-]{1,90})$/.test(branch)||
+    path.length>400||path.startsWith('/')||path.includes('\\')||
+    path.split('/').some(part=>!part||part==='.'||part==='..')){
+  $('status').textContent='Invalid Git branch or file path. Open a supported file from Git.';
+  return;
+ }
+ const sequence=++githubOpenSequence;
+ $('status').textContent='Loading '+path+' from '+branch+'…';
+ let file;
+ try{file=await devRequest('file?branch='+encodeURIComponent(branch)+'&path='+encodeURIComponent(path));}
+ catch(error){if(sequence===githubOpenSequence)$('status').textContent='Cannot open '+branch+' file: '+error.message;return;}
+ if(sequence!==githubOpenSequence||!githubMode)return;
+ if(typeof file.content!=='string'||file.branch!==branch||file.path!==path){
+  $('status').textContent='Branch file response does not match the requested source.';
+  return;
+ }
+ currentGithubBranch=branch;
+ repoFiles.set(path,{content:file.content,version:file.sha});
+ current=path;githubEditing=true;repoDirty=false;
+ $('editor').disabled=false;$('editor').value=file.content;
+ let recovered=false,stale=false;
+ try{
+  const saved=readBrowserDraft(recoveryKey(path))||readBrowserDraft(draftKey(path));
+  if(saved&&typeof saved.content==='string'&&saved.content!==file.content){
+   recovered=true;stale=saved.base!==file.sha;$('editor').value=saved.content;
+  }
+ }catch{}
+ $('fileTitle').textContent=path;
+ $('language').textContent=(path.split('.').pop()||'txt').toUpperCase();
+ $('modeLabel').textContent='GITHUB · '+branch.toUpperCase();
+ $('storageInfo').textContent='bojbrnrdo/Lifegen · '+branch+(file.editable?' · development file':' · read-only branch');
+ $('githubBranch').value=branch;
+ $('tabs').replaceChildren();githubEditControls(true);updateLines();
+ $('status').textContent=stale?'Older branch draft recovered; GitHub source changed. Review before committing.'
+  :recovered?'Saved branch draft recovered · Ctrl+S updates this browser only.'
+  :'Opened '+path+' from '+branch+' in CodeMirror. Ctrl+S saves a browser draft, not GitHub.';
 }
 async function connectGithubSource(){
  if(repoMode||githubMode)return;
@@ -498,8 +548,9 @@ async function connectGithubSource(){
   $('repositoryMode').textContent='Local Workspace';
   $('newFile').disabled=true;$('newFolder').disabled=true;
   $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
-  $('status').textContent='GitHub source loaded · Ctrl+S commits to a GitHub development branch';
+  $('status').textContent='GitHub source loaded · Ctrl+S saves a browser draft; use GitHub to commit';
   scheduleGithubPrefetch('');
+  await openLinkedBranchFile();
  }catch(error){githubMode=false;renderTree();throw error;}
 }
 async function repositoryConnect(){

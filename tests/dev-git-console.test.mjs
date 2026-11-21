@@ -58,7 +58,8 @@ test('Git console opens selected branch and file without requiring write permiss
  assert.match(client,/const selected=branch/);
  assert.match(client,/if\(!connected\)return/);
  assert.match(client,/\/dev\/ide\?branch='\+encodeURIComponent\(selected\)\+'&path='\+encodeURIComponent\(file\)/);
- assert.match(client,/if\(query\.path\)return renderDevIDEGitHub\(\{main,query\}\)/);
+ assert.match(client,/params\.set\('path',query\.path\)/);
+ assert.match(client,/params\.set\('branch',query\.branch\|\|'develop'\)/);
  assert.match(client,/file\.split\('\/'\)\.some/);
 });
 
