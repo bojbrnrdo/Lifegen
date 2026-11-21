@@ -8,7 +8,7 @@ test('LifeIDE warns before unload for unsaved edits and pending saves or commits
  const start=source.indexOf("window.addEventListener('beforeunload'");
  assert.ok(start>=0);
  const guard=source.slice(start,source.indexOf("const draftKey=",start));
- assert.match(guard,/!repoMode\|\|\(!repoDirty&&!saveBusy&&!commitBusy\)/);
+ assert.match(guard,/!repoMode\|\|\(!repoDirty&&!saveBusy&&!commitBusy&&!devBusy\)/);
  assert.match(guard,/event\.preventDefault\(\)/);
  assert.match(guard,/event\.returnValue=''/);
 });
@@ -17,7 +17,7 @@ test('Save and Cmd-S or Ctrl-S use the same active-file save path',()=>{
  assert.match(source,/\$\('saveFile'\)\.addEventListener\('click',saveActiveFile\)/);
  assert.match(source,/e\.metaKey\|\|e\.ctrlKey/);
  assert.match(source,/e\.key\.toLowerCase\(\)!=='s'/);
- assert.match(source,/e\.preventDefault\(\);\s*saveActiveFile\(\)/);
+ assert.match(source,/e\.preventDefault\(\);\s*if\(e\.repeat\)return;\s*saveActiveFile\(\)/);
 });
 
 test('repository save preserves edits typed while an earlier save is pending',()=>{

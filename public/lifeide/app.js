@@ -73,7 +73,7 @@ $('newFolder').addEventListener('click',()=>openDialog('New Folder','Folder name
 $('dialogForm').addEventListener('submit',async e=>{e.preventDefault();try{await dialogAction($('dialogInput').value);closeDialog();}catch(error){$('dialogError').textContent=error.message;}});
 $('cancel').addEventListener('click',closeDialog);
 $('dialog').addEventListener('click',e=>{if(e.target===$('dialog'))closeDialog();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if(!repoMode&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();});
 $('editor').addEventListener('input',()=>{const f=repoMode?null:node(current);if(f){f.content=$('editor').value;f.modified=Date.now();save();}updateLines();});
 $('editor').addEventListener('click',updateLines);
 $('editor').addEventListener('keyup',updateLines);
@@ -90,14 +90,14 @@ $('collapse').addEventListener('click',()=>$('sidebar').classList.toggle('collap
 $('smaller').addEventListener('click',()=>{size=Math.max(11,size-1);setSize();});
 $('larger').addEventListener('click',()=>{size=Math.min(24,size+1);setSize();});
 function setSize(){$('editor').style.fontSize=size+'px';$('lineNumbers').style.fontSize=size+'px';window.lifeideHighlight?.();}
-$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(!confirmRepositoryDiscard('Discard unsaved changes and reload repository?'))return;++githubOpenSequence;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;resetGithubFiles();}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
+$('refresh').addEventListener('click',()=>{if(repoMode){if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save or commit before refreshing.';return;}if(!confirmRepositoryDiscard('Discard unsaved changes and reload repository?'))return;++githubOpenSequence;repoDirty=false;repoExpanded.clear();repoParent='';if(githubMode){githubTreeIndex=null;githubTreePending=null;resetGithubFiles();}repoFiles.clear();selectedGit.clear();$('commit').disabled=true;current=null;$('tabs').replaceChildren();treeFolder().catch(e=>$('status').textContent=e.message);emptyEditor();return;}items=load();if(!node(selectedFolder)||node(selectedFolder)?.type!=='folder')selectedFolder=null;opened=opened.filter(x=>node(x));if(current&&node(current))select(current);else emptyEditor();renderTree();});
 
 // Repository mode uses authenticated same-origin APIs and explicit saves.
 let repoMode=false,githubMode=false,githubEditing=false,repoFiles=new Map(),csrf='',selectedGit=new Set(),repoDirty=false,commitBusy=false,saveBusy=false;
 // Prevent accidental tab refresh/close from discarding in-flight saves or
 // unsaved repository edits. Browser-local files already autosave on input.
 window.addEventListener('beforeunload',event=>{
- if(!repoMode||(!repoDirty&&!saveBusy&&!commitBusy))return;
+ if(!repoMode||(!repoDirty&&!saveBusy&&!commitBusy&&!devBusy))return;
  event.preventDefault();
  event.returnValue='';
 });
@@ -128,7 +128,7 @@ function persistGithubDraft(path,content,recovery=false){
 function githubEditControls(open=false){
  // Keep the legacy workflows available without crowding the source editor.
  $('editGithub').hidden=true;
- $('saveGithubDraft').hidden=true;
+ $('saveGithubDraft').hidden=!githubMode||!open;
  $('publishGithub').hidden=!githubMode||!open;
  $('githubNative').hidden=!githubMode||!open;
  $('githubNative').textContent='GitHub';
@@ -136,7 +136,7 @@ function githubEditControls(open=false){
  $('gitChanges').hidden=githubMode;
  $('commit').hidden=githubMode;
  $('saveFile').disabled=!current;
- $('saveFile').title=githubMode?'Save a browser-local draft (Ctrl+S), not a GitHub commit':'Save file (Ctrl+S)';
+ $('saveFile').title=githubMode?'Commit the current file to a GitHub development branch (Ctrl+S or Cmd+S)':'Save file (Ctrl+S)';
  $('saveGithubDraft').disabled=!githubEditing;
  $('publishGithub').disabled=!githubEditing;
 }
@@ -194,8 +194,10 @@ async function devRequest(route,{method='GET',body}={}){
  if(!response.ok)throw Error(result.error||result.message||'GitHub developer request failed.');
  return result;
 }
-$('githubNative').addEventListener('click',async()=>{
+async function openGithubWorkflow(){
  if(!githubMode||!githubEditing||!current||devBusy)return;
+ const file=current;
+ devBusy=true;
  $('githubWorkflow').hidden=false;
  nativeStatus('Checking whether isolated GitHub developer writes are enabled...');
  try{
@@ -210,7 +212,10 @@ $('githubNative').addEventListener('click',async()=>{
   csrf=auth.csrf_token;
   nativeStatus('Connected to isolated development GitHub writes. Create or select a feature/fix branch before committing.');
  }catch(error){devWriteAvailable=false;nativeStatus('GitHub write access unavailable: '+error.message);}
-});
+ finally{devBusy=false;}
+ return githubMode&&current===file;
+}
+$('githubNative').addEventListener('click',openGithubWorkflow);
 $('closeGithubWorkflow').addEventListener('click',()=>{$('githubWorkflow').hidden=true;});
 function validWorkingBranch(value){return /^(?:feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(value);}
 $('createGithubBranch').addEventListener('click',async()=>{
@@ -225,7 +230,7 @@ $('createGithubBranch').addEventListener('click',async()=>{
  }catch(error){nativeStatus('Branch creation failed: '+error.message);}
  finally{devBusy=false;$('createGithubBranch').disabled=false;}
 });
-$('commitGithubDraft').addEventListener('click',async()=>{
+async function commitActiveGithubFile(){
  if(!devWriteAvailable||devBusy||!githubMode||!githubEditing||!current){nativeStatus('Open and edit a GitHub source file in an isolated development environment first.');return;}
  const branch=$('githubBranch').value.trim(),message=$('githubCommitMessage').value.trim();
  if(!validWorkingBranch(branch)||message.length<8||message.length>160){nativeStatus('Use a feature/fix branch and a descriptive commit message of 8–160 characters.');return;}
@@ -241,10 +246,15 @@ $('commitGithubDraft').addEventListener('click',async()=>{
   const result=await devRequest('file',{method:'PUT',body:{branch,path:file,sha:remote.sha,content,message}});
   if(!result.ok)throw Error('GitHub did not acknowledge the commit.');
   try{localStorage.setItem(draftKey(file),JSON.stringify({content,base:repoFiles.get(file)?.version,updated:Date.now()}));}catch{}
-  clearGithubRecovery(file);repoDirty=false;nativeStatus('Committed to '+branch+' ('+String(result.commit||'').slice(0,8)+'). Create a draft pull request to request review.');
+  const unchanged=current===file&&$('editor').value===content;
+  if(unchanged){clearGithubRecovery(file);repoDirty=false;}
+  const successMessage='Committed to '+branch+' ('+String(result.commit||'').slice(0,8)+').';
+  nativeStatus(successMessage);
+  $('status').textContent=successMessage+(unchanged?'':' Newer edits remain unsaved.');
  }catch(error){nativeStatus('Commit failed: '+error.message);}
  finally{devBusy=false;$('commitGithubDraft').disabled=false;}
-});
+}
+$('commitGithubDraft').addEventListener('click',commitActiveGithubFile);
 $('submitGithubPr').addEventListener('click',async()=>{
  if(!devWriteAvailable||devBusy){nativeStatus('Direct GitHub PR creation is available only in an isolated development environment.');return;}
  const branch=$('githubBranch').value.trim(),title=$('githubPrTitle').value.trim();
@@ -413,7 +423,7 @@ async function createRepoEntry(type,name){
  $('status').textContent=type+' created in local repository';
 }
 async function openRepoFile(rel){
- if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before changing files.';return false;}
+ if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save or commit before changing files.';return false;}
  if(repoMode&&!confirmRepositoryDiscard('Discard unsaved changes to the current repository file?'))return false;
  // Invalidate all prior file-opening requests, including local repository mode.
  const sequence=++githubOpenSequence;
@@ -451,7 +461,7 @@ async function openRepoFile(rel){
  $('fileTitle').textContent=rel;$('language').textContent=(rel.split('.').pop()||'txt').toUpperCase();
  $('tabs').replaceChildren();updateLines();
  $('status').textContent=staleDraft
-  ?'Recovered an older browser draft. GitHub source has changed; compare with the latest file before committing. Ctrl+S saves only this browser copy.'
+  ?'Recovered an older browser draft. GitHub source has changed; compare with the latest file before committing to GitHub.'
   :recoveredOnUnload?'Recovered edits from the previous page · stored in this browser only'
   :recoveredDraft?'Recovered saved browser draft · Ctrl+S updates this browser copy, not GitHub'
   :githubMode?'Editing source · Ctrl+S saves in this browser, not GitHub':'Repository file opened • Cmd/Ctrl+S to save';
@@ -473,12 +483,12 @@ async function connectGithubSource(){
   $('repositoryMode').textContent='Local Workspace';
   $('newFile').disabled=true;$('newFolder').disabled=true;
   $('renameFile').disabled=true;$('commit').disabled=true;$('gitChanges').disabled=true;
-  $('status').textContent='GitHub source loaded · edits save as browser drafts until committed to a development branch';
+  $('status').textContent='GitHub source loaded · Ctrl+S commits to a GitHub development branch';
   scheduleGithubPrefetch('');
  }catch(error){githubMode=false;renderTree();throw error;}
 }
 async function repositoryConnect(){
- if(saveBusy||commitBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
+ if(saveBusy||commitBusy||devBusy){$('status').textContent='Finish the pending save or commit before switching workspaces.';return;}
  if(repoMode){if(!confirmRepositoryDiscard('Discard unsaved repository changes and switch workspace?'))return;repoMode=false;githubMode=false;githubEditing=false;githubEditControls(false);githubTreeIndex=null;githubTreePending=null;resetGithubFiles();$('githubWorkflow').hidden=true;devWriteAvailable=false;repoDirty=false;repoFiles.clear();selectedFolder=null;$('workspaceRoot').hidden=false;$('renameFile').disabled=!node(current);repoExpanded.clear();repoParent='';$('tabs').replaceChildren();selectedGit.clear();$('commit').disabled=true;current=null;opened=[];renderTree();emptyEditor();$('modeLabel').textContent='LOCAL WORKSPACE';$('storageInfo').textContent='Files are saved in this browser only.';$('repositoryMode').textContent=new URLSearchParams(location.search).get('source')==='github'?'GitHub Files':'Repository';$('newFile').disabled=false;$('newFolder').disabled=false;$('gitChanges').disabled=false;return;}
  if(new URLSearchParams(location.search).get('source')==='github'){try{await connectGithubSource();}catch(error){$('status').textContent=error.message;}return;}
  try{
@@ -538,7 +548,7 @@ $('commit').addEventListener('click',async()=>{
 });
 $('editor').addEventListener('input',()=>{if(!repoMode)return;
  repoDirty=true;
- $('status').textContent=githubMode?'Unsaved changes · Ctrl+S saves in this browser':'Unsaved repository changes';
+ $('status').textContent=githubMode?'Unsaved changes · Ctrl+S commits to a GitHub branch':'Unsaved repository changes';
  if(githubMode&&current){
   try{persistGithubDraft(current,$('editor').value,true);}
   catch{$('status').textContent='Browser recovery unavailable · copy your unsaved changes';}
@@ -546,7 +556,19 @@ $('editor').addEventListener('input',()=>{if(!repoMode)return;
 async function saveActiveFile(){
  if(!current)return;
  if(!repoMode){save();return;}
- if(githubMode){$('saveGithubDraft').click();return;}
+ if(githubMode){
+  if(!githubEditing||devBusy)return;
+  if(($('githubWorkflow').hidden||!devWriteAvailable)&&!await openGithubWorkflow())return;
+  if(!githubMode||!githubEditing||!current||!devWriteAvailable||devBusy)return;
+  const branch=$('githubBranch'),message=$('githubCommitMessage');
+  if(!validWorkingBranch(branch.value.trim())||message.value.trim().length<8){
+   nativeStatus('Select or create a GitHub branch and enter a commit message. Press Ctrl+S or Cmd+S to commit.');
+   (validWorkingBranch(branch.value.trim())?message:branch).focus();
+   return;
+  }
+  await commitActiveGithubFile();
+  return;
+ }
  if(saveBusy||commitBusy)return;
  const path=current,f=repoFiles.get(path);if(!f)return;
  const content=$('editor').value;
@@ -563,6 +585,7 @@ $('saveFile').addEventListener('click',saveActiveFile);
 document.addEventListener('keydown',e=>{
  if(!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='s')return;
  e.preventDefault();
+ if(e.repeat)return;
  saveActiveFile();
 },true);
 // TransferBuilder-style third panel: contextual tools without replacing the editor.
