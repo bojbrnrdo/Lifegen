@@ -4,12 +4,12 @@
 const escapeHTML=text=>String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const KEYWORDS=new Set('async await break case catch class const continue default delete do else export extends finally for from function if import in instanceof interface let new of private protected public return static super switch this throw try type typeof var void while with yield as implements namespace readonly declare abstract def elif except lambda pass raise self and or not is global nonlocal SELECT FROM WHERE INSERT INTO UPDATE DELETE CREATE TABLE JOIN LEFT RIGHT INNER OUTER ON GROUP ORDER BY LIMIT AS NULL NOT AND OR VALUES SET PRIMARY KEY'.split(' '));
 const LITERALS=new Set(['true','false','null','undefined','NaN','Infinity','None','True','False']);
-const EXT={js:'code',mjs:'code',cjs:'code',jsx:'code',ts:'code',tsx:'code',py:'code',json:'json',jsonc:'code',html:'markup',htm:'markup',xml:'markup',svg:'markup',css:'css',scss:'css',sql:'sql',md:'markdown',mdx:'markdown',yml:'config',yaml:'config',sh:'config',bash:'config',zsh:'config',vue:'markup',svelte:'markup'};
+const EXT={js:'code',mjs:'code',cjs:'code',jsx:'code',ts:'code',tsx:'code',py:'python',json:'json',jsonc:'code',html:'markup',htm:'markup',xml:'markup',svg:'markup',css:'css',scss:'css',sql:'sql',md:'markdown',mdx:'markdown',yml:'config',yaml:'config',sh:'config',bash:'config',zsh:'config',vue:'markup',svelte:'markup'};
 function language(path){const name=String(path||'').toLowerCase().split('/').pop();return EXT[name.split('.').pop()]||(/^(?:dockerfile|makefile|\.env(?:\..*)?)$/.test(name)?'config':'plain');}
 const color=(role,part)=>'<span class="syn-'+role+'">'+escapeHTML(part)+'</span>';
 function tokenize(text,kind){
  let pattern=/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\[\s\S]|[^"\\])*"?|'(?:\\[\s\S]|[^'\\])*'?|\x60(?:\\[\s\S]|[^\x60\\])*\x60?|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b|\b[A-Za-z_$][\w$]*\b/g;
- if(kind==='code'&&/^(?:def|class|import|from|print)/m.test(text))pattern=/#([^\n]*)|"(?:\\[\s\S]|[^"\\])*"?|'(?:\\[\s\S]|[^'\\])*'?|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b|\b[A-Za-z_$][\w$]*\b/g;
+ if(kind==='python')pattern=/#([^\n]*)|"(?:\\[\s\S]|[^"\\])*"?|'(?:\\[\s\S]|[^'\\])*'?|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b|\b[A-Za-z_$][\w$]*\b/g;
  if(kind==='json')pattern=/"(?:\\[\s\S]|[^"\\])*"?|\b(?:true|false|null|\d+(?:\.\d+)?)\b/g;
  if(kind==='sql')pattern=/--[^\n]*|'(?:''|[^'])*'?|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b/g;
  if(kind==='config')pattern=/#[^\n]*|"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b/g;
