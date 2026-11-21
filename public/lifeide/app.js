@@ -149,7 +149,7 @@ function githubEditControls(open=false){
  $('gitChanges').hidden=githubMode;
  $('commit').hidden=githubMode;
  $('saveFile').disabled=!current;
- $('saveFile').title=githubMode?'Commit the current file to a GitHub development branch (Ctrl+S or Cmd+S)':'Save file (Ctrl+S)';
+ $('saveFile').title=githubMode?'Save this source file as a browser draft (Ctrl+S or Cmd+S). Commit separately using GitHub.':'Save file (Ctrl+S)';
  $('saveGithubDraft').disabled=!githubEditing;
  $('publishGithub').disabled=!githubEditing;
 }
@@ -212,6 +212,7 @@ async function openGithubWorkflow(){
  const file=current;
  devBusy=true;
  $('githubWorkflow').hidden=false;
+ $('githubWorkflow').setAttribute('aria-modal','true');
  nativeStatus('Checking whether isolated GitHub developer writes are enabled...');
  try{
   const info=await devRequest('status');
@@ -230,6 +231,7 @@ async function openGithubWorkflow(){
 }
 $('githubNative').addEventListener('click',openGithubWorkflow);
 $('closeGithubWorkflow').addEventListener('click',()=>{$('githubWorkflow').hidden=true;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('githubWorkflow').hidden)$('githubWorkflow').hidden=true;});
 function validWorkingBranch(value){return /^(?:feature|fix)\/[a-zA-Z0-9._-]{1,90}$/.test(value);}
 $('createGithubBranch').addEventListener('click',async()=>{
  if(!devWriteAvailable||devBusy){nativeStatus('GitHub writes are not enabled in this environment.');return;}
@@ -571,15 +573,15 @@ async function saveActiveFile(){
  if(!repoMode){save();return;}
  if(githubMode){
   if(!githubEditing||devBusy)return;
-  if(($('githubWorkflow').hidden||!devWriteAvailable)&&!await openGithubWorkflow())return;
-  if(!githubMode||!githubEditing||!current||!devWriteAvailable||devBusy)return;
-  const branch=$('githubBranch'),message=$('githubCommitMessage');
-  if(!validWorkingBranch(branch.value.trim())||message.value.trim().length<8){
-   nativeStatus('Select or create a GitHub branch and enter a commit message. Press Ctrl+S or Cmd+S to commit.');
-   (validWorkingBranch(branch.value.trim())?message:branch).focus();
-   return;
-  }
-  await commitActiveGithubFile();
+  // Save must never open a GitHub commit form over the editor. Preserve a
+  // recoverable browser draft until the user explicitly chooses GitHub.
+  try{
+   const draft=persistGithubDraft(current,$('editor').value);
+   repoDirty=false;
+   $('status').textContent=draft.stale
+    ?'Draft saved in this browser; the GitHub source has changed. Review before committing.'
+    :'Draft saved in this browser. Use Actions → GitHub to commit to a development branch.';
+  }catch(error){$('status').textContent='Unable to save draft: '+error.message;}
   return;
  }
  if(saveBusy||commitBusy)return;

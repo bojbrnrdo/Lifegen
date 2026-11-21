@@ -56,7 +56,7 @@
           <button id="saveFile" class="editor-primary-save" type="button" disabled title="Save active file (Ctrl+S / Cmd+S)">Save</button>
         </div>
       </div>
-      <section id="githubWorkflow" class="github-workflow" aria-label="GitHub branch and commit workflow" hidden>
+      <section id="githubWorkflow" class="github-workflow" role="dialog" aria-label="GitHub branch and commit workflow" hidden>
         <strong>Commit to a development branch</strong><button id="closeGithubWorkflow" type="button" title="Close GitHub workflow" aria-label="Close GitHub workflow">×</button>
         <p id="githubWorkflowHelp">Only feature/* and fix/* branches are supported. Production main stays protected.</p><div class="github-handoff"><button id="publishGithub" type="button" hidden disabled title="Continue this change on GitHub in a feature branch">Commit via GitHub ↗</button></div>
         <div class="github-workflow-fields"><label>Branch <input id="githubBranch" value="feature/lifeide-change" autocomplete="off" spellcheck="false"></label><button id="createGithubBranch" type="button">Create branch</button><label>Commit message <input id="githubCommitMessage" placeholder="fix: describe the source change" maxlength="160"></label><button id="commitGithubDraft" type="button">Commit to branch</button></div>

@@ -305,3 +305,11 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
  .editor-overlays{top:128px;right:6px;gap:2px}
  .editor-overlays button{width:24px;height:24px}
 }
+/* Keep GitHub commit actions separate from Save, like a professional IDE.
+   A modal does not displace the code or resize the editor when opened. */
+.main .github-workflow{position:fixed;z-index:80;top:50%;left:50%;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 32px));max-height:min(75vh,660px);overflow-y:auto;border:1px solid #b9cbbf;border-radius:12px;background:#f5faf6;color:#1e422e;padding:18px 20px;box-shadow:0 0 0 100vmax rgba(10,24,16,.55),0 25px 70px #0005}
+.main .github-workflow[hidden]{display:none}
+.main .github-workflow .github-workflow-fields{gap:9px;row-gap:12px}
+.main .github-workflow .github-workflow-fields button{white-space:nowrap}
+.main .github-workflow input{max-width:100%}
+@media(max-width:680px){.main .github-workflow{width:calc(100vw - 16px);max-height:80dvh;padding:12px}}
