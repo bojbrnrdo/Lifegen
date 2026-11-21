@@ -169,3 +169,12 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .cm-host .cm-content{font-family:inherit;min-height:100%;padding:14px 0}
 .cm-host .cm-gutters{font-family:inherit}
 .cm-host .cm-editor.cm-focused{outline:none}
+
+/* MerchIDE-style editor formatting actions */
+.formatbar{display:flex;gap:6px;align-items:center;padding:5px 10px;background:#191923;border-top:1px solid #30303e;min-height:37px;overflow-x:auto;flex:none}
+.formatbar-title{font-size:10px;letter-spacing:1px;color:#9aa0ad;font-weight:700}
+.formatbar button{font-size:11px;white-space:nowrap;padding:5px 8px;background:#272633;color:#d9e0ec;border:1px solid #41404d;border-radius:5px}
+.formatbar button:hover:not(:disabled){background:#343449}
+.formatbar button:disabled{opacity:.5}
+#formatMessage{margin-left:auto;min-width:0;color:#97bfca;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:680px){.formatbar{padding:4px 6px;gap:4px}.formatbar button{font-size:10px;padding:5px 6px}#formatMessage{display:none}}

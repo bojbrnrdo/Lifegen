@@ -137,6 +137,20 @@ try {
   const shortcutHandled=await evaluate("!document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',"+modifier+":true,bubbles:true,cancelable:true}))");
   assert.equal(shortcutHandled,true,'Local Workspace must handle '+modifier+'+S instead of invoking browser Save Page');
  }
+ // CodeMirror formatting controls must modify the real file content, not only the display.
+ await evaluate("(()=>{const v=window.lifeideCodeMirror;v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'\\tconst name = 42;\\n'+'x'.repeat(85)}})})()");
+ assert.equal(await evaluate("document.getElementById('editor').value.startsWith('\\t')"),true,'Fixture starts with a real tab');
+ await evaluate("document.getElementById('formatTabs').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value.startsWith('    const name')"),true,'Tabs to spaces must change the active file');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content.startsWith('    const name')"),true,'Tab conversion must use the normal save path');
+ await evaluate("document.getElementById('formatLongLine').click()");
+ assert.match(await evaluate("document.getElementById('formatMessage').textContent"),/Line 2 has 85 characters/);
+ await evaluate("document.getElementById('formatWrap').click()");
+ assert.equal(await evaluate("document.getElementById('formatWrap').getAttribute('aria-pressed')"),'true');
+ await evaluate("document.getElementById('formatLint').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value.includes('    const name')"),true,'Syntax checking must not edit file content');
+ await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ console.log('PASS LifeIDE browser: formatting buttons, save path, line length, wrapping, diagnostics');
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
