@@ -546,25 +546,43 @@ try {
    return fetchOriginal(url,options);
   };
  })()`);
+ // Save is a safe draft action, never a GitHub commit form.
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Save must not open the GitHub workflow over the code');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 42;','Ctrl+S saves a recoverable draft');
+ assert.equal(await evaluate("window.testGithubWrites.length"),0,'Save must not silently commit to GitHub');
+ // Explicit GitHub action is the only way to open the branch/commit dialog.
+ await evaluate("document.getElementById('githubNative').click()");
  for(let i=0;i<40;i++){
-  if(await evaluate("document.activeElement.id==='githubCommitMessage'"))break;
+  if(await evaluate("document.getElementById('githubWorkflowStatus').textContent.includes('Connected to isolated')"))break;
   await new Promise(r=>setTimeout(r,50));
  }
- assert.equal(await evaluate("document.activeElement.id"),'githubCommitMessage');
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),false,'Explicit GitHub action opens the commit dialog');
+ assert.equal(await evaluate("getComputedStyle(document.getElementById('githubWorkflow')).position"),'fixed','Commit dialog overlays rather than shrinks editor');
  assert.equal(await evaluate("window.testGithubWrites.length"),0);
- await evaluate("document.getElementById('githubCommitMessage').value='fix: save test file';document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
+ await evaluate("document.getElementById('githubCommitMessage').value='fix: save test file';document.getElementById('commitGithubDraft').click()");
  for(let i=0;i<40;i++){
   if(await evaluate("document.getElementById('status').textContent.includes('12345678')"))break;
   await new Promise(r=>setTimeout(r,50));
  }
  assert.deepEqual(await evaluate("window.testGithubWrites"),[{branch:'feature/lifeide-change',path:'src/components/Example.js',sha:'branch-sha',content:'export const example = 42;',message:'fix: save test file'}]);
+ await evaluate("document.getElementById('closeGithubWorkflow').click()");
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true);
  await evaluate("document.getElementById('editor').value='export const example = 43;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Cmd+S also keeps the editor clear');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Cmd+S saves a draft too');
+ await evaluate("document.getElementById('githubNative').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("document.getElementById('githubWorkflowStatus').textContent.includes('Connected to isolated')"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ await evaluate("document.getElementById('commitGithubDraft').click()");
  for(let i=0;i<40;i++){
   if(await evaluate("window.testGithubWrites.length===2"))break;
   await new Promise(r=>setTimeout(r,50));
  }
- assert.equal(await evaluate("window.testGithubWrites[1]?.content"),'export const example = 43;','Cmd+S commits to GitHub too');
+ assert.equal(await evaluate("window.testGithubWrites[1]?.content"),'export const example = 43;','Explicit GitHub action commits updated draft');
+ await evaluate("document.getElementById('closeGithubWorkflow').click()");
  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Saved draft restores automatically when source file reopens');
@@ -598,7 +616,7 @@ try {
  assert.match(await evaluate("document.getElementById('status').textContent"),/Unable to save draft: Test storage failure/);
  assert.equal(await evaluate("document.getElementById('editor').value"),'retain this text');
  await evaluate("Storage.prototype.setItem=window.__draftSetItem");
- console.log('PASS LifeIDE simplified editor: editable on open; Ctrl+S and Cmd+S commit to a GitHub branch and recovery preserves edits');
+ console.log('PASS LifeIDE GitHub saving: Ctrl+S and Cmd+S save drafts; explicit GitHub action commits; recovery preserves edits');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
 
 
