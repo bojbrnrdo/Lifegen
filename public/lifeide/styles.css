@@ -409,3 +409,15 @@ button:focus-visible,.node:focus-visible,.editor-menu>summary:focus-visible{outl
 .editor-menu-panel button{color:#e8f2f2}
 .topbar .editor-menu-panel button:hover:not(:disabled){background:#2b4342}
 @media(max-width:680px){.editor-toolbar .editor-heading{color:#f4f8f6}}
+
+/* Comfortable code reading: short visual lines without modifying source. */
+.editor-wrap .cm-host .cm-editor{font-size:16px;line-height:1.65}
+.editor-wrap .cm-host .cm-scroller{line-height:1.65}
+.editor-wrap .cm-host .cm-content{box-sizing:border-box;width:100%;max-width:78ch;line-height:1.65;padding:20px 0 38px}
+.editor-wrap .cm-host .cm-line{padding-left:17px;padding-right:24px;line-height:1.65;overflow-wrap:anywhere}
+.editor-wrap .cm-host .cm-gutters{min-width:51px}
+.editor-wrap .cm-host .cm-activeLine{background:#43617520}
+@media(max-width:680px){
+ .editor-wrap .cm-host .cm-content{max-width:100%;padding-top:14px}
+ .editor-wrap .cm-host .cm-line{padding-left:9px;padding-right:14px}
+}
