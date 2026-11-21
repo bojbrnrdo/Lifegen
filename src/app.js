@@ -290,6 +290,23 @@ async function customMethod(req,name,args) {
  if(name==='giftTracker')return listGiftTracker();
  if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='archivePerson'){
+  const personId=validId(args[0]);
+  return transaction(async client=>{
+    const person=(await client.query('SELECT id,archived_at FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!person)throw httpError(404,'Person not found.');
+    if(person.archived_at)return person;
+    const {rows:[{leads_network,leads_cell}]}=await client.query(`SELECT
+      EXISTS(SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active) AS leads_network,
+      EXISTS(SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active) AS leads_cell`,[personId]);
+    if(leads_network||leads_cell)
+      throw httpError(409,'Reassign or deactivate active Network and Cell leadership before archiving this person.');
+    const {rows:[archived]}=await client.query(`UPDATE people SET archived_at=now(),updated_at=now()
+      WHERE id=$1 RETURNING id,archived_at`,[personId]);
+    await logAction(client,actor,'people',personId,'update',{fields:['archived_at','updated_at']});
+    return archived;
+  },{write:true});
+ }
  if(name==='setPersonStatus'&&args[1]==='inactive'){
   const personId=validId(args[0]);
   return transaction(async client=>{
