@@ -26,7 +26,7 @@ const wrap=document.getElementById('editorWrap');
 if(textarea&&fileTitle&&wrap){
  const originalValue=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
  const editable=new Compartment(),language=new Compartment(),wrapping=new Compartment();
- let wrapEnabled=false,lastLongLine=0;
+ let wrapEnabled=true,lastLongLine=0;
  let syncing=false;
  const extensionFor=name=>{
   const ext=String(name||'').split('/').pop().split('.').pop().toLowerCase();
@@ -58,7 +58,7 @@ if(textarea&&fileTitle&&wrap){
     lineNumbers(),highlightActiveLineGutter(),highlightSpecialChars(),history(),foldGutter(),drawSelection(),lintGutter(),indentUnit.of('    '),
     indentOnInput(),bracketMatching(),closeBrackets(),autocompletion(),highlightActiveLine(),highlightSelectionMatches(),
     syntaxHighlighting(defaultHighlightStyle,{fallback:true}),syntaxHighlighting(oneDarkHighlightStyle),
-    editable.of(EditorView.editable.of(!textarea.disabled)),language.of(extensionFor(fileTitle.textContent)),wrapping.of([]),oneDark,
+    editable.of(EditorView.editable.of(!textarea.disabled)),language.of(extensionFor(fileTitle.textContent)),wrapping.of(EditorView.lineWrapping),oneDark,
     linter(v=>{
      const name=fileTitle.textContent.toLowerCase(),doc=v.state.doc.toString();
      if(/\.(?:json|jsonc)$/.test(name)){
@@ -106,7 +106,7 @@ if(textarea&&fileTitle&&wrap){
  });
  const syncEditable=()=>{
   view.dispatch({effects:editable.reconfigure(EditorView.editable.of(!textarea.disabled))});
-  view.dom.style.fontSize=textarea.style.fontSize||'14px';
+  view.dom.style.fontSize=textarea.style.fontSize||'16px';
  };
  const syncLanguage=()=>view.dispatch({effects:language.reconfigure(extensionFor(fileTitle.textContent))});
  const obs=new MutationObserver(records=>{
@@ -154,6 +154,37 @@ if(textarea&&fileTitle&&wrap){
   event.currentTarget.setAttribute('aria-pressed',String(wrapEnabled));
   report(wrapEnabled?'Long lines are wrapped.':'Long lines are not wrapped.');view.focus();
  });
+ // MerchIDE-style editor actions live in the global Actions dropdown.
+ const actions=document.getElementById('editorActions');
+ actions?.addEventListener('click',event=>{
+  if(event.target.closest('.editor-menu-panel button'))actions.open=false;
+ });
+ const gotoLine=()=>{
+  if(textarea.disabled){report('Open a file first.');return;}
+  const value=window.prompt('Go to line (1–'+view.state.doc.lines+'):',String(view.state.doc.lineAt(view.state.selection.main.head).number));
+  if(value===null)return;
+  const n=Number(value.trim());
+  if(!Number.isInteger(n)||n<1||n>view.state.doc.lines){report('Enter a line number between 1 and '+view.state.doc.lines+'.');return;}
+  const line=view.state.doc.line(n);
+  view.dispatch({selection:{anchor:line.from},scrollIntoView:true});view.focus();report('Line '+n);
+ };
+ document.getElementById('goToLine')?.addEventListener('click',gotoLine);
+ view.dom.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='g'){e.preventDefault();gotoLine();}
+ });
+ const copyContent=async()=>{
+  if(textarea.disabled){report('Open a file first.');return;}
+  try{await navigator.clipboard.writeText(view.state.doc.toString());report('File content copied.');}
+  catch{report('Copy unavailable in this browser. Select text and use Ctrl+C or Cmd+C.');}
+ };
+ document.getElementById('copyCode')?.addEventListener('click',copyContent);
+ document.getElementById('copyEditorOverlay')?.addEventListener('click',copyContent);
+ document.getElementById('scrollEditorTop')?.addEventListener('click',()=>{view.scrollDOM.scrollTop=0;view.focus();});
+ document.getElementById('scrollEditorBottom')?.addEventListener('click',()=>{view.scrollDOM.scrollTop=view.scrollDOM.scrollHeight;view.focus();});
+ document.getElementById('editorSettings')?.addEventListener('click',()=>{document.getElementById('smaller')?.focus();report('Use A− / A+ to adjust editor font size (8–32 px).');});
+ document.getElementById('closeAllTabs')?.addEventListener('click',()=>window.lifeideCloseAllTabs?.());
+ const wrapButton=document.getElementById('formatWrap');
+ if(wrapButton){wrapButton.textContent='Wrap: On';wrapButton.setAttribute('aria-pressed','true');}
  const formatButtons=['formatTabs','formatLongLine','formatLint','formatWrap'].map(id=>document.getElementById(id));
  const updateControls=()=>{formatButtons.forEach(btn=>{if(btn)btn.disabled=textarea.disabled;});};
  updateControls();
