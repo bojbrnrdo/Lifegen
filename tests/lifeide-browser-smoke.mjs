@@ -287,8 +287,12 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
- // TransferBuilder-style IDE: three panels with working Explorer search and LIFEGEN's light palette.
- assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(255, 255, 255)','Main editor must retain the LIFEGEN light theme');
+ // LIFEGEN LifeIDE uses a cohesive dark theme across all three panels.
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(16, 23, 30)','Main editor must use dark theme');
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.sidebar')).backgroundColor"),'rgb(17, 26, 32)','Explorer must be dark');
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.project-tools')).backgroundColor"),'rgb(17, 26, 32)','Project Tools must be dark');
+ assert.equal(await evaluate("document.querySelector('meta[name=color-scheme]').content"),'dark','Browser native controls must be dark');
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .tree-icon--folder')&&document.querySelector('#tree .tree-icon--file'))"),true,'Explorer must render vector folder and file icons');
  assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),3,'Workspace should have Explorer, editor and project tools');
  assert.equal(await evaluate("!document.querySelector('[id*=aiAgent], .ai-agent, .agent-panel')"),true,'No AI panel should be displayed');
  await evaluate("document.getElementById('explorerSearch').value='root-note';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");

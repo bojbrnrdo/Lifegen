@@ -313,3 +313,99 @@ textarea#editor{background:#fff;color:#223729;caret-color:var(--life-mid)}
 .main .github-workflow .github-workflow-fields button{white-space:nowrap}
 .main .github-workflow input{max-width:100%}
 @media(max-width:680px){.main .github-workflow{width:calc(100vw - 16px);max-height:80dvh;padding:12px}}
+/* LIFEGEN LifeIDE: unified full dark workspace, including every panel.
+   Kept after legacy/MerchIDE layers so dark styling is authoritative. */
+:root{
+ color-scheme:dark;--life-green:#54d68d;--life-dark:#e5f1eb;
+ --life-mid:#39a96b;--life-pale:#203e32;
+ --life-border:#2b3e43;--life-gold:#a2d6a8;
+ --ide-bg:#0f151a;--ide-panel:#111a1f;--ide-panel-raised:#19252b;
+ --ide-border:#2a3b44;--ide-text:#e0eaf0;--ide-muted:#a7b8c1;
+ background:var(--ide-bg);color:var(--ide-text)
+}
+html,body,.ide{background:var(--ide-bg);color:var(--ide-text)}
+button,.top-actions button,.editor-tools button{background:#1e2c32;border-color:#3b525b;color:#e0ecf0}
+button:hover:not(:disabled),.top-actions button:hover,.editor-tools button:hover:not(:disabled){background:#293d44}
+button:focus-visible,.node:focus-visible,.editor-menu>summary:focus-visible{outline-color:#6cdda2}
+.topbar{background:#121d22;color:var(--ide-text);border-bottom:1px solid var(--ide-border);box-shadow:none}
+.brand,.topbar .brand{color:#f1f7f4}
+.brandmark{background:#1d804c;color:#fff}
+.accent,.sortbar>span{color:#71e8a6}
+.project-tag{background:#193328;color:#a9d7be;border-color:#365e49}
+#repositoryMode{background:#1a3329;color:#d4f4e1;border-color:#375b48}
+.topbar .top-actions button,.topbar .merch-action-cluster>button,.topbar .editor-menu>summary{
+ background:#1b2c31;color:#dcefe5;border:1px solid #354b51
+}
+.topbar .top-actions button:hover,.topbar .merch-action-cluster>button:hover,.topbar .editor-menu>summary:hover{background:#294338}
+.explorer-search-label input{background:#152229;color:#e4eff1;border-color:#344951}
+.explorer-search-label input::placeholder{color:#9aabb2}
+.explorer-search-label input:focus{border-color:#4bbd7e;box-shadow:0 0 0 2px #4bbd7e35}
+.sidebar{background:#111a20;border-right-color:var(--ide-border);color:var(--ide-text)}
+.sidebar-title,.project-tools__header{background:#141f25;color:#edf5f7;border-bottom-color:var(--ide-border)}
+.sortbar{background:#162129;border-bottom-color:var(--ide-border)}
+.sort-toggle{border-color:#385056}
+.sort-toggle button{background:#18252b;color:#b5c8cc}
+.sort-toggle button.active{background:#237d4a;color:#fff}
+.workspace-root{background:#19282a;color:#d9eae1;border-color:#355049}
+.workspace-root[aria-pressed="true"]{background:#214534;border-color:#408660;color:#dcf5e3}
+.node{color:#d2dfe7}
+.node:hover{background:#1c3035}
+.node.selected{background:#23543a;color:#f4fff8}
+.node .arrow{color:#80c9a1}
+.node .glyph{display:inline-flex;align-items:center;justify-content:center;flex:0 0 19px;width:19px;height:19px;color:#86a8c6}
+.node .glyph .tree-icon{display:block}
+.node .tree-icon--folder{color:#8ca9c1}
+.node .tree-icon--folder.is-open{color:#b4c6da}
+.node .tree-icon--file{color:#a4b5c8}
+.node.selected .tree-icon--file{color:#e5fbeb}
+.node .name{color:inherit}
+.filetree{scrollbar-color:#3b4d55 #121c22}
+.sidebar-footer{background:#141f25;border-top-color:var(--ide-border);color:#9dafb3}
+.folder-rename,.entry-delete{background:transparent;color:#b6cbd2}
+.explorer-entry>.entry-delete:hover,.explorer-entry>.entry-delete:focus-visible{background:#443036;border-color:#794d56;color:#ffd0d8}
+.main{background:#10171e;color:#e0eaf0}
+.editor-toolbar{background:#151f25;border-bottom-color:var(--ide-border)}
+.editor-toolbar .editor-heading{color:#f1f7f9}
+.editor-toolbar .file-title{color:#b8c6cf}
+.editor-toolbar .font-controls{border-right-color:#34464c}
+.editor-toolbar .font-controls button,.editor-toolbar #refresh{
+ background:#203037;color:#d9e8ed;border-color:#3a5058
+}
+.editor-toolbar .editor-primary-save{background:#25824c;color:#fff;border-color:#32975b}
+.editor-toolbar .editor-primary-save:hover:not(:disabled){background:#2b9e60}
+.tabs{background:#141e25;border-bottom-color:#2b4047}
+.tabs .tab{background:#1b2931;color:#bccbd5;border-right-color:#304249}
+.tabs .tab.active{background:#111a22;color:#fff;border-top-color:#49c988}
+.tabs .tab .close{color:#c1d0d4}
+.editor-wrap,.editor-wrap .cm-host,.editor-wrap .cm-editor,.editor-wrap .cm-scroller{background:#111820}
+.cm-host .cm-content{color:#e2edf1}
+.cm-host .cm-gutters{background:#151e28;color:#8d9fac;border-right-color:#2b3a46}
+.cm-host .cm-activeLine{background:#53647624}
+.cm-host .cm-activeLineGutter{background:#293b4b;color:#e7f3fd}
+.cm-host .cm-selectionBackground{background:#426b7266}
+.editor-overlays button{background:#25353d;color:#e6eff2;border-color:#425762;box-shadow:0 1px 5px #0005}
+.editor-overlays button:hover{background:#33504b}
+.project-tools{background:#111a20;border-left-color:var(--ide-border);color:var(--ide-text)}
+.project-tools__header{color:#eaf3f4}
+.project-tools__section{border-bottom-color:var(--ide-border)}
+.project-tools__section h3{color:#73e7a5}
+.project-tools__section p{color:#dee7e9}
+.project-tools__subtle{color:#aabec3!important}
+.project-tools__section button,.project-tools__link{
+ background:#172b27;border-color:#327957;color:#e9f8ee
+}
+.project-tools__section button:hover:not(:disabled),.project-tools__link:hover{background:#214236}
+.project-tools.is-collapsed{background:#111a20}
+.ide-panel-resizer{background:#263940;border-color:#334a52}
+.ide-panel-resizer:hover,.ide-panel-resizer.is-dragging{background:#3c925d}
+.statusbar{background:#172b26;color:#c3e6d0;border-top-color:#30513e}
+.format-feedback #formatMessage{background:#2b5943;color:#f1fff5}
+.github-workflow,.main .github-workflow,.dialog{background:#18272b;color:#e6f3ec;border-color:#426351}
+.github-workflow-fields input,.dialog input{background:#101b21;color:#f0f8f4;border-color:#3d5654}
+.dialog label{color:#bdd5cb}
+.dialog-actions .primary{background:#2a975b;color:#fff}
+.editor-menu-panel{background:#1b2930;color:#e5edf0;border-color:#40535e;box-shadow:0 14px 32px #000a}
+.editor-menu-panel .menu-label{color:#aebfc3}
+.editor-menu-panel button{color:#e8f2f2}
+.topbar .editor-menu-panel button:hover:not(:disabled){background:#2b4342}
+@media(max-width:680px){.editor-toolbar .editor-heading{color:#f4f8f6}}

@@ -12,7 +12,29 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(items));$('status').
 function node(id){return items.find(x=>x.id===id);}
 function pathOf(x){let parts=[x.name],p=x.parent,steps=0;while(p&&steps++<30){const n=node(p);if(!n)break;parts.unshift(n.name);p=n.parent;}return parts.join('/');}
 function siblings(parent){return items.filter(x=>x.parent===parent).sort((a,b)=>a.type===b.type?(sort==='name'?a.name.localeCompare(b.name):b.modified-a.modified):a.type==='folder'?-1:1);}
-function renderTree(){const root=$('tree');const query=$('explorerSearch').value.trim().toLocaleLowerCase();const visible=f=>!query||pathOf(f).toLocaleLowerCase().includes(query)||(f.type==='folder'&&items.some(x=>pathOf(x).toLocaleLowerCase().includes(query)&&pathOf(x).startsWith(pathOf(f)+'/')));$('workspaceRoot').setAttribute('aria-pressed',String(selectedFolder===null));root.replaceChildren();function visit(parent,depth){for(const f of siblings(parent)){if(!visible(f))continue;const button=document.createElement('button');button.type='button';button.className='node'+(current===f.id||selectedFolder===f.id?' selected':'');button.dataset.entryId=f.id;button.setAttribute('aria-label',(f.type==='folder'?'Folder ':'File ')+pathOf(f));if(f.type==='folder')button.setAttribute('aria-expanded',String(expanded.has(f.id)));button.style.paddingLeft=(7+depth*15)+'px';const arrow=document.createElement('span');arrow.className='arrow';arrow.textContent=f.type==='folder'?(expanded.has(f.id)?'▾':'▸'):' ';const glyph=document.createElement('span');glyph.className='glyph';glyph.textContent=f.type==='folder'?'📁':'▤';const name=document.createElement('span');name.className='name';name.textContent=f.name;button.append(arrow,glyph,name);button.title=pathOf(f);button.addEventListener('click',()=>{if(f.type==='folder'){selectedFolder=f.id;expanded.has(f.id)?expanded.delete(f.id):expanded.add(f.id);renderTree();root.querySelectorAll('.node').forEach(b=>{if(b.dataset.entryId===f.id)b.focus();});}else select(f.id);});button.addEventListener('contextmenu',ev=>{ev.preventDefault();if(confirm('Delete '+pathOf(f)+'? This cannot be undone.'))remove(f.id);});const entry=document.createElement('div');entry.className='explorer-entry';entry.append(button);if(f.type==='folder'&&!repoMode){const rename=document.createElement('button');rename.type='button';rename.className='folder-rename';rename.setAttribute('aria-label','Rename folder '+f.name);rename.textContent='✎';rename.addEventListener('click',()=>openDialog('Rename Folder','New folder name',async name=>renameLocal(f.id,name),f.name));entry.append(rename);}if(!repoMode){const del=document.createElement('button');del.type='button';del.className='entry-delete';del.setAttribute('aria-label','Delete '+f.type+' '+pathOf(f));del.title='Delete '+pathOf(f);del.textContent='×';del.addEventListener('click',()=>{if(confirm('Delete '+pathOf(f)+'? This cannot be undone.'))remove(f.id);});entry.append(del);}root.append(entry);if(f.type==='folder'&&(expanded.has(f.id)||query))visit(f.id,depth+1);}}visit(null,0);}
+// Lightweight, accessible decorative file icons (no external font or network dependency).
+const fileIcon=(type,open=false)=>{
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','17');svg.setAttribute('height','17');
+ svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+ svg.classList.add('tree-icon',type==='folder'?'tree-icon--folder':'tree-icon--file');
+ if(open)svg.classList.add('is-open');
+ const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+ path.setAttribute('d',type==='folder'
+  ?(open?'M3 7.5h7l2 2h8a1 1 0 0 1 1 1v1l-2 8H3a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z':'M3 5h6.5l2 2H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z')
+  :'M6 2.5h8l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4a1.5 1.5 0 0 1 1-1.5Z');
+ path.setAttribute('fill',type==='folder'?'currentColor':'none');
+ path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width',type==='folder'?'0.8':'1.7');
+ path.setAttribute('stroke-linejoin','round');svg.append(path);
+ if(type==='file'){
+  const fold=document.createElementNS('http://www.w3.org/2000/svg','path');
+  fold.setAttribute('d','M14 2.5V8h5M8 12h8M8 16h7');
+  fold.setAttribute('stroke','currentColor');fold.setAttribute('stroke-width','1.4');
+  fold.setAttribute('fill','none');fold.setAttribute('stroke-linecap','round');svg.append(fold);
+ }
+ return svg;
+};
+function renderTree(){const root=$('tree');const query=$('explorerSearch').value.trim().toLocaleLowerCase();const visible=f=>!query||pathOf(f).toLocaleLowerCase().includes(query)||(f.type==='folder'&&items.some(x=>pathOf(x).toLocaleLowerCase().includes(query)&&pathOf(x).startsWith(pathOf(f)+'/')));$('workspaceRoot').setAttribute('aria-pressed',String(selectedFolder===null));root.replaceChildren();function visit(parent,depth){for(const f of siblings(parent)){if(!visible(f))continue;const button=document.createElement('button');button.type='button';button.className='node'+(current===f.id||selectedFolder===f.id?' selected':'');button.dataset.entryId=f.id;button.setAttribute('aria-label',(f.type==='folder'?'Folder ':'File ')+pathOf(f));if(f.type==='folder')button.setAttribute('aria-expanded',String(expanded.has(f.id)));button.style.paddingLeft=(7+depth*15)+'px';const arrow=document.createElement('span');arrow.className='arrow';arrow.textContent=f.type==='folder'?(expanded.has(f.id)?'▾':'▸'):' ';const glyph=document.createElement('span');glyph.className='glyph';glyph.append(fileIcon(f.type,f.type==='folder'&&expanded.has(f.id)));const name=document.createElement('span');name.className='name';name.textContent=f.name;button.append(arrow,glyph,name);button.title=pathOf(f);button.addEventListener('click',()=>{if(f.type==='folder'){selectedFolder=f.id;expanded.has(f.id)?expanded.delete(f.id):expanded.add(f.id);renderTree();root.querySelectorAll('.node').forEach(b=>{if(b.dataset.entryId===f.id)b.focus();});}else select(f.id);});button.addEventListener('contextmenu',ev=>{ev.preventDefault();if(confirm('Delete '+pathOf(f)+'? This cannot be undone.'))remove(f.id);});const entry=document.createElement('div');entry.className='explorer-entry';entry.append(button);if(f.type==='folder'&&!repoMode){const rename=document.createElement('button');rename.type='button';rename.className='folder-rename';rename.setAttribute('aria-label','Rename folder '+f.name);rename.textContent='✎';rename.addEventListener('click',()=>openDialog('Rename Folder','New folder name',async name=>renameLocal(f.id,name),f.name));entry.append(rename);}if(!repoMode){const del=document.createElement('button');del.type='button';del.className='entry-delete';del.setAttribute('aria-label','Delete '+f.type+' '+pathOf(f));del.title='Delete '+pathOf(f);del.textContent='×';del.addEventListener('click',()=>{if(confirm('Delete '+pathOf(f)+'? This cannot be undone.'))remove(f.id);});entry.append(del);}root.append(entry);if(f.type==='folder'&&(expanded.has(f.id)||query))visit(f.id,depth+1);}}visit(null,0);}
 // Standard Explorer arrow keys, scoped to browser-local entries only.
 $('tree').addEventListener('keydown',e=>{
  if(repoMode||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
@@ -374,8 +396,8 @@ async function treeFolder(){
    const arrow=document.createElement('span');arrow.className='arrow';
    arrow.textContent=entry.type==='folder'?'▸':' ';
    const name=document.createElement('span');name.className='name';
-   name.textContent=(entry.type==='folder'?'📁 ':'▤ ')+entry.name;
-   el.append(arrow,name);wrapper.append(el);
+   name.textContent=entry.name;const glyph=document.createElement('span');glyph.className='glyph';glyph.append(fileIcon(entry.type));
+   el.append(arrow,glyph,name);wrapper.append(el);
    if(entry.type==='folder'){
     const children=document.createElement('div');children.className='repo-children';children.hidden=true;
     el.setAttribute('aria-expanded','false');
@@ -387,18 +409,18 @@ async function treeFolder(){
      if(repoExpanded.has(rel)){
       repoExpanded.delete(rel);
       children.hidden=true;
-      arrow.textContent='▸';el.setAttribute('aria-expanded','false');
+      arrow.textContent='▸';glyph.replaceChildren(fileIcon('folder'));el.setAttribute('aria-expanded','false');
       return;
      }
      loading=true;arrow.textContent='…';el.setAttribute('aria-busy','true');
      try{
       if(!loaded){await appendFolder(rel,depth+1,children);loaded=true;}
       repoExpanded.add(rel);
-      children.hidden=false;arrow.textContent='▾';el.setAttribute('aria-expanded','true');
+      children.hidden=false;arrow.textContent='▾';glyph.replaceChildren(fileIcon('folder',true));el.setAttribute('aria-expanded','true');
       if(githubMode)scheduleGithubPrefetch(rel);
       filterRepoTree();
      }catch(error){
-      children.hidden=true;arrow.textContent='▸';
+      children.hidden=true;arrow.textContent='▸';glyph.replaceChildren(fileIcon('folder'));
       $('status').textContent='Unable to open '+rel+': '+error.message;
      }finally{loading=false;el.removeAttribute('aria-busy');}
     };
@@ -407,7 +429,7 @@ async function treeFolder(){
      // Restore open folders after explicit Explorer refresh without changing the other rows.
      try{
       await appendFolder(rel,depth+1,children);loaded=true;
-      children.hidden=false;arrow.textContent='▾';el.setAttribute('aria-expanded','true');
+      children.hidden=false;arrow.textContent='▾';glyph.replaceChildren(fileIcon('folder',true));el.setAttribute('aria-expanded','true');
      }catch(error){repoExpanded.delete(rel);$('status').textContent=error.message;}
     }
    }else{
