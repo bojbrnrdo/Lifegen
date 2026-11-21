@@ -159,6 +159,9 @@ try {
  // CodeMirror formatting controls must modify the real file content, not only the display.
  await evaluate("(()=>{const v=window.lifeideCodeMirror;v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'\\tconst name = 42;\\n'+'x'.repeat(85)}})})()");
  assert.equal(await evaluate("document.getElementById('editor').value.startsWith('\\t')"),true,'Fixture starts with a real tab');
+ assert.equal(await evaluate("parseFloat(getComputedStyle(document.querySelector('.cm-content')).maxWidth)<800"),true,'Code display should limit reading width');
+ assert.equal(await evaluate("document.querySelector('.cm-line:nth-child(2)').getBoundingClientRect().height > parseFloat(getComputedStyle(document.querySelector('.cm-line')).lineHeight)*1.5"),true,'Long logical lines should wrap visually into multiple rows');
+ assert.equal(await evaluate("window.lifeideCodeMirror.state.doc.lines"),2,'Visual wrapping must not insert actual line breaks');
  await evaluate("document.getElementById('formatTabs').click()");
  assert.equal(await evaluate("document.getElementById('editor').value.startsWith('    const name')"),true,'Tabs to spaces must change the active file');
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content.startsWith('    const name')"),true,'Tab conversion must use the normal save path');
