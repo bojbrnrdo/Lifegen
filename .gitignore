@@ -12,3 +12,5 @@ playwright-report/
 # Local media import sources and optional image tooling; ship only public assets.
 google_drive/
 .venv/
+# Local layout previews generated for inspection, not shipped.
+preview/lifegroups-mock-*.html
