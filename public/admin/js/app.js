@@ -33,6 +33,13 @@ export const state = {
 };
 export const can = (perm) => Boolean(state.user?.permissions?.includes(perm)) && !(state.user?.person_id && state.user.role_id!=='admin' && ['people:write','people:delete','lifegroups:manage'].includes(perm));
 const isYouthWelfareRole = role => ['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(role);
+const shouldOpenYouthWelfare = user => Boolean(user && (
+  isYouthWelfareRole(user.role_id) ||
+  // Shared LIFEGEN accounts may receive an active Youth Welfare assignment
+  // without changing their primary staff role. Keep primary admins in Admin.
+  (user.role_id !== 'admin' && isYouthWelfareRole(user.youth_welfare_role) &&
+   user.permissions?.includes('youth_welfare:view'))
+));
 const youthWelfareUrl = preview => {
   const token = preview ? api.getPreviewSessionToken() : null;
   return '/youth-welfare' + (token ? `#preview-session=${encodeURIComponent(token)}` : '');
@@ -254,7 +261,7 @@ export async function boot() {
       try {
         const verified=await api.status(); if(!verified.user) return false;
         const signedInUser=verified.user||loginUser;
-        if(isYouthWelfareRole(signedInUser.role_id)){
+        if(shouldOpenYouthWelfare(signedInUser)){
           // In production the HttpOnly cookie carries the session across this redirect.
           // Hosted previews hand off their in-memory bearer in a fragment, consumed immediately.
           location.replace(youthWelfareUrl(verified.preview)); return true;
@@ -265,7 +272,7 @@ export async function boot() {
     });
     return;
   }
-  if(isYouthWelfareRole(status.user.role_id)){
+  if(shouldOpenYouthWelfare(status.user)){
     location.replace(youthWelfareUrl(status.preview));
     return;
   }
