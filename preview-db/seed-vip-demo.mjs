@@ -1,4 +1,4 @@
-// Seeds demo VIP registrations + attendance so the Registrations page can show
+// Seeds demo VIP registrations + check-in attendance so the Registrations page can show
 // both the monthly prize streaks AND the 4-week lifegroup export outcomes.
 // Each VIP's 4-week window starts on their invitation (registration) date; when
 // the window closes the person is exported to the tracker as Regular Attendee
@@ -10,15 +10,9 @@ await c.connect();
 await c.query('BEGIN');
 const nextId = async (entity) => (await c.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id', [entity])).rows[0].last_id;
 
-// Demo services (future/extra dates, demo-only).
-for (const d of ['2026-09-06', '2026-09-13', '2026-09-20', '2026-09-27', '2026-10-18', '2026-10-25']) {
-  await c.query(`INSERT INTO services(id,service_date,service_type,is_demo,notes)
-                 SELECT $1,$2,'lifegen',true,'Demo seed for preview'
-                 WHERE NOT EXISTS (SELECT 1 FROM services s WHERE s.service_date=$2)`, [await nextId('services'), d]);
-}
-const svc = {};
-for (const r of (await c.query(`SELECT id, service_date::text AS d FROM services
-  WHERE service_date IN ('2026-09-06','2026-09-13','2026-09-20','2026-09-27','2026-10-04','2026-10-11','2026-10-18','2026-10-25')`)).rows) svc[r.d] = r.id;
+// Attendance is recorded as VIP check-ins against a Sunday date. A Sunday is a
+// calendar fact now that the services table is gone, so there is nothing to
+// create up front.
 
 // [first, last, invitation date, attended Sundays]
 const specs = [
@@ -48,10 +42,12 @@ for (const [fn, ln, invite, days] of specs) {
     SELECT $1,$2,$3,20,'Demo University','Walk-in','0900 000 0000','reviewed',now(),$4::timestamptz
     WHERE NOT EXISTS (SELECT 1 FROM vip_registrations v WHERE v.person_id=$2)`, [await nextId('vip_registrations'), pid, full, invite + 'T09:00:00+08:00']);
   await c.query(`UPDATE vip_registrations SET created_at=$1::timestamptz WHERE person_id=$2`, [invite + 'T09:00:00+08:00', pid]);
+  const regId = (await c.query('SELECT id FROM vip_registrations WHERE person_id=$1 ORDER BY id LIMIT 1', [pid])).rows[0]?.id;
   for (const d of days) {
-    await c.query(`INSERT INTO records(id,service_id,person_id,status,classification,source,recorded_by_name)
-      SELECT $1,$2,$3,'present','first_timer','staff','Demo seed'
-      WHERE NOT EXISTS (SELECT 1 FROM records r WHERE r.service_id=$2 AND r.person_id=$3)`, [await nextId('records'), svc[d], pid]);
+    if (!regId) break;
+    await c.query(`INSERT INTO vip_checkins(id,registration_id,date_key,status,validated_at)
+      SELECT $1,$2,$3,'valid',now()
+      WHERE NOT EXISTS (SELECT 1 FROM vip_checkins v WHERE v.registration_id=$2 AND v.date_key=$3)`, [await nextId('vip_checkins'), regId, d]);
   }
 }
 await c.query('COMMIT');

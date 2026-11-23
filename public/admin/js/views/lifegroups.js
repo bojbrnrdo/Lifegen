@@ -736,12 +736,11 @@ async function drawNeeds(body) {
     try { rows = await api.lifegroupNeeds({ q }); } catch (e) { list.innerHTML = html`<div class="alert alert--error" style="margin:16px">${e.message}</div>`; return; }
     if (!rows.length) { list.innerHTML = emptyState({ icon: 'check', title: q ? 'No one matches' : 'Everyone is connected', text: q ? '' : 'Every active person already has a Cell.' }); return; }
     list.innerHTML = html`<div class="table-wrap"><table class="table table--stack">
-      <thead><tr><th>Name</th><th>Boy / Girl</th><th>Status</th><th>Last attendance</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Boy / Girl</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows.map((p) => html`<tr data-id="${p.id}">
         <td data-label=""><div class="person-cell">${raw(avatar(p, 'sm'))}<div class="person-cell__text"><a class="name" href="#/people/${p.id}">${fullName(p)}</a><div class="code">${p.person_code}${p.is_vip ? raw(' <span class="badge badge--vip badge--nodot">VIP signup</span>') : ''}</div></div></div></td>
         <td data-label="Boy / Girl">${sexBadge(p.sex)}</td>
         <td data-label="Status">${raw(statusBadge(p.status))}</td>
-        <td data-label="Last attendance" class="nowrap">${p.last_attended ? fmtDate(p.last_attended, { short: true }) : raw('<span class="muted">—</span>')}</td>
         <td data-label="" class="actions">${can('lifegroups:manage') ? html`<button class="btn btn--sm" data-find="${p.id}">${icon('group', 14)} Find a Cell</button>` : ''}</td>
       </tr>`)}</tbody></table></div>
       <div class="card__footer small muted">${rows.length} ${rows.length === 1 ? 'person' : 'people'} without a Cell</div>`;
@@ -833,7 +832,7 @@ export async function renderLifegroup({ main }, id) {
         </dl></div>
       </details>
     </div>
-    <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>Attendance &amp; progress</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
+    <details class="card mt-2 lifegroup-detail__progress" id="progressDisclosure"><summary class="card__header">${icon('chart',18)} <h2>How this Cell is doing</h2>${icon('chevR',16)}</summary><div id="progressCard"></div></details>
     ${g.former.length ? html`<details class="card mt-2" id="formerMembersSection"><summary class="card__header" style="cursor:pointer"><h2>Former members</h2></summary>
       <div class="card__body"><ul class="small" style="margin:0 0 0 18px;columns:2;column-gap:24px">${g.former.map((f) => html`<li><a href="#/people/${f.id}">${fullName(f)}</a> <span class="muted">· ${fmtDate(f.joined_at, { short: true })} → ${fmtDate(f.left_at, { short: true })}</span></li>`)}</ul></div></details>` : ''}
     ${can('lifegroups:manage') && !g.members.length && !g.former.length ? html`<div class="row mt-3" style="padding:0 4px"><button class="btn btn--ghost small" id="delGroup" style="color:var(--muted)">Delete this empty group</button></div>` : ''}

@@ -7,9 +7,9 @@ const scrypt=promisify(crypto.scrypt);
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
- admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','attendance:view','attendance:write','attendance:correct','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage','users:manage','settings:manage','youth_welfare:view','youth_welfare:classify','youth_welfare:manage','youth_welfare:access:manage','youth_welfare:profile:private','youth_welfare:tracker:view'],
- staff:['dashboard:view','people:view','people:view_private','people:write','attendance:view','attendance:write','reports:view','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage'],
- viewer:['dashboard:view','people:view','attendance:view','reports:view','lifegroups:view'],
+ admin:['dashboard:view','people:view','people:view_private','people:write','people:delete','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage','users:manage','settings:manage','youth_welfare:view','youth_welfare:classify','youth_welfare:manage','youth_welfare:access:manage','youth_welfare:profile:private','youth_welfare:tracker:view'],
+ staff:['dashboard:view','people:view','people:view_private','people:write','registrations:manage','lifegroups:view','lifegroups:manage','calendar:manage'],
+ viewer:['dashboard:view','people:view','lifegroups:view'],
  youth_welfare_admin:['youth_welfare:view','youth_welfare:classify','youth_welfare:manage','youth_welfare:records:manage','youth_welfare:access:manage','youth_welfare:profile:private','youth_welfare:people:add','youth_welfare:tracker:view'],
  youth_welfare_staff:['youth_welfare:view','youth_welfare:records:manage','youth_welfare:tracker:view'],
  youth_welfare_viewer:['youth_welfare:view','youth_welfare:tracker:view']

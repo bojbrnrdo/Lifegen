@@ -1,10 +1,10 @@
 // VIP Gift Tracker — who among the VIPs has reached four Sunday attendances, and
 // who has already received the gift that is handed out in person.
 //
-// Read path: derived live from records that already exist. There is no sync job,
-// no copy of the attendance data and no change to the registration or attendance
-// workflows. records.status='present' is the single source: staff marking a
-// person present and a validated VIP check-in both land on that same row.
+// Read path: derived live from the VIP check-ins themselves. There is no sync
+// job and no copy of the attendance data. A validated check-in
+// (vip_checkins.status='valid') IS the VIP's attendance for that Sunday — the
+// general Sunday roster that used to be mirrored alongside it is gone.
 //
 // Write path: one additive row in vip_gift_handouts per VIP, recorded by an
 // admin or attendance staff member, and removable again as the approved Undo.
@@ -15,11 +15,11 @@ import { httpError } from './domain.js';
 /** Sunday attendances that make a VIP eligible for the gift. */
 export const GIFT_SUNDAYS_REQUIRED = 4;
 
-// Distinct Sundays this person was actually present. Same definition the VIP
-// registrations list already uses for "sundays_attended".
-const ATTENDED = `(SELECT count(DISTINCT s.service_date)::int
-   FROM records r JOIN services s ON s.id = r.service_id
-  WHERE r.person_id = p.id AND r.status = 'present')`;
+// Distinct Sundays this person attended. Same definition the VIP registrations
+// list uses for "sundays_attended" — see vipAttendedSundays in vip-attendance.js.
+const ATTENDED = `(SELECT count(DISTINCT c.date_key)::int
+   FROM vip_checkins c JOIN vip_registrations vr ON vr.id = c.registration_id
+  WHERE vr.person_id = p.id AND c.status = 'valid')`;
 
 // Ready-for-gift rows first, then the ones still building up (closest first),
 // then everyone already recorded.

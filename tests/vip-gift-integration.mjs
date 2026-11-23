@@ -90,39 +90,19 @@ const client = new pg.Client(databaseUrl);
 await client.connect();
 const allocate = async (entity) => (await client.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id', [entity])).rows[0].last_id;
 
-const ids = { people: [], services: [], registrations: [] };
+const ids = { people: [], registrations: [] };
 
 async function cleanup() {
   const people = (await client.query("SELECT id FROM people WHERE person_code LIKE 'TEST-GIFT-%'")).rows.map((r) => r.id);
-  const services = (await client.query('SELECT id FROM services WHERE notes = $1', [MARK])).rows.map((r) => r.id);
   if (people.length) {
     await client.query('DELETE FROM vip_checkins WHERE registration_id IN (SELECT id FROM vip_registrations WHERE person_id = ANY($1::bigint[]))', [people]);
-    await client.query('DELETE FROM records WHERE person_id = ANY($1::bigint[])', [people]);
     await client.query('DELETE FROM vip_gift_handouts WHERE person_id = ANY($1::bigint[])', [people]);
     await client.query('DELETE FROM vip_registrations WHERE person_id = ANY($1::bigint[])', [people]);
     await client.query('DELETE FROM people WHERE id = ANY($1::bigint[])', [people]);
   }
-  if (services.length) {
-    await client.query('DELETE FROM records WHERE service_id = ANY($1::bigint[])', [services]);
-    await client.query('DELETE FROM services WHERE id = ANY($1::bigint[])', [services]);
-  }
 }
 await cleanup();
 
-for (const date of sundays) {
-  if ((await client.query('SELECT id FROM services WHERE service_date=$1', [date])).rows.length) {
-    console.error(`Refusing to run: ${date} already has a service row that this test did not create.`);
-    process.exit(2);
-  }
-}
-
-async function createServices() {
-  for (const date of sundays) {
-    const id = await allocate('services');
-    await client.query('INSERT INTO services(id,service_date,notes) VALUES($1,$2,$3)', [id, date, MARK]);
-    ids.services.push(id);
-  }
-}
 async function createPerson(name, { vip = true, attended = 0, archived = false } = {}) {
   const personId = await allocate('people');
   await client.query(
@@ -136,33 +116,26 @@ async function createPerson(name, { vip = true, attended = 0, archived = false }
     await client.query('INSERT INTO vip_registrations(id,person_id,full_name,inviter) VALUES($1,$2,$3,$4)', [registrationId, personId, name, 'Kuya Test']);
     ids.registrations.push(registrationId);
   }
-  for (let i = 0; i < attended; i++) {
-    const recordId = await allocate('records');
-    await client.query("INSERT INTO records(id,service_id,person_id,status,classification) VALUES($1,$2,$3,'present','first_timer')", [recordId, ids.services[i], personId]);
+  // Attendance is a validated VIP check-in per Sunday.
+  if (vip) {
+    for (let i = 0; i < attended; i++) {
+      const checkinId = await allocate('vip_checkins');
+      await client.query("INSERT INTO vip_checkins(id,registration_id,date_key,status,validated_at) VALUES($1,$2,$3,'valid',now())",
+        [checkinId, ids.registrations.at(-1), sundays[i]]);
+    }
   }
   return personId;
 }
 
-// A past Sunday with no service row yet. validateCheckin() opens the service for
-// the check-in date, and the app refuses future Sundays, so the check-in sync is
-// proven on a real past Sunday — created here with the TEST-GIFT- marker and
-// removed by cleanup().
-async function createPastSundayService() {
+// A past Sunday for the check-in test. The app refuses future Sundays, so the
+// check-in is proven on a real past Sunday. No service row has to exist: the
+// Sunday is the attendance key.
+async function pastSunday() {
   const d = new Date();
   d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() - 60);
   while (d.getDay() !== 0) d.setDate(d.getDate() - 1);
-  for (let i = 0; i < 12; i++) {
-    const date = iso(d);
-    if (!(await client.query('SELECT id FROM services WHERE service_date=$1', [date])).rows.length) {
-      const id = await allocate('services');
-      await client.query('INSERT INTO services(id,service_date,notes) VALUES($1,$2,$3)', [id, date, MARK]);
-      ids.services.push(id);
-      return date;
-    }
-    d.setDate(d.getDate() - 7);
-  }
-  throw new Error('Could not find a free past Sunday for the check-in test.');
+  return iso(d);
 }
 
 const find = (payload, id) => payload.items.find((i) => i.person_id === String(id));
@@ -177,7 +150,6 @@ try {
   truthy('a preview session is issued', session);
 
   section('1. TEST DATA (marked TEST-GIFT-, removed again at the end)');
-  await createServices();
   const fourSundays = await createPerson('Gift Test Four', { attended: 4 });
   const threeSundays = await createPerson('Gift Test Three', { attended: 3 });
   const noneYet = await createPerson('Gift Test New', { attended: 0 });
@@ -199,7 +171,7 @@ try {
   const eligibleBefore = before.data.counts.gift_eligible;
 
   section('3. A VIP CHECK-IN THAT STAFF VALIDATE FEEDS THE SAME TRACKER');
-  const checkinSunday = await createPastSundayService();
+  const checkinSunday = await pastSunday();
   const checkedIn = await createPerson('Gift Test Checkin', { attended: 0 });
   const fresh = await call('/api/tracker/giftTracker', { method: 'POST', body: { args: [] } });
   ok('the check-in VIP starts at zero', find(fresh.data, checkedIn)?.sundays_attended, 0);

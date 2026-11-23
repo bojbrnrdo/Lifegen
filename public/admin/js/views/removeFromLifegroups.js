@@ -156,7 +156,7 @@ export function openRemoveFromLifegroups({
       mode==='cell'?(group.leader_name||group.name):
       sel('member','member').selectedOptions[0].textContent;
     const message=mode==='network'?
-      'This takes <strong>'+escapeHTML(target)+'</strong> and every Cell and person under it off the list. Nothing is deleted: profiles, meetings and history all stay in People and Attendance.':
+      'This takes <strong>'+escapeHTML(target)+'</strong> and every Cell and person under it off the list. Nothing is deleted: profiles and meetings all stay in People.':
       mode==='cell'?'This takes <strong>'+escapeHTML(target)+'</strong> and their Cell off the list. The people in it become “not in a Cell yet”, but their profiles, meetings and history stay.':
       'This takes <strong>'+escapeHTML(target)+'</strong> out of their Cell. Their profile and history stay.';
     const confirmed=await confirmDialog({

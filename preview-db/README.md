@@ -72,5 +72,5 @@ BASE_URL=http://127.0.0.1:3000 node preview-db/rename-demo-people.mjs
 ```
 
 It renames only people who still carry a placeholder name and changes nothing
-else: person codes, Cell membership, attendance and status all stay. Safe to
+else: person codes, Cell membership and status all stay. Safe to
 re-run — it reports "No placeholder names left" once there is nothing to do.

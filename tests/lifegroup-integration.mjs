@@ -38,7 +38,7 @@ const server = app.listen(0, '127.0.0.1');
 await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
 const base = `http://127.0.0.1:${server.address().port}`;
 const idempotencyKey = crypto.randomBytes(18).toString('hex');
-let personId = null, registrationId = null, groupId = null, meetingId = null, membershipId = null, checkinId = null, checkinServiceId = null;
+let personId = null, registrationId = null, groupId = null, meetingId = null, membershipId = null, checkinId = null;
 let cleanupClient;
 
 async function json(path, { method = 'GET', body, auth = null } = {}) {
@@ -191,20 +191,22 @@ try {
       method: 'POST', body: { args: [checkinId, true] }, auth: session,
     });
     assert.equal(approved.status, 'valid', 'admin can approve pending check-in');
+    // The validated check-in IS the attendance record now: there is no separate
+    // `records` row to mirror it into.
     const attendance = await checkinClient.query(
-      "SELECT r.id,r.source,(r.extras->>'source_checkin_id')::bigint AS source_checkin_id,r.service_id FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=$1 AND s.service_date=$2 AND r.status='present'",
-      [personId, meetingDate],
+      'SELECT id,status,date_key::text AS date_key FROM vip_checkins WHERE id=$1',
+      [checkinId],
     );
-    assert.equal(attendance.rows.length, 1, 'approval records exactly one Sunday attendance');
-    assert.equal(attendance.rows[0].source_checkin_id, checkinId, 'attendance references the validated check-in');
-    checkinServiceId = Number(attendance.rows[0].service_id);
+    assert.equal(attendance.rows.length, 1, 'the check-in row is the attendance record');
+    assert.equal(attendance.rows[0].status, 'valid', 'approval marks the check-in valid');
+    assert.equal(attendance.rows[0].date_key, meetingDate, 'attendance is attributed to the Sunday');
 
     const declined = await json('/api/tracker/validateCheckin', {
       method: 'POST', body: { args: [checkinId, false] }, auth: session,
     });
     assert.equal(declined.status, 'invalid', 'admin can decline the check-in');
-    const removed = await checkinClient.query('SELECT count(*)::int total FROM records WHERE person_id=$1 AND service_id=$2', [personId,checkinServiceId]);
-    assert.equal(removed.rows[0].total, 0, 'declining undoes only check-in-sourced attendance');
+    const removed = await checkinClient.query('SELECT status FROM vip_checkins WHERE id=$1', [checkinId]);
+    assert.equal(removed.rows[0].status, 'invalid', 'declining marks the check-in invalid');
 
     // Equivalent persistence state to an allowed retry, then validate again.
     await checkinClient.query("UPDATE vip_checkins SET status='pending',validated_by=NULL,validated_at=NULL WHERE id=$1", [checkinId]);
@@ -212,7 +214,7 @@ try {
       method: 'POST', body: { args: [checkinId, true] }, auth: session,
     });
     assert.equal(approvedAgain.status, 'valid', 'retried check-in can be validated');
-    const once = await checkinClient.query('SELECT count(*)::int total FROM records WHERE person_id=$1 AND service_id=$2', [personId,checkinServiceId]);
+    const once = await checkinClient.query('SELECT count(*)::int total FROM vip_checkins WHERE registration_id=(SELECT registration_id FROM vip_checkins WHERE id=$1) AND date_key=$2', [checkinId, meetingDate]);
     assert.equal(once.rows[0].total, 1, 're-validation does not duplicate Sunday attendance');
   } finally {
     await checkinClient.end();
@@ -228,10 +230,6 @@ try {
       await cleanupClient.query('DELETE FROM lifegroup_meetings WHERE lifegroup_id=$1', [groupId]);
       await cleanupClient.query('DELETE FROM lifegroup_memberships WHERE lifegroup_id=$1 OR person_id=$2', [groupId, personId]);
       await cleanupClient.query('DELETE FROM lifegroups WHERE id=$1', [groupId]);
-    }
-    if (checkinServiceId) {
-      await cleanupClient.query('DELETE FROM records WHERE service_id=$1 AND person_id=$2', [checkinServiceId, personId]);
-      await cleanupClient.query('DELETE FROM services WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM records WHERE service_id=$1)', [checkinServiceId]);
     }
     if (registrationId) {
       await cleanupClient.query('DELETE FROM vip_sessions WHERE registration_id=$1', [registrationId]);

@@ -8,8 +8,8 @@ types.setTypeParser(20, v => { const n=Number(v); if(!Number.isSafeInteger(n)) t
 types.setTypeParser(1082, v => v);
 types.setTypeParser(1184, v => new Date(v).toISOString());
 export const WRITE_LOCK = 72114026;
-const TABLES=['people','services','records','audit'];
-const DELETE_ORDER=['records','audit','services','people'];
+const TABLES=['people'];
+const DELETE_ORDER=['people'];
 let pool;
 const columnCache=new Map();
 // Supabase database endpoints can present a project-minted CA chain that a hosting build
@@ -129,7 +129,7 @@ export async function loadState(client,{includeAudit=false,includeVipRegistratio
  data.vip_registrations=includeVipRegistrations?(await client.query('SELECT id,person_id,review_status,created_at FROM vip_registrations ORDER BY id')).rows:[];
  return data;
 }
-const defaults={people:{last_name:'',status:'first_timer',registration_source:'staff'},services:{service_type:'lifegen'},records:{source:'staff'}};
+const defaults={people:{last_name:'',status:'first_timer',registration_source:'staff'}};
 function packRow(row,cols,table) {
  const out={}; const known=new Set(cols); const extras={...(row.extras||{})};
  for(const [k,v] of Object.entries(row)) if(!known.has(k)) extras[k]=v;
@@ -194,7 +194,7 @@ export async function withState(fn,{actor=null,write=false,dryRun=false,tables=T
  },{write,dryRun});
 }
 const READ_TABLES={
- person:['people','services','records'],
+ person:['people'],
 };
 export const runDomain=(method,args=[],actor=null,write=false)=>withState(async({data,client})=>{
  // Archiving a person must not break an active Network or Cell leadership, so
@@ -203,16 +203,9 @@ export const runDomain=(method,args=[],actor=null,write=false)=>withState(async(
   data.networks=(await client.query('SELECT id,leader_person_id,is_active FROM networks')).rows;
   data.lifegroups=(await client.query('SELECT id,leader_person_id,is_active FROM lifegroups')).rows;
  }
- const result=await domain[method](...args);
- // Attendance is one shared source of truth, including staff corrections/undo.
- if(write&&['mark','undoMark'].includes(method)){
-  const service=data.services.find(s=>s.id===Number(args[0]));
-  if(service){const status=method==='mark'&&args[2]==='present'?'valid':'invalid';
-   const updated=await client.query('UPDATE vip_checkins c SET status=$1,validated_by=$2,validated_at=now() FROM vip_registrations v WHERE c.registration_id=v.id AND v.person_id=$3 AND c.date_key=$4 AND c.status<>$1 RETURNING c.id',[status,actor?.id||null,Number(args[1]),service.service_date]);
-   for(const c of updated.rows)await logAction(client,actor,'vip_checkins',c.id,'attendance_'+status);
-  }
- }
- return result;
+ // Sunday attendance was removed, so staff `mark`/`undoMark` no longer exist and
+ // nothing has to be mirrored into vip_checkins. The check-in IS the record.
+ return await domain[method](...args);
 },{actor,write,tables:READ_TABLES[method]||TABLES});
 export function stateId(data,table) {data.seq[table]=(data.seq[table]||0)+1;return data.seq[table];}
 export async function allocateId(client,entity) {const {rows}=await client.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id',[entity]);if(!rows[0]) throw new Error('Unknown entity counter');return rows[0].last_id;}

@@ -240,8 +240,8 @@ async function activeMembers(groupId) {
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,
       (v.id IS NOT NULL) AS is_vip
     FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
-    LEFT JOIN LATERAL (SELECT count(*)::int AS sundays_attended,max(s.service_date)::text AS last_attended
-      FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status='present') stats ON true
+    LEFT JOIN LATERAL (SELECT count(DISTINCT c.date_key)::int AS sundays_attended,max(c.date_key)::text AS last_attended
+      FROM vip_checkins c JOIN vip_registrations vr ON vr.id=c.registration_id WHERE vr.person_id=p.id AND c.status='valid') stats ON true
     LEFT JOIN LATERAL (SELECT id,review_status,created_at FROM vip_registrations vr WHERE vr.person_id=p.id ORDER BY vr.created_at DESC,vr.id DESC LIMIT 1) v ON true
     WHERE m.lifegroup_id=$1 AND m.left_at IS NULL AND p.archived_at IS NULL
     ORDER BY CASE m.role WHEN 'leader' THEN 0 WHEN 'assistant' THEN 1 ELSE 2 END,lower(p.last_name),lower(p.first_name),p.id`, [groupId]);
@@ -337,8 +337,8 @@ async function needsLifegroup(filters = {}) {
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,
       (v.id IS NOT NULL) AS is_vip
     FROM people p
-    LEFT JOIN LATERAL (SELECT count(*)::int AS sundays_attended,max(s.service_date)::text AS last_attended
-      FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status='present') stats ON true
+    LEFT JOIN LATERAL (SELECT count(DISTINCT c.date_key)::int AS sundays_attended,max(c.date_key)::text AS last_attended
+      FROM vip_checkins c JOIN vip_registrations vr ON vr.id=c.registration_id WHERE vr.person_id=p.id AND c.status='valid') stats ON true
     LEFT JOIN LATERAL (SELECT id,review_status,created_at FROM vip_registrations vr WHERE vr.person_id=p.id ORDER BY vr.created_at DESC,vr.id DESC LIMIT 1) v ON true
     WHERE p.archived_at IS NULL AND p.status<>'inactive'
       AND NOT EXISTS(SELECT 1 FROM lifegroup_memberships m WHERE m.person_id=p.id AND m.left_at IS NULL)

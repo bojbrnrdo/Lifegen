@@ -1,5 +1,6 @@
 /** Server-side domain rules, adapted from the supplied tracker. No browser storage. */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { sundaysBetween } from './vip-attendance.js';
 export const domainContext = new AsyncLocalStorage();
 process.env.TZ = process.env.APP_TIMEZONE || 'Asia/Manila';
 const load = () => { const c=domainContext.getStore(); if(!c) throw new Error('Domain operation requires a database transaction'); return c.data; };
@@ -36,13 +37,19 @@ const round1 = (n) => Math.round(n * 10) / 10;
 // ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
-function presentRecordsOf(personId) {
+// Attendance is tracked only for VIPs and first timers, and the check-in is the
+// record. There is no general Sunday roster any more, so "attended" means a
+// validated vip_checkins row. See src/vip-attendance.js for the SQL definition.
+function attendedSundaysOf(personId) {
   const d = load();
-  return d.records.filter((r) => r.person_id === personId && r.status === 'present').map((r) => ({ ...r, service: d.services.find((s) => s.id === r.service_id) })).filter((r) => r.service);
+  const regs = new Set((d.vip_registrations || []).filter((r) => Number(r.person_id) === Number(personId)).map((r) => Number(r.id)));
+  return [...new Set((d.vip_checkins || [])
+    .filter((c) => regs.has(Number(c.registration_id)) && c.status === 'valid')
+    .map((c) => c.date_key))].sort();
 }
 function decorate(p) {
-  const pres = presentRecordsOf(p.id);
-  return { ...p, sundays_attended: pres.length, last_attended: pres.length ? pres.map((r) => r.service.service_date).sort().at(-1) : null };
+  const dates = attendedSundaysOf(p.id);
+  return { ...p, sundays_attended: dates.length, last_attended: dates.at(-1) || null };
 }
 function findPerson(id) { return load().people.find((p) => p.id === Number(id)); }
 
@@ -52,7 +59,7 @@ export function promoteVipMemberIfEligible(personId) {
   const person = findPerson(personId);
   if (!person || !VIP_PROMOTION_STATUSES.has(person.status)) return false;
   if (!(d.vip_registrations || []).some((registration) => Number(registration.person_id) === person.id)) return false;
-  const attendedSundays = new Set(presentRecordsOf(person.id).map((record) => record.service.service_date)).size;
+  const attendedSundays = attendedSundaysOf(person.id).length;
   if (attendedSundays < VIP_MEMBER_ATTENDANCE_THRESHOLD) return false;
   person.status = 'member';
   person.updated_at = nowSql();
@@ -69,8 +76,8 @@ export function promoteVipRegularIfCompleted(personId) {
   if (!person || !['first_timer', 'new_believer'].includes(person.status)) return false;
   if (!(d.vip_registrations || []).some((registration) => Number(registration.person_id) === person.id)) return false;
   const t = today(); const monthStart = t.slice(0, 8) + '01';
-  const attended = new Set(presentRecordsOf(person.id).map((record) => record.service.service_date).filter((dt) => dt >= monthStart && dt <= t));
-  const sundays = d.services.map((x) => x.service_date).filter((dt) => dt >= monthStart && dt <= t).sort();
+  const attended = new Set(attendedSundaysOf(person.id).filter((dt) => dt >= monthStart && dt <= t));
+  const sundays = sundaysBetween(monthStart, t);
   let best = 0, run = 0;
   for (const dt of sundays) { if (attended.has(dt)) { run++; if (run > best) best = run; } else run = 0; }
   if (best < 4) return false;
@@ -165,75 +172,6 @@ function listPeople(params = {}) {
   return rows;
 }
 
-// ---------------------------------------------------------------------------
-// Services & statistics (mirror src/services/stats.js)
-// ---------------------------------------------------------------------------
-function registeredBase(date) {
-  return load().people.filter((p) => p.status !== 'inactive' && !p.archived_at && (p.date_first_attended && p.date_first_attended < p.date_registered ? p.date_first_attended : p.date_registered) <= date).length;
-}
-function summary(s) {
-  const recs = load().records.filter((r) => r.service_id === s.id);
-  const present = recs.filter((r) => r.status === 'present');
-  const base = registeredBase(s.service_date);
-  return {
-    ...s,
-    present_count: present.length,
-    first_timer_count: present.filter((r) => r.classification === 'first_timer').length,
-    returning_count: present.filter((r) => r.classification === 'returning').length,
-    absent_count: recs.filter((r) => r.status === 'absent').length,
-    recorded_count: recs.length,
-    registered_base: base,
-    attendance_rate: base > 0 ? round1((present.length / base) * 100) : null,
-  };
-}
-function summaries({ from, to } = {}) {
-  return load().services.filter((s) => (!from || s.service_date >= from) && (!to || s.service_date <= to)).sort((a, b) => a.service_date.localeCompare(b.service_date)).map(summary);
-}
-function aggregate(rows) {
-  const n = rows.length; const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
-  const present = sum('present_count'); const rated = rows.filter((r) => r.attendance_rate !== null);
-  return {
-    services: n, total_attendance: present, first_timers: sum('first_timer_count'), returning: sum('returning_count'), absent: sum('absent_count'),
-    average_attendance: n ? round1(present / n) : 0,
-    highest: n ? rows.reduce((a, r) => (r.present_count > a.present_count ? r : a), rows[0]) : null,
-    lowest: n ? rows.reduce((a, r) => (r.present_count < a.present_count ? r : a), rows[0]) : null,
-    average_rate: rated.length ? round1(rated.reduce((a, r) => a + r.attendance_rate, 0) / rated.length) : null,
-  };
-}
-function monthlyBreakdown(rows) {
-  const map = new Map();
-  for (const r of rows) {
-    const key = r.service_date.slice(0, 7);
-    const m = map.get(key) || { month: key, services: 0, present: 0, first_timers: 0, returning: 0, absent: 0 };
-    m.services++; m.present += r.present_count; m.first_timers += r.first_timer_count; m.returning += r.returning_count; m.absent += r.absent_count;
-    map.set(key, m);
-  }
-  return [...map.values()].sort((a, b) => a.month.localeCompare(b.month)).map((m) => ({ ...m, average: m.services ? round1(m.present / m.services) : 0 }));
-}
-function findService(id) { return load().services.find((s) => s.id === Number(id)); }
-function attendedBefore(personId, date) {
-  const d = load();
-  return d.records.some((r) => r.person_id === personId && r.status === 'present' && (d.services.find((s) => s.id === r.service_id)?.service_date || '') < date);
-}
-function autoClassify(person, date) {
-  return attendedBefore(person.id, date) || (person.date_first_attended && person.date_first_attended < date) ? 'returning' : 'first_timer';
-}
-function roster(service) {
-  const d = load();
-  return d.people.filter((p) => (p.status !== 'inactive' && !p.archived_at) || d.records.some((r) => r.service_id === service.id && r.person_id === p.id)).sort(byName).map((p) => {
-    const r = d.records.find((x) => x.service_id === service.id && x.person_id === p.id);
-    const before = attendedBefore(p.id, service.service_date);
-    const expected = before || (p.date_first_attended && p.date_first_attended < service.service_date) ? 'returning' : 'first_timer';
-    return { ...p, record_id: r?.id || null, att_status: r?.status || null, classification: r?.classification || null, recorded_at: r?.recorded_at || null,
-      recorded_by: r ? r.recorded_by_name || 'Imported staff' : null, attended_before: before ? 1 : 0, expected_classification: r?.classification || expected };
-  });
-}
-function rollbackFirstAttended(person, serviceDate) {
-  if (person.date_first_attended !== serviceDate) return;
-  const dates = presentRecordsOf(person.id).map((r) => r.service.service_date).sort();
-  person.date_first_attended = dates[0] || null;
-}
-function audit(entry) { load().audit.push({ id: nextId('audit'), user_id: ADMIN.id, created_at: nowSql(), user_name: ADMIN.display_name, ...entry }); }
 
 // ---------------------------------------------------------------------------
 // Demo data
@@ -246,13 +184,13 @@ function lastSundays(n) {
   for (let i = 0; i < n; i++) { const c = new Date(d); c.setDate(d.getDate() - i * 7); out.push(toISO(c)); }
   return out.reverse();
 }
-function demoStatus() { const d = load(); const people = d.people.filter((p) => p.is_demo).length; const services = d.services.filter((s) => s.is_demo).length; return { loaded: people > 0, people, services }; }
+function demoStatus() { const d = load(); const people = d.people.filter((p) => p.is_demo).length; return { loaded: people > 0, people, services: 0 }; }
 function demoLoad() {
   if (demoStatus().loaded) return { ...demoStatus(), message: 'Demo data is already loaded.' };
   const d = load(); const sundays = lastSundays(10);
   const statuses = ['regular', 'regular', 'member', 'member', 'new_believer', 'volunteer', 'first_timer'];
   let seed = 42; const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-  const people = [];
+  const created = [];
   for (let i = 1; i <= 24; i++) {
     const joinIdx = Math.min(sundays.length - 1, Math.floor(rand() * rand() * sundays.length));
     const p = { id: nextId('people'), first_name: 'Demo', last_name: `Person ${pad(i)}`, middle_name: null, photo: null, birthdate: null, sex: i % 2 ? 'male' : 'female',
@@ -260,28 +198,30 @@ function demoLoad() {
       status: joinIdx >= sundays.length - 1 ? 'first_timer' : statuses[i % statuses.length], date_registered: sundays[joinIdx], date_first_attended: null,
       notes: 'DEMO DATA — not a real person', is_demo: 1, created_at: nowSql(), updated_at: nowSql() };
     p.person_code = nextPersonCode(p.date_registered);
-    d.people.push(p); people.push({ p, joinIdx, faithfulness: 0.45 + rand() * 0.5 });
+    d.people.push(p); created.push({ p, joinIdx });
   }
-  sundays.forEach((date, idx) => {
-    let s = d.services.find((x) => x.service_date === date);
-    if (!s) { s = { id: nextId('services'), service_date: date, service_type: 'lifegen', notes: 'DEMO DATA', is_demo: 1, created_at: nowSql(), updated_at: nowSql() }; d.services.push(s); }
-    for (const { p, joinIdx, faithfulness } of people) {
-      if (idx < joinIdx) continue;
-      const present = idx === joinIdx ? true : rand() < faithfulness;
-      d.records.push({ id: nextId('records'), service_id: s.id, person_id: p.id, status: present ? 'present' : 'absent', classification: present ? (idx === joinIdx ? 'first_timer' : 'returning') : null,
-        recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', recorded_at: `${date} ${pad(7 + Math.floor(rand() * 3))}:${pad(10 + Math.floor(rand() * 40))}:00`, updated_at: nowSql() });
-      if (present && (!p.date_first_attended || p.date_first_attended > date)) p.date_first_attended = date;
+  // Attendance is only tracked for VIPs, so demo attendance is demo check-ins:
+  // each demo person gets a VIP registration and one validated check-in per
+  // Sunday they were "present" from their joining Sunday onwards.
+  d.vip_registrations = d.vip_registrations || [];
+  d.vip_checkins = d.vip_checkins || [];
+  for (const { p, joinIdx } of created) {
+    const reg = { id: (d.seq.vip_registrations = (d.seq.vip_registrations || 0) + 1), person_id: p.id, review_status: 'reviewed', created_at: nowSql() };
+    d.vip_registrations.push(reg);
+    for (let idx = joinIdx; idx < sundays.length; idx++) {
+      p.date_first_attended = p.date_first_attended || sundays[joinIdx];
+      d.vip_checkins.push({ id: (d.seq.vip_checkins = (d.seq.vip_checkins || 0) + 1), registration_id: reg.id, date_key: sundays[idx], status: 'valid', validated_at: nowSql(), created_at: nowSql() });
     }
-  });
+  }
   save();
   return { ...demoStatus(), message: 'Demo data loaded.' };
 }
 function demoRemove() {
   const d = load();
   const demoIds = new Set(d.people.filter((p) => p.is_demo).map((p) => p.id));
-  d.records = d.records.filter((r) => !demoIds.has(r.person_id));
-  d.audit = d.audit.filter((a) => !a.person_id || !demoIds.has(a.person_id));
-  d.services = d.services.filter((s) => !s.is_demo || d.records.some((r) => r.service_id === s.id));
+  const demoRegs = new Set((d.vip_registrations || []).filter((r) => demoIds.has(Number(r.person_id))).map((r) => Number(r.id)));
+  d.vip_checkins = (d.vip_checkins || []).filter((c) => !demoRegs.has(Number(c.registration_id)));
+  d.vip_registrations = (d.vip_registrations || []).filter((r) => !demoIds.has(Number(r.person_id)));
   d.people = d.people.filter((p) => !demoIds.has(p.id));
   save();
   return { ...demoStatus(), message: 'Demo data removed.' };
@@ -293,12 +233,13 @@ export const domain = {
   person: async_((id) => {
     const p = findPerson(id); if (!p) throw httpError(404, 'Person not found.');
     const d = load();
-    const history = d.records.filter((r) => r.person_id === p.id).map((r) => { const s = findService(r.service_id); return { id: r.id, service_id: s.id, service_date: s.service_date, status: r.status, classification: r.classification, recorded_at: r.recorded_at, recorded_by: r.recorded_by_name || 'Imported staff' }; })
+    // Attendance history exists only for VIPs: one entry per validated check-in.
+    const regs = new Set((d.vip_registrations || []).filter((r) => Number(r.person_id) === p.id).map((r) => Number(r.id)));
+    const history = (d.vip_checkins || []).filter((c) => regs.has(Number(c.registration_id)) && c.status === 'valid')
+      .map((c) => ({ id: c.id, date_key: c.date_key, service_date: c.date_key, status: 'present', classification: null, recorded_at: c.validated_at || c.created_at, recorded_by: null }))
       .sort((a, b) => b.service_date.localeCompare(a.service_date));
-    const since = p.date_first_attended || p.date_registered;
-    const servicesSince = d.services.filter((s) => s.service_date >= since).length;
     const dec = decorate(p);
-    return { ...dec, history, services_since: servicesSince, attendance_rate: servicesSince ? round1((dec.sundays_attended / servicesSince) * 100) : null };
+    return { ...dec, history, services_since: history.length, attendance_rate: null };
   }),
   createPerson: async_((body) => {
     const data = validatePerson(body || {}); const d = load();
@@ -354,45 +295,6 @@ export const domain = {
   deletePerson: async_((id) => {
     if (!findPerson(Number(id))) throw httpError(404, 'Person not found.');
     throw httpError(409, 'Permanent deletion is disabled to protect Lifegroup and attendance history. Archive the person instead.');
-  }),
-
-  // services / attendance
-  openService: async_((service_date) => {
-    if (!isSunday(service_date)) throw httpError(400, 'Lifegen attendance is Sunday only — please choose a Sunday.');
-    if (service_date > today()) throw httpError(400, 'Future Sundays cannot be recorded yet.');
-    const d = load(); let s = d.services.find((x) => x.service_date === service_date);
-    if (!s) { s = { id: nextId('services'), service_date, service_type: 'lifegen', notes: null, is_demo: 0, created_at: nowSql(), updated_at: nowSql() }; d.services.push(s); save(); }
-    return summary(s);
-  }),
-  mark: async_((serviceId, personId, status, classification) => {
-    const s = findService(serviceId); if (!s) throw httpError(404, 'Service not found.');
-    const p = findPerson(personId); if (!p) throw httpError(404, 'Person not found.');
-    if (!['present', 'absent'].includes(status)) throw httpError(400, 'Status must be present or absent.');
-    if (classification && !['first_timer', 'returning'].includes(classification)) throw httpError(400, 'Invalid classification.');
-    const d = load();
-    let r = d.records.find((x) => x.service_id === s.id && x.person_id === p.id);
-    const old = r ? { ...r } : null;
-    if (status === 'present') classification = classification || old?.classification || autoClassify(p, s.service_date); else classification = null;
-    if (r && r.status === status && (r.classification || null) === (classification || null)) {
-      if (status === 'present') { promoteVipRegularIfCompleted(p.id); promoteVipMemberIfEligible(p.id); }
-      return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: true };
-    }
-    if (r) Object.assign(r, { status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', updated_at: nowSql() });
-    else { r = { id: nextId('records'), service_id: s.id, person_id: p.id, status, classification, recorded_by: ADMIN.id, recorded_by_name: ADMIN.display_name, source: 'staff', recorded_at: nowSql(), updated_at: nowSql() }; d.records.push(r); }
-    audit({ service_id: s.id, person_id: p.id, action: old ? 'update' : 'mark', old_status: old?.status || null, new_status: status, old_classification: old?.classification || null, new_classification: classification });
-    if (status === 'present') { if (!p.date_first_attended || p.date_first_attended > s.service_date) p.date_first_attended = s.service_date; promoteVipRegularIfCompleted(p.id); promoteVipMemberIfEligible(p.id); }
-    else if (old?.status === 'present') rollbackFirstAttended(p, s.service_date);
-    save();
-    return { record: { ...r, recorded_by_name: ADMIN.display_name }, summary: summary(s), already_marked: false };
-  }),
-  undoMark: async_((serviceId, personId) => {
-    const d = load(); const r = d.records.find((x) => x.service_id === Number(serviceId) && x.person_id === Number(personId));
-    if (!r) throw httpError(404, 'No attendance record to undo.');
-    d.records = d.records.filter((x) => x !== r);
-    audit({ service_id: r.service_id, person_id: r.person_id, action: 'undo', old_status: r.status, new_status: null, old_classification: r.classification, new_classification: null });
-    if (r.status === 'present') rollbackFirstAttended(findPerson(r.person_id), findService(r.service_id).service_date);
-    save();
-    return { summary: summary(findService(serviceId)) };
   }),
 
   // dashboard / reports

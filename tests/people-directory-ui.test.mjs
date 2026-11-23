@@ -28,12 +28,14 @@ test('People search, pagination and empty states remain available',()=>{
  assert.match(people,/can\('people:write'\)/);
 });
 
-test('People profile has readable navigable sections',()=>{
+test('People profile shows details without the removed attendance section',()=>{
  assert.match(profile,/id="personDetails"/);
- assert.match(profile,/id="personAttendance"/);
- assert.match(profile,/aria-label="Profile sections"/);
+ // Sunday attendance was removed from the profile along with the attendance
+ // feature, so there is no attendance section or section tab strip to render.
+ assert.doesNotMatch(profile,/id="personAttendance"/);
+ assert.doesNotMatch(profile,/Attendance history/);
+ assert.doesNotMatch(profile,/aria-label="Profile sections"/);
  assert.match(css,/\.people-directory__tabs/);
- assert.match(css,/\.people-profile__tab/);
 });
 
 test('Person registration shows essential fields first without dropping optional data',()=>{
