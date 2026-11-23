@@ -100,7 +100,10 @@ async function topUpToSix(existingNets) {
         await call('assignLifegroup', Number(leaderCell.lifegroup_id), Number(cellLeader.id), { role: 'member', tier: 'new' });
         await call('setDiscipleshipClassification', Number(cellLeader.id), 'cell_leader', 'Cell Leader');
         for (let i = 0; i < PER_CELL; i += 1) {
-          const member = await person(`Friend${i + 1}`, cellName, sex);
+          // Real-looking names, so the demo reads like a church rather than
+          // a list of stand-ins. Each full name is handed out only once.
+          const { firstName, lastName } = nextName(sex);
+          const member = await person(firstName, lastName, sex);
           await call('assignLifegroup', Number(cell.id), Number(member.id), { role: 'member', tier: i < 2 ? 'solid' : 'new' });
         }
         added += 1;
@@ -109,6 +112,25 @@ async function topUpToSix(existingNets) {
     }
   }
   return added;
+}
+
+// Real-looking names for the people in the Cells. Deterministic, and each full
+// name is handed out once, so no two people share a name.
+const FIRST_FEMALE = ['Maria Angelica','Andrea','Patricia','Juliana','Rhea','Kristine','Angeline','Maricris','Jasmine','Lorraine','Bernadette','Charmaine','Dianne','Elaine','Ferdilyn','Grace Ann','Hazel','Ivy','Joanna','Karen','Lovely','Maureen','Nadine','Olivia','Pauline','Queenie','Rochelle','Sheena','Tricia','Venus','Wendy','Yvonne','Abigail','Bianca','Carla','Danica','Erika Mae','Faith','Gillian','Hannah','Isabel','Janice','Katrina','Liza Marie','Michelle','Nikki','Odette','Precious','Rachelle','Samantha','Tanya','Ursula','Veronica','Wilma','Xyza','Yvette','Zara'];
+const FIRST_MALE = ['Mark Anthony','Joshua','Christian','Michael','Jose Mari','Paolo','Ramon','Angelo','Benedict','Carlo','Dominic','Emmanuel','Francis','Gabriel','Harvey','Ian','Jerome','Kevin','Lorenzo','Marvin','Nathaniel','Oliver','Patrick','Quincy','Rafael','Samuel','Timothy','Ulysses','Victor','Wesley','Xander','Yohann','Zachary','Adrian','Bryan','Cedric','Dennis','Edward','Ferdinand','Gerald','Hector','Ivan','Jomar','Kenneth','Leonardo','Melvin','Noel','Oscar','Philip','Rico','Salvador','Tristan','Vincent','Warren','Yasser','Zoren'];
+const SURNAMES = ['Reyes','Santos','Cruz','Bautista','Ocampo','Garcia','Mendoza','Torres','Flores','Ramos','Villanueva','Aquino','Castillo','Dela Cruz','Navarro','Salazar','Mercado','Pascual','Alvarez','Domingo','Esguerra','Fajardo','Gonzales','Hernandez','Ibarra','Jimenez','Lopez','Magbanua','Nolasco','Ortega','Paredes','Quiambao','Rivera','Soriano','Tolentino','Valdez'];
+const usedNames = new Set();
+let nameSeed = 20261116;
+const nameRand = () => { nameSeed = (nameSeed * 1103515245 + 12345) & 0x7fffffff; return nameSeed / 0x7fffffff; };
+function nextName(sex) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const pool = sex === 'female' ? FIRST_FEMALE : FIRST_MALE;
+    const firstName = pool[Math.floor(nameRand() * pool.length)];
+    const lastName = SURNAMES[Math.floor(nameRand() * SURNAMES.length)];
+    const full = `${firstName} ${lastName}`;
+    if (!usedNames.has(full)) { usedNames.add(full); return { firstName, lastName }; }
+  }
+  throw new Error('Ran out of unused names.');
 }
 
 async function run() {
@@ -151,6 +173,7 @@ async function run() {
       console.log(`  network leader: ${name} → ${net.name} (${net.id})`);
 
       const leaderCell = await call('ensureNetworkLeaderGroup', Number(net.id));
+      const sex = group.gender === 'boys' ? 'male' : 'female';
       for (const cellName of CELL_LEADERS[name] || []) {
         const cellLeader = await person(cellName, 'Borromeo', group.gender === 'boys' ? 'male' : 'female');
         const cell = await call('createLifegroup', {
@@ -161,7 +184,10 @@ async function run() {
         await call('assignLifegroup', Number(leaderCell.lifegroup_id), Number(cellLeader.id), { role: 'member', tier: 'new' });
         await call('setDiscipleshipClassification', Number(cellLeader.id), 'cell_leader', 'Cell Leader');
         for (let i = 0; i < PER_CELL; i += 1) {
-          const member = await person(`Friend${i + 1}`, cellName, group.gender === 'boys' ? 'male' : 'female');
+          // Real-looking names, so the demo reads like a church rather than
+          // a list of stand-ins. Each full name is handed out only once.
+          const { firstName, lastName } = nextName(sex);
+          const member = await person(firstName, lastName, sex);
           await call('assignLifegroup', Number(cell.id), Number(member.id), {
             role: 'member', tier: i < 2 ? 'solid' : 'new',
           });

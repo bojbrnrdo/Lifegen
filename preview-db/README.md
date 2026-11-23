@@ -58,3 +58,19 @@ Youth Welfare preview: open `/youth-welfare` and use `demo-youth@lifegen.local` 
 - Never run migrations/seeds over the wire while a transaction from another
   client could interleave; apply-migrations/seed-demo open PGlite directly
   with the gateway stopped.
+
+## Realistic names in the demo
+
+The seeders used to write stand-ins such as `Friend1 Kai`, `Demo Person 01` and
+`Test VIP`. `seed-pastoral-hierarchy.mjs` now generates real-looking Filipino
+names instead, matched to sex and unique across the church.
+
+For a database seeded before that change, run:
+
+```bash
+BASE_URL=http://127.0.0.1:3000 node preview-db/rename-demo-people.mjs
+```
+
+It renames only people who still carry a placeholder name and changes nothing
+else: person codes, Cell membership, attendance and status all stay. Safe to
+re-run — it reports "No placeholder names left" once there is nothing to do.

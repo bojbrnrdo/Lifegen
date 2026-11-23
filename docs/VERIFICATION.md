@@ -79,6 +79,39 @@ preview database, and the seven browser suites on a clean reset:
 **180 checks, all passed** — plus a live end-to-end walk of
 Bishop → Roxxane Network → Kai Cell → member with no JavaScript errors.
 
+## Demo data: real names instead of stand-ins (this revision)
+
+Every demo record now carries a realistic name, so the portal can be reviewed
+as if it held real church records.
+
+| Before | After |
+| --- | --- |
+| `Friend1 Kai`, `Friend2 Kai` … (216) | `Ramon Castillo`, `Michael Mercado` … |
+| `Demo Person 01` … `Demo Person 24` | `Leonardo Soriano`, `Zachary Santos` … |
+| `Test VIP` | `Philip Domingo` |
+| 44 leaders all surnamed `Borromeo` | only the two pastors share that surname |
+| 25 people with no sex recorded | every person has one |
+
+**What did not change:** person codes (`LG-2026-0065` still identifies the same
+person), Cell membership, attendance history, statuses, and the structure —
+2 pastors, 6 Network Leaders, 36 Cells, 258 people in Cells, 285 people total.
+
+Two tools, both idempotent:
+
+- `preview-db/rename-demo-people.mjs` — renames anything still shaped like a
+  placeholder. Recognises `FriendN`, `Demo`/`Person NN` and `Test VIP`; the
+  first version checked only one of those shapes and silently skipped 24 rows.
+- `preview-db/seed-pastoral-hierarchy.mjs` — now generates real names directly,
+  so a rebuild does not reintroduce placeholders. Verified in isolation: 216
+  generated, 216 unique, sex-appropriate.
+
+`updatePerson` was proven to send only the fields supplied: a rename left code,
+sex, status, registration date, attendance and `is_demo` unchanged. Cell
+membership lives outside the person record (`/api/tracker/lifegroupPeopleIndex`)
+and was checked separately before and after.
+
+`npm test` 442/442 pass; the change touches data only, no application code.
+
 ## Lifegroups: numbers first, clutter last (this revision)
 
 The Lifegroups landing page was reorganised so the state of the church is the
