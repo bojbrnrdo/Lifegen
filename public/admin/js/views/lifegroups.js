@@ -306,33 +306,110 @@ export async function renderLifegroups({main, query}) {
  }
 
  const filters={q:query.q||'',gender:query.gender||'',status:query.status||'active'};
+ // The one-line summary under the title is fetched first, so the page never
+ // renders a "0 Cells" that later has to correct itself.
+ let allNets=[],allGroups=[];
+ try{ [allGroups,allNets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]); }
+ catch(e){ allGroups=[];allNets=[]; }
+ const FULL=lifegroupHeadline(allNets,allGroups,{status:'active'});
+ // ONE thing at a time. The page opens on a short menu of what you might want
+ // to do; only the chosen task shows its own tools. This is what keeps it usable
+ // on a phone and readable on a desktop, where the old page stacked everything.
+ const TABS=[
+  {id:'directory',label:'Who leads whom',icon:'group'},
+  {id:'find',label:'Find a person',icon:'search'},
+  {id:'needs',label:'Not in a Cell',icon:'user'},
+  {id:'progress',label:'How groups are doing',icon:'chart'},
+  ...(can('people:view')?[{id:'people',label:'Everyone registered',icon:'people'}]:[]),
+ ];
+ const startTab=TABS.some(t=>t.id===query.tab)?query.tab:'directory';
  main.innerHTML=html`
- <section class="lifegroups-page">
- <div class="page-header lifegroups-page__header"><div><h1>Lifegroups</h1><p class="sub">Who meets with whom, and how each Cell is doing.</p></div>
- <div class="page-actions">${can('lifegroups:manage')?html`<button class="btn btn--primary" id="addNew" title="Create a Network, a Cell Leader or a member">${icon('plus')} Add New</button><button class="btn" id="removeFromLifegroups" title="Remove someone from a group, keeping their record and history">${icon('trash',16)} Remove</button>`:''}</div></div>
- <div id="treeSummary" class="lifegroups-page__summary lifegroups-page__numbers is-loading" aria-live="polite"><div class="lifegroups-page__number">Loading the numbers…</div></div>
- <div class="toolbar lg-tree-toolbar" role="search"><div class="gsearch grow" style="max-width:none">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search a Network or a Cell Leader…" aria-label="Search Networks and Cell Leaders" /></div>
- <div class="lg-gender-filter" role="group" aria-label="Show only boys or only girls"><button class="lg-gender-filter__button" type="button" data-gender-filter="" aria-label="Show all Networks" title="Show all Networks">${icon('group',18)} <span>Everyone</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="boys" aria-label="Show only boys' Networks" title="Show only boys' Networks">${icon('mars',18)} <span>Boys</span></button><button class="lg-gender-filter__button" type="button" data-gender-filter="girls" aria-label="Show only girls' Networks" title="Show only girls' Networks">${icon('venus',18)} <span>Girls</span></button></div>
- <select id="treeStatus" aria-label="Show which groups"><option value="active">Active only</option><option value="all">Everything</option><option value="inactive">Removed only</option></select>
- <button class="btn lifegroups-page__refresh" id="treeRefresh" title="Reload the latest numbers" aria-label="Reload the latest numbers">${icon('undo',17)} <span>Refresh</span></button></div>
+ <section class="lifegroups-page lifegroups-page--focused">
+  <div class="lg-head">
+   <div class="lg-head__text">
+    <h1>Lifegroups</h1>
+    <p class="sub">${FULL.cellLeaders} Cells · ${FULL.members} people</p>
+   </div>
+   ${can('lifegroups:manage')?html`<button class="btn btn--primary lg-head__add" id="addNew">${icon('plus')} <span>Add New</span></button>`:''}
+  </div>
 
- <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
- <div id="treeNotice" aria-live="polite"></div>
- <div id="findPersonPanel" class="lifegroups-page__find"></div>
- <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
- <div class="lifegroups-page__extras">
- <details class="card" id="allPeoplePanel"><summary class="lifegroups-page__extra-head">${icon('people',18)} <span>Everyone registered</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="allPeopleBody"></div></details>
- <details class="card" id="needsPanel"><summary class="lifegroups-page__extra-head">${icon('user',18)} <span>Not in a Cell yet</span><span class="small muted lifegroups-page__extra-hint">people waiting for a group</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="needsBody"></div></details>
- <details class="card" id="progressPanel"><summary class="lifegroups-page__extra-head">${icon('chart',18)} <span>How groups are doing</span><span class="small muted lifegroups-page__extra-hint">meetings held in the last weeks</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body" id="progressBody"></div></details>
- <details class="card" id="lifegroupsHelp"><summary class="lifegroups-page__extra-head">${icon('info',18)} <span>The three words you need</span><span class="small muted lifegroups-page__extra-hint">Network · Cell · Member</span>${icon('chevR',16)}</summary><div class="lifegroups-page__extra-body lifegroups-page__help-body">
-   <ul>
-    <li><b>Network</b> — a group of Cells, all boys or all girls. A Network Leader looks after it.</li>
-    <li><b>Cell</b> (also called a Lifegroup) — one weekly small group, with its own Cell Leader.</li>
-    <li><b>Member</b> — one person in a Cell.</li>
-   </ul>
-   <p class="small muted">Nothing is deleted when someone leaves. Their record and attendance stay, and they move to <b>Former members</b>.</p>
-  </div></details>
- </div></section>`;
+  <nav class="lg-tabs" role="tablist" aria-label="Lifegroups sections">
+   ${TABS.map(t=>html`<button type="button" role="tab" class="lg-tabs__tab" id="lgTab-${t.id}" data-tab="${t.id}"
+     aria-selected="${t.id===startTab?'true':'false'}" aria-controls="lgPanel-${t.id}">
+     ${icon(t.icon,18)}<span>${t.label}</span>${t.id==='needs'&&FULL.attention?html`<b class="lg-tabs__count">${FULL.attention}</b>`:''}</button>`)}
+  </nav>
+
+  <div class="lg-panel" role="tabpanel" id="lgPanel-directory" aria-labelledby="lgTab-directory">
+   <div class="lg-filterbar">
+    <div class="lg-search">${icon('search',17)}<input id="treeQ" type="search" value="${filters.q}" placeholder="Search a Cell or leader…" aria-label="Search Cells and leaders" /></div>
+    <div class="lg-seg" role="group" aria-label="Show everyone, only boys, or only girls">
+     <button type="button" data-gender-filter="" aria-label="Show everyone">Everyone</button>
+     <button type="button" data-gender-filter="boys" aria-label="Show only boys' Networks">${icon('mars',16)} Boys</button>
+     <button type="button" data-gender-filter="girls" aria-label="Show only girls' Networks">${icon('venus',16)} Girls</button>
+    </div>
+    <details class="lg-more">
+     <summary aria-label="More options and filters">${icon('settings',17)}<span>More</span></summary>
+     <div class="lg-more__body">
+      <label class="lg-more__field">Show <select id="treeStatus"><option value="active">Active groups</option><option value="all">Everything</option><option value="inactive">Removed only</option></select></label>
+      <button class="btn btn--sm" type="button" id="treeRefresh">${icon('undo',15)} Refresh</button>
+      ${can('lifegroups:manage')?html`<button class="btn btn--sm btn--danger-ghost" type="button" id="removeFromLifegroups">${icon('trash',15)} Remove someone</button>`:''}
+      <p class="lg-more__hint">Numbers at the top count what these filters show.</p>
+     </div>
+    </details>
+   </div>
+   <div id="treePeopleMatches" role="region" aria-label="Matching People" hidden></div>
+   <div id="treeNotice" aria-live="polite"></div>
+   <div id="treeSummary" class="lifegroups-page__numbers" aria-live="polite"><div class="lifegroups-page__number">Loading…</div></div>
+   <div id="lifegroupsDirectory" class="lifegroups-page__directory" aria-label="Networks and Cell Leaders"></div>
+  </div>
+
+  <div class="lg-panel" role="tabpanel" id="lgPanel-find" aria-labelledby="lgTab-find" hidden>
+   <div id="findPersonPanel" class="lifegroups-page__find"></div>
+  </div>
+
+  <div class="lg-panel" role="tabpanel" id="lgPanel-needs" aria-labelledby="lgTab-needs" hidden>
+   <div class="card"><div class="card__body card__body--flush" id="needsBody"><div class="loading">Loading…</div></div></div>
+  </div>
+
+  <div class="lg-panel" role="tabpanel" id="lgPanel-progress" aria-labelledby="lgTab-progress" hidden>
+   <div class="card"><div class="card__body card__body--flush" id="progressBody"><div class="loading">Loading…</div></div></div>
+  </div>
+
+  ${can('people:view')?html`<div class="lg-panel" role="tabpanel" id="lgPanel-people" aria-labelledby="lgTab-people" hidden>
+   <div class="card"><div class="card__body card__body--flush" id="allPeopleBody"><div class="loading">Loading…</div></div></div>
+  </div>`:''}
+
+  <details class="card lg-about"><summary><span>What "Network", "Cell" and "Member" mean</span>${icon('chevR',16)}</summary>
+   <div class="lg-about__body">
+    <dl>
+     <div><dt>Network</dt><dd>A group of Cells, all boys or all girls, looked after by a Network Leader.</dd></div>
+     <div><dt>Cell</dt><dd>One weekly small group with its own Cell Leader. Also called a Lifegroup.</dd></div>
+     <div><dt>Member</dt><dd>One person in a Cell.</dd></div>
+    </dl>
+    <p class="small muted">Nothing is deleted when someone leaves. Their record and attendance stay, and they move to Former members.</p>
+   </div>
+  </details>
+ </section>`;
+
+ const openTab=(id,save=true)=>{
+  const known=TABS.some(t=>t.id===id)?id:'directory';
+  main.querySelectorAll('.lg-tabs__tab').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.tab===known)));
+  TABS.forEach(t=>{const panel=main.querySelector('#lgPanel-'+t.id);if(panel)panel.hidden=t.id!==known;});
+  if(save&&history.replaceState)history.replaceState(null,'','#/lifegroups'+(known==='directory'?'':api.qs({tab:known})));
+  // Draw a section only when it is first opened, so the page stays light.
+  const lazy={'needs':['#needsBody',drawNeeds],'progress':['#progressBody',drawProgressTab],'people':['#allPeopleBody',drawAllPeople]}[known];
+  if(lazy&&!lazy[1])return;
+  if(lazy){const body=main.querySelector(lazy[0]);if(body&&!body.dataset.loaded){body.dataset.loaded='yes';lazy[1](body);}}
+ };
+ main.querySelectorAll('.lg-tabs__tab').forEach(button=>{
+  button.addEventListener('click',()=>{openTab(button.dataset.tab);if(button.dataset.tab==='find')ensureFind();});
+  button.addEventListener('keydown',event=>{
+   // Arrow keys move between tabs, as a tablist should.
+   const list=[...main.querySelectorAll('.lg-tabs__tab')],index=list.indexOf(button);
+   const next=event.key==='ArrowRight'?list[(index+1)%list.length]:event.key==='ArrowLeft'?list[(index-1+list.length)%list.length]:null;
+   if(next){event.preventDefault();next.focus();openTab(next.dataset.tab);next.dataset.tab==='find'&&ensureFind();}
+  });
+ });
  main.querySelector('#addNew')?.addEventListener('click',()=>createAddNewModal({onSaved:()=>{
   // A new Cell or member changes the find-person index too.
   peopleIndex=null;peopleIndexError='';drawFindPanel();loadPeopleIndex();
@@ -502,8 +579,8 @@ export async function renderLifegroups({main, query}) {
   catch(error){ peopleIndexError=error.message||'Unable to load people.'; }
   if(main.contains(findPanel))drawFindPanel();
  };
- drawFindPanel();
- loadPeopleIndex();
+ // Drawn when the "Find a person" tab is first opened; the index loads then too.
+ const ensureFind=()=>{ drawFindPanel(); loadPeopleIndex(); };
 
  function afterRemove(){
   // People may have moved, so the find box reloads with the tree.
@@ -545,20 +622,28 @@ export async function renderLifegroups({main, query}) {
   });
  }
 
+ let prefetched={groups:allGroups,nets:allNets};
  async function load(force=false){
   const seq=++sequence;
   if(!cache||force){
    try{
-    const [groups,nets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]);
-    if(seq!==sequence||!main.contains(directory))return;
-    cache={groups,nets};
+    // The page already fetched this to draw its summary; reuse it instead of
+    // asking the server twice on first paint. A refresh always refetches.
+    if(!force&&prefetched.nets){ cache={groups:prefetched.groups,nets:prefetched.nets}; prefetched={}; }
+    else{
+     const [groups,nets]=await Promise.all([api.lifegroups({status:'all'}),api.networks({status:'all'})]);
+     if(seq!==sequence||!main.contains(directory))return;
+     cache={groups,nets};
+    }
    }catch(e){
     if(seq===sequence)directory.innerHTML=html`<div class="alert alert--error">${e.message}</div>`;
     return;
    }
   }
   if(seq!==sequence||!main.contains(directory))return;
-  history.replaceState(null,'','#/lifegroups'+api.qs({q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
+  // Keep the open section in the URL, so a refresh or a shared link returns here.
+  const openSection=main.querySelector('.lg-tabs__tab[aria-selected="true"]')?.dataset.tab||'directory';
+  history.replaceState(null,'','#/lifegroups'+api.qs({tab:openSection==='directory'?'':openSection,q:filters.q,gender:filters.gender,status:filters.status==='active'?'':filters.status}));
   renderUnassigned();
   renderDirectory();
   repaintFind?.();
@@ -603,14 +688,9 @@ export async function renderLifegroups({main, query}) {
  genderButtons.forEach(button=>button.addEventListener('click',()=>{filters.gender=button.dataset.genderFilter;syncGender();load();}));
  main.querySelector('#treeStatus').addEventListener('change',e=>{filters.status=e.target.value;load();});
  main.querySelector('#treeRefresh').addEventListener('click',()=>load(true));
- const allPeople=main.querySelector('#allPeoplePanel');
- allPeople.addEventListener('toggle',()=>{if(allPeople.open&&!allPeople.dataset.loaded){allPeople.dataset.loaded='yes';drawAllPeople(main.querySelector('#allPeopleBody'));}});
- const needs=main.querySelector('#needsPanel'),progress=main.querySelector('#progressPanel');
- needs.addEventListener('toggle',()=>{if(needs.open&&!needs.dataset.loaded){needs.dataset.loaded='yes';drawNeeds(main.querySelector('#needsBody'));}});
- progress.addEventListener('toggle',()=>{if(progress.open&&!progress.dataset.loaded){progress.dataset.loaded='yes';drawProgressTab(main.querySelector('#progressBody'));}});
- if(query.tab==='people')allPeople.open=true;
- if(query.tab==='needs')needs.open=true;
- if(query.tab==='progress')progress.open=true;
+ // Open the requested section (or the directory) and draw it.
+ openTab(startTab,false);
+ if(startTab==='find')ensureFind();
  main.__liveReload=()=>load(true);
  return load();
 }
@@ -1185,6 +1265,6 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
   main.querySelector('#delNet')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `Delete ${n.name}?`, message: 'This Network has no Cell Leaders, so it can be removed.', confirmText: 'Delete', danger: true });
     if (!ok) return;
-    try { await api.deleteNetwork(n.id); toast('Network deleted.', 'info'); location.hash = '#/lifegroups?tab=networks'; } catch (e) { toast(e.message, 'error'); }
+    try { await api.deleteNetwork(n.id); toast('Network deleted.', 'info'); location.hash = '#/lifegroups'; } catch (e) { toast(e.message, 'error'); }
   });
 }

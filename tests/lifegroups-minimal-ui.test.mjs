@@ -37,14 +37,22 @@ test('the shared Lifegroup tree model keeps its three levels',()=>{
  assert.equal(arrangeLifegroupTree(opened).nodes.length,2);
 });
 
-test('Lifegroups toolbar and optional extras remain functional but compact',()=>{
+test('each section is a tab, and only the chosen one is shown',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- for(const id of ['treeQ','treeStatus','treeRefresh','needsPanel','progressPanel','treeSummary'])
-  assert.ok(page.includes('id="'+id+'"'));
- for(const name of ['genderButtons','drawNeeds','drawProgressTab','findUnassignedGroups'])
-  assert.ok(page.includes(name));
- assert.match(css, /\.lifegroups-page__summary/);
- assert.match(css, /\.lifegroups-page__extras/);
+ // The controls still exist, but live inside their own section.
+ for(const id of ['treeQ','treeStatus','treeRefresh','treeSummary','lgPanel-needs','lgPanel-progress'])
+  assert.ok(page.includes('id="'+id+'"'), 'missing '+id);
+ for(const name of ['openTab','drawNeeds','drawProgressTab','findUnassignedGroups'])
+  assert.ok(page.includes(name), 'missing '+name);
+ // A tablist with panels, and no panel opened by default other than the first.
+ assert.match(page, /role="tablist"/);
+ assert.match(page, /role="tabpanel"/);
+ assert.match(page, /panel\.hidden=t\.id!==known/);
+ // The old always-open panels are gone.
+ for(const dead of ['allPeoplePanel','needsPanel','progressPanel','lifegroups-page__extras'])
+  assert.ok(!page.includes(dead), 'old stacked panel removed: '+dead);
+ assert.match(css, /\.lg-tabs/);
+ assert.match(css, /\.lg-panel\[hidden\]/);
 });
 
 test('Cell Leader details prioritize an avatar and a unified member list',()=>{
@@ -84,7 +92,10 @@ test('the directory is the only view and the map build is gone from the project'
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page,/let cache=null,sequence=0/);
  for(const label of ['Everyone','Boys','Girls'])
-  assert.ok(page.includes('<span>'+label+'</span>'),label);
+  assert.ok(page.includes('>'+label+'<')||page.includes(label+'</button>'),label);
+ // The filter is a pressed-state group, which screen readers announce correctly.
+ assert.match(page, /data-gender-filter=""/);
+ assert.match(page, /aria-pressed/);
  const pkg=JSON.parse(read('../package.json'));
  assert.ok(!pkg.scripts['build:lifegroups']);
  assert.ok(!pkg.scripts.build.includes('lifegroups'));
@@ -99,16 +110,30 @@ test('the directory is the only view and the map build is gone from the project'
  assert.ok(!index.includes('react-lifegroups'));
 });
 
-test('the numbers come first and the explanations come last',()=>{
+test('the numbers sit with the directory, and the explanations at the very bottom',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  const at=(needle)=>page.indexOf(needle);
- // Numbers sit above the search toolbar and the directory, so the first thing
- // on the page is what is true today, not a control to operate.
- assert.ok(at('id="treeSummary"')<at('id="treeQ"'),'numbers above the search box');
+ // Numbers belong to the directory section, right above the list they describe.
+ assert.ok(at('id="treeSummary"')>at('id="lgPanel-directory"'),'numbers inside the directory panel');
  assert.ok(at('id="treeSummary"')<at('id="lifegroupsDirectory"'),'numbers above the directory');
- // "Add New" is in the header, level with the title.
- assert.ok(at('id="addNew"')<at('id="treeSummary"'),'the primary action sits in the header');
- // The dictionary lives at the bottom with the other optional detail.
- assert.ok(at('id="lifegroupsHelp"')>at('id="lifegroupsDirectory"'),'the word list is at the bottom');
- assert.ok(at('id="lifegroupsHelp"')>at('id="progressPanel"'),'below the other optional panels');
+ // The primary action stays in the header, level with the title.
+ assert.ok(at('id="addNew"')<at('role="tablist"'),'the primary action sits in the header');
+ // The word list is reference material and comes last.
+ assert.ok(at('class="card lg-about"')>at('id="lgPanel-directory"'),'glossary after the sections');
+ assert.ok(at('class="card lg-about"')>at('id="lgPanel-needs"'),'glossary last');
+ assert.match(css, /\.lg-about/);
+});
+
+test('the page is usable on a phone: full-width controls and 44px targets',()=>{
+ const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
+ // Every interactive control the page adds must meet the minimum touch size,
+ // and the search must be 16px so iOS does not zoom the page on focus.
+ assert.match(css, /\.lg-search input\{[^}]*font-size:1rem/);
+ assert.match(css, /@media\(max-width:640px\)/);
+ assert.match(css, /\.lg-tabs\{[^}]*overflow-x:auto/, 'tabs scroll sideways instead of stacking');
+ assert.match(css, /\.lg-search\{flex:1 1 100%\}/, 'search takes its own row on a phone');
+ assert.match(css, /\.lg-more__body\{left:0;right:0;width:auto\}/, 'the options popover cannot overflow a phone');
+ // Icon-only Add New on small screens, with the label kept for screen readers.
+ assert.match(css, /\.lg-head__add span\{display:none\}/);
+ assert.match(page, /id="addNew"/);
 });

@@ -1401,38 +1401,15 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 
 /* Lifegroups: compact network-first workspace. Do not override other Admin pages. */
 .lifegroups-page{display:grid;gap:14px;min-width:0}
-.lifegroups-page__header{margin-bottom:0;align-items:center}
-.lifegroups-page__header h1{font-size:clamp(1.42rem,2.4vw,1.78rem);letter-spacing:-.035em}
-.lifegroups-page__header .sub{margin:5px 0 0;color:#748b7a;font-size:.88rem}
-.lifegroups-page .lg-tree-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(120px,145px) auto;align-items:center;gap:10px;margin:0;padding:10px;border:1px solid #dfebe1;border-radius:13px;background:#fff}
-.lifegroups-page .lg-tree-toolbar .gsearch{grid-column:auto;min-width:0}
-.lifegroups-page .lg-tree-toolbar select{height:42px;border-radius:9px;border:1px solid #e1ebe4}
-.lifegroups-page__refresh{height:42px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
 .lifegroups-page__summary{display:flex;align-items:center;gap:8px 19px;flex-wrap:wrap;padding:0 5px;min-height:24px}
 .lifegroups-page__summary[hidden]{display:none}
 .lifegroups-page__summary>span{display:inline-flex;align-items:center;gap:6px;color:#728579;font-size:.8rem}
 .lifegroups-page__summary svg{color:#367b54}
 .lifegroups-page__summary b{font-size:.86rem;color:#205b3a;font-variant-numeric:tabular-nums}
 .lifegroups-page .lfg{border-radius:15px;border-color:#dce9df;box-shadow:none}
-.lifegroups-page__extras{display:grid;gap:10px;margin-top:2px}
-.lifegroups-page__extras .card{margin:0;box-shadow:none;border-radius:11px}
-.lifegroups-page__extra-head{display:flex;align-items:center;gap:10px;padding:16px 18px;font-size:.88rem;font-weight:650;color:#284735;cursor:pointer;list-style:none}
-.lifegroups-page__extra-head::-webkit-details-marker{display:none}
-.lifegroups-page__extra-head>svg:first-child{color:#317b52}
-.lifegroups-page__extra-head>span{flex:1}
-.lifegroups-page__extra-head>svg:last-child{transition:transform .2s ease;color:#8ca398}
-.lifegroups-page__extras details[open] .lifegroups-page__extra-head>svg:last-child{transform:rotate(90deg)}
-.lifegroups-page__extra-head:focus-visible{outline:2px solid #338458;outline-offset:-2px}
-.lifegroups-page__extra-body{padding:0 14px 14px}
-@media(max-width:1100px){.lifegroups-page .lg-tree-toolbar{grid-template-columns:minmax(160px,1fr) auto auto}.lifegroups-page .lg-tree-toolbar .gsearch{grid-column:1/3}}
 @media(max-width:670px){
  .lifegroups-page{gap:12px}
- .lifegroups-page .lg-tree-toolbar{grid-template-columns:minmax(0,1fr) auto;padding:9px}
- .lifegroups-page .lg-tree-toolbar .gsearch{grid-column:1/-1}
- .lifegroups-page .lg-tree-toolbar .lg-gender-filter{min-width:0}
- .lifegroups-page .lg-tree-toolbar #treeStatus{min-width:0}
- .lifegroups-page__refresh{grid-column:1/-1;justify-content:center}
- .lifegroups-page__summary{gap:8px 13px}
+  .lifegroups-page__summary{gap:8px 13px}
  .lifegroups-page__summary>span{font-size:.73rem}
 }
 /* Cell Leader details: the people list is the primary content; history is on demand. */
@@ -1501,7 +1478,7 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
  .lifegroup-detail__person{padding:12px;gap:10px}
  .lifegroup-detail__member-menu{right:6px;max-width:calc(100% - 12px)}
 }
-@media(prefers-reduced-motion:reduce){.lifegroups-page__extra-head>svg:last-child,.lifegroup-detail__info>summary svg:last-child,.lifegroup-detail__progress>summary svg:last-child{transition:none}}
+@media(prefers-reduced-motion:reduce){.lifegroup-detail__info>summary svg:last-child,.lifegroup-detail__progress>summary svg:last-child{transition:none}}
 
 
 /* Lifegroups: compact, permission-gated Network / Cell Leader / Member removal. */
@@ -1684,9 +1661,6 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 
 /* LifeGroups directory: the one and only view (the network map was removed). */
 .lifegroups-page__directory[hidden]{display:none!important}
-.lifegroups-page__directory-head{margin:18px 0 14px}
-.lifegroups-page__directory-head h2{font-size:1.16rem;margin:0 0 4px}
-.lifegroups-page__directory-head p{margin:0}
 .lifegroups-page__directory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
 .lifegroups-page__network-card{min-width:0;height:100%}
 .lifegroups-page__network-title{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -1710,7 +1684,6 @@ details[open] > summary .t-open { display: none; } details:not([open]) > summary
 .lifegroups-page__help-body p{margin:12px 0 0}
 .lifegroups-page__help-body ul,.lifegroups-page__help-body ol{margin:0 0 10px 20px;display:grid;gap:5px}
 .lifegroups-page__help-body li{font-size:.92rem}
-.lifegroups-page__extra-hint{font-weight:400;margin-left:6px}
 @media(max-width:650px){
  .lifegroups-page__cell-row{padding:12px 2px}
  .lifegroups-page__cell-row-go span{display:none}
@@ -1820,10 +1793,107 @@ a.lifegroups-page__number:hover{background:#f5faf6}
 
 /* The page itself: fewer separate rows, the same information. */
 .lifegroups-page{gap:12px}
-.lifegroups-page__header .sub{font-size:.86rem}
 /* The toolbar and the numbers are one block, so the eye reads top-down once. */
-.lifegroups-page .lg-tree-toolbar{padding:8px;border-radius:12px}
 @media(min-width:1024px){
  .lifegroups-page__numbers .lifegroups-page__number{padding:17px 20px}
- .lifegroups-page__directory-head{margin:16px 0 12px}
+ }
+
+/* ==========================================================================
+   Lifegroups — one task at a time
+   The page used to stack a summary, a search bar, a gender filter, a status
+   select, a refresh button, a find panel, a directory and four collapsed
+   panels. On a phone that is several screens before any content, and on a
+   desktop it reads as a wall. Each section is now a tab: the page shows one
+   set of tools plus its own content, nothing else.
+   ========================================================================== */
+.lifegroups-page--focused{display:block;max-width:960px;margin:0 auto}
+
+/* Title row: name on the left, the one main action on the right. */
+.lg-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.lg-head__text h1{margin:0;font-size:clamp(1.35rem,4.5vw,1.6rem);letter-spacing:-.02em}
+.lg-head__text .sub{margin:3px 0 0;color:#6c8073;font-size:.86rem;font-variant-numeric:tabular-nums}
+.lg-head__add{flex:none;min-height:44px}
+
+/* The section switcher. Scrolls sideways on a narrow phone rather than
+   wrapping into a tall block of buttons. */
+.lg-tabs{display:flex;gap:4px;margin:0 0 14px;padding:4px;background:#eef3ef;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.lg-tabs::-webkit-scrollbar{display:none}
+.lg-tabs__tab{
+ display:flex;align-items:center;gap:7px;flex:none;
+ min-height:42px;padding:9px 14px;border:0;border-radius:9px;
+ background:transparent;color:#4b6353;font:inherit;font-size:.85rem;font-weight:650;
+ cursor:pointer;white-space:nowrap;
+}
+.lg-tabs__tab svg{flex:none;opacity:.85}
+.lg-tabs__tab:hover{background:#e2ebe4;color:#234334}
+.lg-tabs__tab[aria-selected="true"]{background:#fff;color:#1d4d32;box-shadow:0 1px 3px rgba(24,52,35,.14)}
+.lg-tabs__tab:focus-visible{outline:2px solid #348358;outline-offset:2px}
+.lg-tabs__count{
+ display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;
+ border-radius:999px;background:#c2410c;color:#fff;font-size:.72rem;font-variant-numeric:tabular-nums;
+}
+
+/* Filter row: search grows, the rest stays small. */
+.lg-filterbar{display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+.lg-search{position:relative;flex:1 1 190px;min-width:0}
+.lg-search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:#8ba394;pointer-events:none}
+.lg-search input{padding-left:36px;min-height:44px;font-size:1rem} /* 16px: iOS must not zoom on focus */
+.lg-seg{display:inline-flex;padding:3px;background:#eef3ef;border-radius:10px;flex:none}
+.lg-seg button{display:inline-flex;align-items:center;gap:5px;min-height:38px;padding:7px 11px;border:0;border-radius:8px;background:transparent;color:#4b6353;font:inherit;font-size:.82rem;font-weight:650;cursor:pointer;white-space:nowrap}
+.lg-seg button[aria-pressed="true"]{background:#fff;color:#1d4d32;box-shadow:0 1px 2px rgba(24,52,35,.14)}
+.lg-seg button:focus-visible{outline:2px solid #348358;outline-offset:2px}
+
+/* "More" holds the rarely-used controls, so the default row stays three items. */
+.lg-more{position:relative;flex:none}
+.lg-more>summary{display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:0 12px;border:1px solid #dbe6de;border-radius:10px;background:#fff;color:#41594a;font-size:.82rem;font-weight:650;cursor:pointer;list-style:none}
+.lg-more>summary::-webkit-details-marker{display:none}
+.lg-more[open]>summary{background:#eef3ef}
+.lg-more__body{position:absolute;right:0;top:calc(100% + 6px);z-index:20;width:min(260px,calc(100vw - 32px));display:grid;gap:10px;padding:12px;background:#fff;border:1px solid #dbe6de;border-radius:12px;box-shadow:0 16px 36px -18px rgba(15,40,26,.4)}
+.lg-more__field{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:650;color:#41594a}
+.lg-more__field select{min-height:40px;font-size:.85rem}
+.lg-more__hint{margin:0;font-size:.74rem;color:#7b8f82;line-height:1.4}
+
+.lg-panel[hidden]{display:none!important}
+.lg-panel>.card{margin:0}
+
+/* The numbers, inside the directory section, in a compact row. */
+.lifegroups-page--focused .lifegroups-page__numbers{
+ display:flex;flex-wrap:wrap;gap:0;margin:0 0 14px;padding:0;
+ background:#fff;border:1px solid #dbe7de;border-radius:12px;overflow:hidden;
+}
+.lifegroups-page--focused .lifegroups-page__number{
+ flex:1 1 0;min-width:88px;padding:11px 14px;border-right:1px solid #edf2ee;
+}
+.lifegroups-page--focused .lifegroups-page__number:last-child{border-right:0}
+.lifegroups-page--focused .lifegroups-page__number-value{font-size:1.3rem;line-height:1.15}
+.lifegroups-page--focused .lifegroups-page__number-label{font-size:.72rem}
+
+/* The glossary is reference, not content: one tap at the very bottom. */
+.lg-about{margin:16px 0 0;border-color:#e2ebe4;box-shadow:none}
+.lg-about>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;font-size:.84rem;font-weight:650;color:#41594a;cursor:pointer;list-style:none;min-height:46px}
+.lg-about>summary::-webkit-details-marker{display:none}
+.lg-about>summary svg{transition:transform .2s;color:#8ba394}
+.lg-about[open]>summary svg{transform:rotate(90deg)}
+.lg-about__body{padding:0 16px 16px;border-top:1px solid #eef2ef}
+.lg-about__body dl{margin:12px 0;display:grid;gap:10px}
+.lg-about__body dt{font-weight:700;color:#1d4d32;font-size:.86rem}
+.lg-about__body dd{margin:2px 0 0;font-size:.85rem;color:#4b6353;line-height:1.45}
+
+/* Phone: everything full width, nothing squeezed into columns. */
+@media(max-width:640px){
+ .lg-head{margin-bottom:12px}
+ .lg-head__add span{display:none} /* icon-only keeps the title room */
+ .lg-head__add{width:46px;justify-content:center;padding:0}
+ .lg-tabs{margin-bottom:12px}
+ .lg-tabs__tab{padding:9px 12px;font-size:.82rem}
+ .lg-filterbar{gap:8px}
+ .lg-search{flex:1 1 100%}
+ .lg-seg{flex:1 1 auto}
+ .lg-seg button{flex:1;justify-content:center;min-height:40px}
+ .lg-more{flex:1 1 100%}
+ .lg-more>summary{width:100%;justify-content:center;min-height:42px}
+ .lg-more__body{left:0;right:0;width:auto}
+ .lifegroups-page--focused .lifegroups-page__numbers{display:grid;grid-template-columns:1fr 1fr}
+ .lifegroups-page--focused .lifegroups-page__number{min-width:0;border-right:1px solid #edf2ee;border-bottom:1px solid #edf2ee}
+ .lifegroups-page--focused .lifegroups-page__number:nth-child(2n){border-right:0}
 }
