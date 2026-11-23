@@ -1,11 +1,10 @@
-// Lifegroup progress: solid/new members, weekly meeting calendar, leader report link,
-// per-network grid and the overall Progress tab. Shared by lifegroups.js.
+// Lifegroup progress: solid/new members, weekly meeting calendar and the
+// per-Cell report form. Shared by lifegroups.js.
 import { api } from '../api.js';
 import { can } from '../app.js';
-import { html, raw, esc, icon, fmtDate, toISODate, toast, openModal, closeModal, confirmDialog, withLoading, emptyState, debounce } from '../ui.js';
+import { html, raw, esc, icon, fmtDate, toISODate, toast, openModal, closeModal, confirmDialog, withLoading } from '../ui.js';
 import { createProgressGuard } from './progressGuard.js';
 
-const DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 export const weekLabel = (monday) => { const d = new Date(`${monday}T00:00:00`); return `${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}`; };
 
 /** Compact week strip: one cell per week — held / no meeting / nothing reported. */
@@ -174,63 +173,4 @@ export function meetingForm(groupId, p, existing, onSaved) {
     catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
   modal.querySelector('#mtSave').onclick = save; form.onsubmit = save;
-}
-
-// ---------------------------------------------------------------------------
-// Network detail: weekly grid (network leader's own group first, then each group)
-// ---------------------------------------------------------------------------
-export async function renderNetworkCalendar(card, networkId, prefetched = null) {
-  card.innerHTML = '<div class="card__header"><h2>Weekly Lifegroups</h2></div><div class="card__body"><div class="loading">Loading…</div></div>';
-  let d = prefetched;
-  if (!d) { try { d = await api.networkCalendar(networkId, 8); } catch (e) { card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; } }
-  const s = d.summary;
-  card.innerHTML = html`
-    <div class="card__header"><h2>Weekly Lifegroups</h2><span class="hint">Last 8 weeks · ${s.met_this_week}/${s.groups} met this week · ${s.consistency_pct}% of the last 4 weeks</span></div>
-    <div class="card__body card__body--flush">
-      ${d.groups.length ? html`<div class="table-wrap"><table class="table table--grid">
-        <thead><tr><th>Lifegroup</th><th>Settled</th>${d.weeks.map((w) => html`<th class="num small">${weekLabel(w)}</th>`)}</tr></thead>
-        <tbody>${d.groups.map((g) => html`<tr>
-          <td><a href="#/lifegroups/${g.id}"><b>${g.name}</b></a>${g.is_leader_group ? raw(' <span class="badge badge--leader">Network leader’s group</span>') : ''}<div class="small muted">${g.leader_name || '—'}${g.schedule_day ? ` · ${DAY_SHORT[g.schedule_day]}` : ''}</div></td>
-          <td class="nowrap">${solidBadge(g.solid, g.target, g.is_solid)}</td>
-          ${g.calendar.map((w) => { const m = w.meeting; return html`<td class="num"><span class="wk__c wk__c--md ${!m ? 'wk__c--none' : m.held ? 'wk__c--held' : 'wk__c--skip'}" title="${!m ? 'Not reported' : m.held ? `Held ${fmtDate(m.date, { short: true })} · ${m.present} present` : 'No Lifegroup'}">${m && m.held ? m.present : m ? '×' : ''}</span></td>`; })}
-        </tr>`)}</tbody></table></div>` : html`<div class="empty" style="padding:28px"><p>No active Lifegroups under this network yet.</p></div>`}
-      <div class="card__footer small muted"><span class="wk__c wk__c--held wk__c--key"></span> held (number = present) <span class="wk__c wk__c--skip wk__c--key"></span> no Lifegroup <span class="wk__c wk__c--none wk__c--key"></span> not reported</div>
-    </div>`;
-}
-
-// ---------------------------------------------------------------------------
-// Lifegroups → Progress tab
-// ---------------------------------------------------------------------------
-export async function drawProgressTab(body) {
-  body.innerHTML = '<div class="loading">Loading…</div>';
-  let d;
-  try { d = await api.progressOverview(8); } catch (e) { body.innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; }
-  const s = d.summary;
-  let q = '';
-  body.innerHTML = html`
-    <div class="kpi-row mb-2" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
-      <div class="kpi" title="Cells with enough settled members to be thriving"><b>${s.solid_groups}<small>/${s.groups}</small></b><span>Thriving Cells</span></div>
-      <div class="kpi"><b>${s.solid_members}</b><span>Settled members</span></div>
-      <div class="kpi"><b>${s.new_members}</b><span>New / not regular</span></div>
-      <div class="kpi ${s.met_this_week < s.groups ? 'kpi--amber' : ''}"><b>${s.met_this_week}<small>/${s.groups}</small></b><span>Met this week?</span></div>
-      <div class="kpi"><b>${s.consistency_pct}%</b><span>Held, last 4 weeks</span></div>
-      <div class="kpi"><b>${s.networks}</b><span>Networks</span></div>
-    </div>
-    <div class="card"><div class="card__header"><h2>Every Lifegroup</h2><div class="gsearch" style="max-width:260px">${icon('search', 15)}<input id="pgq" placeholder="Filter…" autocomplete="off" aria-label="Filter groups" /></div></div><div class="card__body card__body--flush" id="pgAll"></div></div>`;
-  const all = body.querySelector('#pgAll');
-  const drawAll = () => {
-    const needle = q.toLowerCase();
-    const rows = needle ? d.groups.filter((g) => [g.name, g.leader_name, g.network_name].some((v) => v && v.toLowerCase().includes(needle))) : d.groups;
-    all.innerHTML = rows.length ? html`<div class="table-wrap"><table class="table table--grid">
-      <thead><tr><th>Lifegroup</th><th>Network</th><th>Settled</th><th class="num">People</th>${d.weeks.map((w) => html`<th class="num small">${weekLabel(w)}</th>`)}</tr></thead>
-      <tbody>${rows.map((g) => html`<tr>
-        <td><a href="#/lifegroups/${g.id}"><b>${g.name}</b></a>${g.is_leader_group ? raw(' <span class="badge badge--leader">Network leader’s Lifegroup</span>') : ''}<div class="small muted">${g.leader_name || '—'}</div></td>
-        <td class="small">${g.network_name || raw('<span class="muted">—</span>')}</td>
-        <td class="nowrap">${g.is_leader_group ? html`<span class="small muted">${g.total} / 6 cell leaders</span>` : solidBadge(g.solid, g.target, g.is_solid)}</td>
-        <td class="num">${g.total}</td>
-        ${g.calendar.map((w) => { const m = w.meeting; return html`<td class="num"><span class="wk__c wk__c--md ${!m ? 'wk__c--none' : m.held ? 'wk__c--held' : 'wk__c--skip'}" title="${!m ? 'Not reported' : m.held ? `Held ${fmtDate(m.date, { short: true })} · ${m.present} present` : 'No Lifegroup'}">${m && m.held ? m.present : m ? '×' : ''}</span></td>`; })}
-      </tr>`)}</tbody></table></div><div class="card__footer small muted">${rows.length} group${rows.length === 1 ? '' : 's'} · <span class="wk__c wk__c--held wk__c--key"></span> held <span class="wk__c wk__c--skip wk__c--key"></span> no Lifegroup <span class="wk__c wk__c--none wk__c--key"></span> not reported</div>` : emptyState({ icon: 'group', title: 'No group matches', text: '' });
-  };
-  body.querySelector('#pgq').addEventListener('input', debounce((e) => { q = e.target.value.trim(); drawAll(); }, 150));
-  drawAll();
 }

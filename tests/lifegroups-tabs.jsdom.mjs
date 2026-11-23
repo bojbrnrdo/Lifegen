@@ -91,12 +91,12 @@ console.log('\n=== the Lifegroups page loads its sections ===');
 await until(() => doc.querySelector('.lifegroups-page'));
 check('page rendered', Boolean(doc.querySelector('.lifegroups-page')));
 check('title says Lifegroups', doc.querySelector('.lg-head h1')?.textContent.trim() === 'Lifegroups');
-check('tab strip has 5 sections', doc.querySelectorAll('.lg-tabs__tab').length === 5,
+check('tab strip has 4 sections', doc.querySelectorAll('.lg-tabs__tab').length === 4,
   String(doc.querySelectorAll('.lg-tabs__tab').length));
 
 console.log('\n=== one section at a time ===');
 const panels = () => [...doc.querySelectorAll('.lg-panel')];
-check('5 panels exist', panels().length === 5, String(panels().length));
+check('5 panels exist', panels().length === 4, String(panels().length));
 check('exactly one panel visible', panels().filter((p) => !p.hidden).length === 1,
   panels().map((p) => `${p.id}:${p.hidden ? 'hidden' : 'shown'}`).join(' '));
 check('the visible one is the directory', !$('lgPanel-directory').hidden);
@@ -126,10 +126,11 @@ console.log('\n=== arrow keys move between tabs ===');
 doc.querySelector('.lg-tabs__tab[data-tab="needs"]').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 await sleep(80);
 const afterArrow = doc.querySelector('.lg-tabs__tab[aria-selected="true"]')?.dataset.tab;
-check('ArrowRight advances to the next tab', afterArrow === 'progress', String(afterArrow));
+check('ArrowRight advances to the next tab', afterArrow === 'people', String(afterArrow));
 
 console.log('\n=== the URL remembers the section ===');
-check('hash includes the open tab', window.location.hash.includes('tab=progress'), window.location.hash);
+check('hash includes the open tab', window.location.hash.includes('tab=people'), window.location.hash);
+check('the removed group-progress tab is not offered', !doc.querySelector('.lg-tabs__tab[data-tab="progress"]'));
 
 console.log('\n=== numbers are on the page ===');
 click(doc.querySelector('.lg-tabs__tab[data-tab="directory"]'));
@@ -145,7 +146,7 @@ check('People in Cells counts all 4 Cells x 6 = 24', values.includes('24'), valu
 console.log('\n=== the header stays short ===');
 const head = doc.querySelector('.lg-head');
 check('header has only the title block and Add New', head?.children.length === 2, String(head?.children.length));
-check('no leftover always-open panels', !doc.querySelector('#allPeoplePanel, #needsPanel, #progressPanel'));
+check('no leftover always-open panels', !doc.querySelector('#allPeoplePanel, #needsPanel, #lgPanel-progress'));
 check('the glossary is collapsed by default', doc.querySelector('.lg-about') && !doc.querySelector('.lg-about').open);
 
 console.log(`\n${pass} passed, ${fail} failed`);

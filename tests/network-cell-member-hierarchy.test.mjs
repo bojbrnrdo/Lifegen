@@ -71,7 +71,8 @@ test('navigation and actions show Cell Leaders and Members without a separate gr
 test('existing database operations and history are retained',()=>{
  assert.match(view,/api\.updateLifegroup\(g\.id, d\)/);
  assert.match(view,/api\.assignLifegroup\(g\.id, pid/);
- assert.match(view,/renderNetworkCalendar\(/);
+ // The weekly meeting grid was removed; tier changes remain.
+ assert.doesNotMatch(view,/renderNetworkCalendar\(/);
  assert.match(view,/api\.setTier\(/);
  assert.match(view,/#\/lifegroups\/\$\{g\.id\}/);
 });

@@ -27,12 +27,9 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     memberCard.querySelector('.stat__label').textContent = 'Members';
     memberCard.querySelector('.small.muted')?.remove();
   }
-  if (attendanceCard) {
-    attendanceCard.querySelector('.stat__label').textContent = 'Meetings this week';
-    const summary = cal?.summary;
-    attendanceCard.querySelector('.stat__value').textContent = summary ? String(summary.met_this_week ?? 0) : '—';
-    attendanceCard.querySelector('.small.muted')?.remove();
-  }
+  // The "Meetings this week" figure was removed: it counted reported meetings,
+  // which is not what a leader opens this page to find out.
+  attendanceCard?.remove();
   extraCard?.remove();
   // Reuse existing cell-team records: only the leader and member count are
   // visible until the person opens that group.
@@ -86,12 +83,6 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
       leaders.append(leaderChips);
       aside.querySelector('#netExtras').append(leaders);
     }
-    const report = header.querySelector('#netReport');
-    if (report) {
-      report.textContent = 'Report meeting';
-      report.classList.add('network-detail__action');
-      actions.append(report);
-    }
   }
   if (!manage) {
     aside.querySelector('h2').textContent = 'Explore';
@@ -103,15 +94,11 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     actions.append(link);
   }
 
-  const history = document.createElement('details');
-  history.className = 'card network-detail__history';
-  history.id = 'netAttendanceHistory';
-  history.innerHTML = '<summary><span><strong>Attendance & meeting history</strong>' +
-    '<small>Last eight weeks · Open when you need the detailed report</small></span>' +
-    '<span class="network-detail__expand-arrow" aria-hidden="true">⌄</span></summary>';
-  workspace.after(history);
-  calendar.classList.add('network-detail__calendar');
-  history.append(calendar);
+  // "Attendance & meeting history" was removed along with the calendar behind
+  // it. The calendar data is still fetched for member tiers and the leader
+  // team, so the element is kept out of the page rather than left orphaned.
+  calendar.remove();
+  const history = null;
 
   if (!cells.length && manage) {
     const note = document.createElement('p');

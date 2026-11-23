@@ -40,16 +40,16 @@ test('the shared Lifegroup tree model keeps its three levels',()=>{
 test('each section is a tab, and only the chosen one is shown',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  // The controls still exist, but live inside their own section.
- for(const id of ['treeQ','treeStatus','treeRefresh','treeSummary','lgPanel-needs','lgPanel-progress'])
+ for(const id of ['treeQ','treeStatus','treeRefresh','treeSummary','lgPanel-needs'])
   assert.ok(page.includes('id="'+id+'"'), 'missing '+id);
- for(const name of ['openTab','drawNeeds','drawProgressTab','findUnassignedGroups'])
+ for(const name of ['openTab','drawNeeds','findUnassignedGroups'])
   assert.ok(page.includes(name), 'missing '+name);
  // A tablist with panels, and no panel opened by default other than the first.
  assert.match(page, /role="tablist"/);
  assert.match(page, /role="tabpanel"/);
  assert.match(page, /panel\.hidden=t\.id!==known/);
  // The old always-open panels are gone.
- for(const dead of ['allPeoplePanel','needsPanel','progressPanel','lifegroups-page__extras'])
+ for(const dead of ['allPeoplePanel','needsPanel','progressPanel','lgPanel-progress','drawProgressTab','lifegroups-page__extras'])
   assert.ok(!page.includes(dead), 'old stacked panel removed: '+dead);
  assert.match(css, /\.lg-tabs/);
  assert.match(css, /\.lg-panel\[hidden\]/);

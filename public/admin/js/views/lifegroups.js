@@ -7,7 +7,7 @@ import { networkLeaderRegistrationHtml, bindNetworkLeaderRegistration } from './
 import { createFourFieldNetwork } from './networkFourField.js';
 import { createAddNewModal } from './unifiedAddNew.js';
 import { openRemoveFromLifegroups } from './removeFromLifegroups.js';
-import { renderProgressCard, renderNetworkCalendar, drawProgressTab, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
+import { renderProgressCard, solidBadge, weekStrip, memberSections, memberDots, dotsKey, TIER_LABEL, meetingForm } from './progress.js';
 import { can } from '../app.js';
 import {
   html, raw, icon, avatar, fullName, statusBadge, fmtDate, fmtNum, emptyState, debounce, toast, confirmDialog,
@@ -319,7 +319,6 @@ export async function renderLifegroups({main, query}) {
   {id:'directory',label:'Who leads whom',icon:'group'},
   {id:'find',label:'Find a person',icon:'search'},
   {id:'needs',label:'Not in a Cell',icon:'user'},
-  {id:'progress',label:'How groups are doing',icon:'chart'},
   ...(can('people:view')?[{id:'people',label:'Everyone registered',icon:'people'}]:[]),
  ];
  const startTab=TABS.some(t=>t.id===query.tab)?query.tab:'directory';
@@ -371,10 +370,6 @@ export async function renderLifegroups({main, query}) {
    <div class="card"><div class="card__body card__body--flush" id="needsBody"><div class="loading">Loading…</div></div></div>
   </div>
 
-  <div class="lg-panel" role="tabpanel" id="lgPanel-progress" aria-labelledby="lgTab-progress" hidden>
-   <div class="card"><div class="card__body card__body--flush" id="progressBody"><div class="loading">Loading…</div></div></div>
-  </div>
-
   ${can('people:view')?html`<div class="lg-panel" role="tabpanel" id="lgPanel-people" aria-labelledby="lgTab-people" hidden>
    <div class="card"><div class="card__body card__body--flush" id="allPeopleBody"><div class="loading">Loading…</div></div></div>
   </div>`:''}
@@ -397,7 +392,7 @@ export async function renderLifegroups({main, query}) {
   TABS.forEach(t=>{const panel=main.querySelector('#lgPanel-'+t.id);if(panel)panel.hidden=t.id!==known;});
   if(save&&history.replaceState)history.replaceState(null,'','#/lifegroups'+(known==='directory'?'':api.qs({tab:known})));
   // Draw a section only when it is first opened, so the page stays light.
-  const lazy={'needs':['#needsBody',drawNeeds],'progress':['#progressBody',drawProgressTab],'people':['#allPeopleBody',drawAllPeople]}[known];
+  const lazy={'needs':['#needsBody',drawNeeds],'people':['#allPeopleBody',drawAllPeople]}[known];
   if(lazy&&!lazy[1])return;
   if(lazy){const body=main.querySelector(lazy[0]);if(body&&!body.dataset.loaded){body.dataset.loaded='yes';lazy[1](body);}}
  };
@@ -1134,7 +1129,7 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
           : isPastorNet(n) ? html`<p class="small muted">Pastor · the Network Leaders under them are listed below</p>` : ''}
         <div class="row mt-1">${genderBadge(n.gender, { long: true, noun: 'network' })}<span class="small muted">${n.is_auto ? 'Created automatically' : 'Created by staff'}</span>${n.is_active ? '' : raw('<span class="badge badge--nodot">Inactive</span>')}${n.is_demo ? raw('<span class="badge badge--demo badge--nodot">Demo data</span>') : ''}</div>
       </div>
-      ${manage ? html`<div class="page-actions">${leaderGroup ? html`<button class="btn btn--primary" id="netReport">${icon('plus')} Report a meeting</button>` : ''}<button class="btn" id="editNet">${icon('edit')} Edit</button>${n.is_active?html`<button class="btn" id="removeNetwork">${icon('trash',16)} Remove</button>`:''}</div>` : ''}
+      ${manage ? html`<div class="page-actions"><button class="btn" id="editNet">${icon('edit')} Edit</button>${n.is_active?html`<button class="btn" id="removeNetwork">${icon('trash',16)} Remove</button>`:''}</div>` : ''}
     </div>
 
 
@@ -1201,12 +1196,8 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
     networkForm(n, () => renderNetwork({ main }, id));
     document.querySelector('#netLeaderPick')?.focus();
   });
-  // Load the eight-week table only when explicitly requested.
-  compact?.history.addEventListener('toggle', () => {
-    if (!compact.history.open || compact.history.dataset.loaded) return;
-    compact.history.dataset.loaded = 'true';
-    renderNetworkCalendar(main.querySelector('#netCalendar'), n.id, cal).catch((e) => toast(e.message, 'error'));
-  });
+  // The attendance & meeting history disclosure was removed, so there is
+  // nothing to expand and nothing to load on demand.
   main.querySelector('#netCreateGroup')?.addEventListener('click', () =>
     groupForm(null, () => renderNetwork({ main }, id), { networkId: n.id, gender: n.gender }));
   main.querySelector('#netQuickAddMember')?.addEventListener('click', () => {
@@ -1243,9 +1234,6 @@ export async function renderNetwork({ main }, id, openGroups = new Set(), { auto
       } catch (e) { toast(e.message, 'error'); }
     });
   });
-  if (manage && leaderGroup) {
-    main.querySelector('#netReport').onclick = async () => { try { const p = await api.lifegroupProgress(leaderGroup.id, 12); meetingForm(leaderGroup.id, p, null, () => renderNetwork({ main }, id)); } catch (e) { toast(e.message, 'error'); } };
-  }
   main.querySelector('#editNet')?.addEventListener('click', () => networkForm(n, () => renderNetwork({ main }, id)));
   main.querySelector('#removeNetwork')?.addEventListener('click', () => openRemoveFromLifegroups({
     initialTab:'network',networkId:n.id,onRemoved:()=>{ location.hash='#/lifegroups'; },

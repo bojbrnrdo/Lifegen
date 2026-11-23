@@ -64,7 +64,9 @@ test('Existing schedule, venue and notes are preserved by server-side update sem
   assert.match(server, /schedule_time: clean\(src\.schedule_time\)/);
   assert.match(server, /venue: stringField\(src\.venue/);
   assert.match(server, /notes: stringField\(src\.notes/);
-  assert.match(networkPage, /renderNetworkCalendar\(/);
+  // The attendance & meeting history (and its eight-week grid) was removed from
+  // the Network page, so the calendar is no longer rendered there.
+  assert.doesNotMatch(networkPage, /renderNetworkCalendar\(/);
   assert.doesNotMatch(networkPage, /\$\{n\.notes \? html/);
 });
 

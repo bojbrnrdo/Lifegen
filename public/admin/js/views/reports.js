@@ -7,7 +7,6 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const shortSunday = (d) => { const [, m, day] = d.split('-'); return `${MONTHS[+m - 1].slice(0, 3)} ${+day}`; };
 
 export async function renderReports({ main, query }) {
-  if (query.view === 'lifegroups') { location.hash = '#/lifegroups?tab=progress'; return; }
   const years = await api.reportYears();
   const now = new Date();
   const mode = query.mode || (query.year && !query.quarter && !query.month ? 'year' : query.quarter ? 'quarter' : query.from ? 'range' : 'month');
@@ -26,7 +25,6 @@ export async function renderReports({ main, query }) {
     <div class="page-header">
       <div><h1>Reports</h1></div>
       <div class="page-actions">
-        <div class="filter-tabs" style="margin:0"><button class="active">Attendance</button><button id="toLgReport">Lifegroups</button></div>
         <button class="btn" id="printBtn">${icon('print')} Print / PDF</button>
         <div class="row" style="position:relative">
           <button class="btn" id="exportBtn">${icon('download')} Export</button>
@@ -86,7 +84,6 @@ export async function renderReports({ main, query }) {
     main.querySelectorAll('#modeSeg button').forEach((x) => x.classList.toggle('active', x === b));
     drawPickers(); load();
   };
-  main.querySelector('#toLgReport').onclick = () => { location.hash = '#/lifegroups?tab=progress'; };
   main.querySelector('#printBtn').onclick = () => window.print();
   const exportMenu = main.querySelector('#exportMenu');
   main.querySelector('#exportBtn').onclick = (e) => { e.stopPropagation(); exportMenu.hidden = !exportMenu.hidden; };
