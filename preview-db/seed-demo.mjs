@@ -1,6 +1,6 @@
 // Seeds the preview database DIRECTLY via PGlite (gateway must be STOPPED).
 // Creates: demo admin and restricted Youth Welfare users, 24 demo people,
-// ministry-only sample categories, last 10 Sunday services with attendance spread,
+// ministry-only sample categories, VIP check-ins across the last 10 Sundays,
 // calendar events, monthly prize, and the QA VIP rows
 // (person id=25 / registration 901 / checkins 801-802).
 // Usage: node seed-demo.mjs
@@ -90,36 +90,36 @@ await db.query(`INSERT INTO youth_welfare_report_templates(user_id,name,config)
   VALUES($1,'Demo · Monthly registration events','{"type":"registration_summary","period":"month","category":"all"}'::jsonb)
   ON CONFLICT(user_id,lower(btrim(name))) DO NOTHING`,[youthUserId]);
 
-// ---- services: last 10 Sundays -------------------------------------------
+// ---- VIP attendance: last 10 Sundays --------------------------------------
+// Attendance is tracked only for VIPs, so each demo person is given a VIP
+// registration and a validated check-in per Sunday they "attended". There is no
+// general Sunday roster any more.
 const sundays = lastSundays(10);
-const svcIds = {};
-for (const d of sundays) {
-  const existing = (await db.query('SELECT id FROM services WHERE service_date=$1', [d])).rows[0];
-  if (existing) { svcIds[d] = existing.id; continue; }
-  const { rows } = await db.query(
-    "INSERT INTO services(id,service_date,service_type,is_demo,notes) VALUES($1,$2,'lifegen',true,'Demo seed') RETURNING id",
-    [await nextId('services'), d]);
-  svcIds[d] = rows[0].id;
-}
-console.log('services ready:', sundays.length);
-
-// ---- attendance records (deterministic spread) ----------------------------
 let recCount = 0;
 for (let i = 0; i < personIds.length; i++) {
+  const pid = personIds[i];
   const keep = 3 + ((i * 7) % 8); // attends 3..10 most recent Sundays
+  let reg = (await db.query('SELECT id FROM vip_registrations WHERE person_id=$1 ORDER BY id LIMIT 1', [pid])).rows[0];
+  if (!reg) {
+    reg = (await db.query(
+      `INSERT INTO vip_registrations(id,person_id,full_name,review_status,service_date)
+       SELECT $1,p.id,coalesce(nullif(p.full_name,''),concat_ws(' ',p.first_name,p.last_name)),'reviewed',$2
+       FROM people p WHERE p.id=$3 RETURNING id`,
+      [await nextId('vip_registrations'), sundays[0], pid])).rows[0];
+  }
+  if (!reg) continue;
   for (let s = 0; s < Math.min(keep, sundays.length); s++) {
     if ((i + s) % 9 === 7) continue; // occasional absence
     const d = sundays[s];
-    const exists = (await db.query('SELECT 1 FROM records WHERE service_id=$1 AND person_id=$2', [svcIds[d], personIds[i]])).rows[0];
+    const exists = (await db.query('SELECT 1 FROM vip_checkins WHERE registration_id=$1 AND date_key=$2', [reg.id, d])).rows[0];
     if (exists) continue;
     await db.query(
-      `INSERT INTO records(id,service_id,person_id,status,classification,source,recorded_by_name)
-       VALUES($1,$2,$3,'present',$4,'staff','Demo seed')`,
-      [await nextId('records'), svcIds[d], personIds[i], s >= keep - 1 ? 'first_timer' : 'returning']);
+      `INSERT INTO vip_checkins(id,registration_id,date_key,status,validated_at)
+       VALUES($1,$2,$3,'valid',now())`, [await nextId('vip_checkins'), reg.id, d]);
     recCount++;
   }
 }
-console.log('attendance records added:', recCount);
+console.log('VIP attendance check-ins added:', recCount);
 
 // ---- calendar events -------------------------------------------------------
 const evCount = (await db.query('SELECT count(*)::int AS n FROM calendar_events')).rows[0].n;
@@ -160,13 +160,6 @@ if (!qaReg) {
     `INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,review_status)
      VALUES(901,25,'Test VIP',25,'QA University','Walk-in','0917 000 0099','reviewed')`);
 }
-const today = sundays[0];
-const qaRec = (await db.query('SELECT 1 FROM records WHERE service_id=$1 AND person_id=25', [svcIds[today]])).rows[0];
-if (!qaRec) {
-  await db.query(
-    `INSERT INTO records(id,service_id,person_id,status,classification,source,recorded_by_name)
-     VALUES($1,$2,25,'present','first_timer','vip_self','QA seed')`, [await nextId('records'), svcIds[today]]);
-}
 for (const [cid, d] of [[801, sundays[1]], [802, sundays[0]]]) {
   const exists = (await db.query('SELECT 1 FROM vip_checkins WHERE id=$1', [cid])).rows[0];
   if (exists) continue;
@@ -178,7 +171,7 @@ console.log('QA rows ready (person 25 / reg 901 / checkins 801-802)');
 // Keep ID generators ahead of the fixed QA IDs, so the VIP preview seed and
 // subsequent app writes do not collide with person 25 / registration 901.
 for (const [entity, table] of Object.entries({
-  people: 'people', services: 'services', records: 'records', audit: 'audit',
+  people: 'people',
   vip_registrations: 'vip_registrations', vip_checkins: 'vip_checkins',
   community_posts: 'community_posts', calendar_events: 'calendar_events',
 })) {

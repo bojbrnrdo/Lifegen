@@ -18,25 +18,17 @@ test('sidebar and page are named Lifegroups, without changing its route',()=>{
  assert.match(nav, /navLink\('#\/lifegroups',\s*'lifegroups',\s*'Lifegroups',\s*'group'(?:,\s*true)?\)/);
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
  assert.match(page, /<h1>Lifegroups<\/h1>/);
- assert.match(page, /id="treeCanvas"/);
- assert.match(page, /loadReactLifegroups\(\)/);
- assert.match(page, /mount\(canvas,\{/);
- assert.match(page, /renderHierarchy\(canvas,cache\.nets,cache\.groups,filters,\{onRemove:removeContext\}\)/);
+ assert.match(page, /id="lifegroupsDirectory"/);
+ assert.match(page, /id="findPersonPanel"/);
  assert.match(page, /createAddNewModal/);
  assert.match(page, /id="treeRefresh"/);
  assert.match(page, /id="treeStatus"/);
+ // No map: no canvas, no React Flow loader, no SVG fallback.
+ for(const dead of ['treeCanvas','showGroupMap','react-lifegroups','renderHierarchy','mountMap'])
+  assert.ok(!page.includes(dead), 'the removed network map is gone: '+dead);
 });
 
-test('diagram remains a three-level interactive SVG network with always-fit tools',()=>{
- assert.match(tree, /<svg class="lfg__svg"/);
- for(const name of ['fit','collapse','plus','minus'])assert.match(tree,new RegExp('data-action="'+name+'"'));
- assert.match(tree, /treeControlIcon/);
- assert.match(tree, /aria-label="Interactive Lifegroup network/);
- assert.doesNotMatch(tree, /data-action="focus"/);
- assert.match(tree, /target\.querySelector\('\[data-action="fit"\]'\)\.onclick/);
- assert.match(tree, /profileAvatar\(n\)/);
- assert.match(tree, /target\.querySelector\('\.lfg__svg'\)/);
- assert.match(tree, /api\.lifegroup\(node\.record\.id\)/);
+test('the shared Lifegroup tree model keeps its three levels',()=>{
  const networks=[{id:1,name:'Network',leader_name:'Network Leader',is_active:true,gender:'boys'}];
  const groups=[{id:2,network_id:1,name:'Cell',leader_name:'Cell Leader',member_count:1,is_active:true,gender:'boys'}];
  const initial=buildLifegroupTree(networks,groups,{},new Set(),new Map(),new Set());
@@ -45,14 +37,22 @@ test('diagram remains a three-level interactive SVG network with always-fit tool
  assert.equal(arrangeLifegroupTree(opened).nodes.length,2);
 });
 
-test('Lifegroups toolbar and optional extras remain functional but compact',()=>{
+test('each section is a tab, and only the chosen one is shown',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- for(const id of ['treeQ','treeStatus','treeRefresh','needsPanel','progressPanel','treeSummary'])
-  assert.ok(page.includes('id="'+id+'"'));
- for(const name of ['genderButtons','drawNeeds','drawProgressTab','findUnassignedGroups'])
-  assert.ok(page.includes(name));
- assert.match(css, /\.lifegroups-page__summary/);
- assert.match(css, /\.lifegroups-page__extras/);
+ // The controls still exist, but live inside their own section.
+ for(const id of ['treeQ','treeStatus','treeRefresh','treeSummary','lgPanel-needs'])
+  assert.ok(page.includes('id="'+id+'"'), 'missing '+id);
+ for(const name of ['openTab','drawNeeds','findUnassignedGroups'])
+  assert.ok(page.includes(name), 'missing '+name);
+ // A tablist with panels, and no panel opened by default other than the first.
+ assert.match(page, /role="tablist"/);
+ assert.match(page, /role="tabpanel"/);
+ assert.match(page, /panel\.hidden=t\.id!==known/);
+ // The old always-open panels are gone.
+ for(const dead of ['allPeoplePanel','needsPanel','progressPanel','lgPanel-progress','drawProgressTab','lifegroups-page__extras'])
+  assert.ok(!page.includes(dead), 'old stacked panel removed: '+dead);
+ assert.match(css, /\.lg-tabs/);
+ assert.match(css, /\.lg-panel\[hidden\]/);
 });
 
 test('Cell Leader details prioritize an avatar and a unified member list',()=>{
@@ -72,33 +72,68 @@ test('leadership, attendance and history remain available as expandable sections
  assert.match(detail, /lifegroup-detail__info/);
  assert.match(detail, /lifegroup-detail__progress/);
  assert.match(detail, /progressDisclosure\.addEventListener\('toggle'/);
- assert.match(detail, /renderProgressCard\(main\.querySelector\('#progressCard'\)/);
+ assert.match(detail, /renderProgressCard\(progressCard, g\.id/);
+ assert.match(detail, /const progressCard=main\.querySelector\('#progressCard'\)/);
  assert.match(detail, /Former members/);
  assert.match(detail, /api\.setTier/);
  assert.match(detail, /bindMemberActions/);
 });
 
-test('Lifegroups directory offers an accessible alternate view without removing the map',()=>{
+test('Lifegroups has a single, list-first view with no map toggle',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- for(const id of ['showGroupMap','showGroupDirectory','lifegroupsDirectory','treeCanvas','treeQ','treeStatus'])
-  assert.ok(page.includes('id="'+id+'"'),id);
- assert.match(page,/aria-label="Lifegroups view"/);
- assert.match(page,/aria-pressed/);
  assert.match(page,/const renderDirectory=/);
  assert.match(page,/renderDirectory\(\)/);
  assert.match(page,/href="#\/lifegroups\/\$\{g.id\}"/);
- assert.match(page,/switchView\('directory'\)/);
  assert.match(css,/\.lifegroups-page__directory-grid/);
+ assert.doesNotMatch(page,/aria-label="Lifegroups view"/);
 });
 
-test('LifeGroups opens the directory by default with readable category options',()=>{
+test('the directory is the only view and the map build is gone from the project',()=>{
  const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
- assert.match(page,/let view='directory',cache=null,sequence=0/);
- assert.match(page,/id="treeCanvas" hidden/);
- assert.match(page,/id="showGroupDirectory" aria-pressed="true"/);
- assert.match(page,/id="showGroupMap" aria-pressed="false"/);
- for(const label of ['All','Boys','Girls'])
-  assert.ok(page.includes('<span>'+label+'</span>'),label);
- assert.match(page,/mapButton\.onclick=\(\)=>switchView\('map'\)/);
- assert.match(page,/directoryButton\.onclick=\(\)=>switchView\('directory'\)/);
+ assert.match(page,/let cache=null,sequence=0/);
+ for(const label of ['Everyone','Boys','Girls'])
+  assert.ok(page.includes('>'+label+'<')||page.includes(label+'</button>'),label);
+ // The filter is a pressed-state group, which screen readers announce correctly.
+ assert.match(page, /data-gender-filter=""/);
+ assert.match(page, /aria-pressed/);
+ const pkg=JSON.parse(read('../package.json'));
+ assert.ok(!pkg.scripts['build:lifegroups']);
+ assert.ok(!pkg.scripts.build.includes('lifegroups'));
+ // The map's own dependencies are gone. react itself is still needed by
+ // frontend/depth-carousel, so it is deliberately not asserted absent here —
+ // removing it broke `npm run build` on a clean install.
+ for(const dep of ['@xyflow/react','dagre'])
+  assert.ok(!pkg.devDependencies[dep],'removed dependency: '+dep);
+ assert.ok(pkg.devDependencies.react,'react is still required by frontend/depth-carousel');
+ assert.ok(pkg.devDependencies['react-dom'],'react-dom is still required by frontend/depth-carousel');
+ const index=read('../public/admin/index.html');
+ assert.ok(!index.includes('react-lifegroups'));
+});
+
+test('the numbers sit with the directory, and the explanations at the very bottom',()=>{
+ const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
+ const at=(needle)=>page.indexOf(needle);
+ // Numbers belong to the directory section, right above the list they describe.
+ assert.ok(at('id="treeSummary"')>at('id="lgPanel-directory"'),'numbers inside the directory panel');
+ assert.ok(at('id="treeSummary"')<at('id="lifegroupsDirectory"'),'numbers above the directory');
+ // The primary action stays in the header, level with the title.
+ assert.ok(at('id="addNew"')<at('role="tablist"'),'the primary action sits in the header');
+ // The word list is reference material and comes last.
+ assert.ok(at('class="card lg-about"')>at('id="lgPanel-directory"'),'glossary after the sections');
+ assert.ok(at('class="card lg-about"')>at('id="lgPanel-needs"'),'glossary last');
+ assert.match(css, /\.lg-about/);
+});
+
+test('the page is usable on a phone: full-width controls and 44px targets',()=>{
+ const page=slice('export async function renderLifegroups(', 'async function drawNeeds(');
+ // Every interactive control the page adds must meet the minimum touch size,
+ // and the search must be 16px so iOS does not zoom the page on focus.
+ assert.match(css, /\.lg-search input\{[^}]*font-size:1rem/);
+ assert.match(css, /@media\(max-width:640px\)/);
+ assert.match(css, /\.lg-tabs\{[^}]*overflow-x:auto/, 'tabs scroll sideways instead of stacking');
+ assert.match(css, /\.lg-search\{flex:1 1 100%\}/, 'search takes its own row on a phone');
+ assert.match(css, /\.lg-more__body\{left:0;right:0;width:auto\}/, 'the options popover cannot overflow a phone');
+ // Icon-only Add New on small screens, with the label kept for screen readers.
+ assert.match(css, /\.lg-head__add span\{display:none\}/);
+ assert.match(page, /id="addNew"/);
 });

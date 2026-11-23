@@ -24,10 +24,11 @@ test('one Add New action replaces New Network and Add Cell Leader',()=>{
  assert.match(section,/createAddNewModal\(\{onSaved/);
 });
 
-test('one tabbed modal exposes Network Leader, Cell Leader and Members',()=>{
+test('one tabbed modal exposes the pastor level, Network Leader, Cell Leader and Members',()=>{
  assert.match(modal,/role="tablist"/);
- for(const mode of ['network','cell','member','vip']) {
-   assert.ok(modal.includes("const modes=['network','cell','member','vip']"));
+ // 'pastor' is the Bishop / Pastora card at the very top of the hierarchy.
+ for(const mode of ['pastor','network','cell','member','vip']) {
+   assert.ok(modal.includes("const modes=['pastor','network','cell','member','vip']"));
    assert.ok(modal.includes("data-form="));
  }
  assert.match(modal,/ArrowRight/);
@@ -65,7 +66,11 @@ test('duplicates, role assignments and interrupted saves are handled',()=>{
  assert.match(modal,/state\.pending\[mode\]\.group=result/);
  assert.match(modal,/state\.pending\[mode\]\.network=result/);
  assert.match(modal,/api\.ensureNetworkLeaderGroup\(network\.id\)/);
- assert.match(modal,/role:'leader'/);
+ // A Cell Leader joins the Network Leader's cell as a *member* (the same way a
+ // Network Leader joins their pastor's cell); their own Cell is what makes them
+ // a Cell Leader, so no 'leader' membership is written for them.
+ assert.match(modal,/api\.assignLifegroup\(team\.lifegroup_id,created\.id,\{role:'member'/);
+ assert.doesNotMatch(modal,/role:'leader'/);
  assert.match(modal,/role:'member'/);
 });
 

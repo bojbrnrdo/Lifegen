@@ -64,11 +64,16 @@ test('ZIP inventory rejects directory traversal, invalid archives and duplicate 
 test('ZIP inventory rejects ZIP entry encryption and unsupported archive methods',()=>{
  const encrypted=makeStoredZip();const flags=new DataView(encrypted.buffer);
  const offset=encrypted.length-22-('src/example.js'.length+46);
+ // Flag a tamper in ONE place only: the central directory. Copying the flag to
+ // the local header too would only prove the header-mismatch check.
  flags.setUint16(offset+8,1,true);
- assert.throws(()=>inspectPackageZip(encrypted),/unsafe|encrypted/);
+ assert.throws(()=>inspectPackageZip(encrypted),/local header|unsupported|encrypted/);
+ // A tampered method in the central directory no longer matches the local
+ // header, which the stricter header-consistency check rejects before the
+ // per-entry method check. Either way the archive must be refused.
  const method=makeStoredZip();const dv=new DataView(method.buffer);
  dv.setUint16(offset+10,99,true);
- assert.throws(()=>inspectPackageZip(method),/unsupported/);
+ assert.throws(()=>inspectPackageZip(method),/unsupported|local header/);
 });
 
 test('ZIP inspector rejects mismatched filenames in local file header',()=>{

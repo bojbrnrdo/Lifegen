@@ -100,8 +100,6 @@ export async function currentPrize(client={query}) {
 publicRouter.get('/service-checkin',async(req,res)=>{
  const pass=verifyServicePass(req.query?.t);
  if(!pass)return res.status(400).json({error:'Invalid service QR.'});
- const service=(await query('SELECT id,service_date::text AS service_date,service_type FROM services WHERE id=$1',[pass.service_id])).rows[0];
- if(!service||service.service_date!==pass.service_date||service.service_type!=='lifegen')return res.status(404).json({error:'Service not found.'});
  const vip=await readVip(req);
  res.json({service_date:pass.service_date,registered:!!vip,csrf_token:vip?.csrf_token||null,attendee:vip?{name:vip.person_name||vip.full_name}:null,can_check_in:pass.service_date===today()&&isSunday(today())});
 });
@@ -114,8 +112,6 @@ publicRouter.post('/service-checkin',async(req,res)=>{
  if(!vip)return res.status(401).json({error:'Please recover or register your VIP portal before checking in.'});
  if(!safeEqual(req.get('x-csrf-token'),vip.csrf_token))return res.status(403).json({error:'Refresh the page before checking in.'});
  const result=await transaction(async client=>{
-  const service=(await client.query('SELECT id FROM services WHERE id=$1 AND service_date=$2 AND service_type=$3 FOR SHARE',[pass.service_id,pass.service_date,'lifegen'])).rows[0];
-  if(!service)throw httpError(404,'Service unavailable.');
   const previous=(await client.query('SELECT id,status FROM vip_checkins WHERE registration_id=$1 AND date_key=$2 FOR UPDATE',[vip.id,pass.service_date])).rows[0];
   if(previous){
    if(previous.status==='invalid')return (await client.query("UPDATE vip_checkins SET status='pending',validated_by=NULL,validated_at=NULL WHERE id=$1 RETURNING id,status",[previous.id])).rows[0];
@@ -204,9 +200,9 @@ publicRouter.get('/event.ics',async(req,res)=>{
 publicRouter.get('/vip',async(req,res)=>{
  const vip=await readVip(req);if(!vip)return res.json({registered:false,today:today(),timezone:'Asia/Manila'});
  const month=today().slice(0,7);
- const present=(await query('SELECT s.service_date AS date_key FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=$1 AND r.status=\'present\' AND s.service_date>=$2::date AND s.service_date<($2::date+interval \'1 month\')',[vip.person_id,month+'-01'])).rows;
+ // The check-in is the attendance record; there is no separate records table.
  const checkins=(await query('SELECT date_key,status FROM vip_checkins WHERE registration_id=$1 AND date_key>=$2::date AND date_key<($2::date+interval \'1 month\')',[vip.id,month+'-01'])).rows;
- const map=new Map(checkins.map(r=>[r.date_key,r.status]));for(const r of present)map.set(r.date_key,'valid');
+ const map=new Map(checkins.map(r=>[r.date_key,r.status]));
  const days=new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate();let sundayCount=0;for(let n=1;n<=days;n++)if(isSunday(month+'-'+String(n).padStart(2,'0')))sundayCount++;const validatedCount=[...map].filter(([day,status])=>status==='valid'&&isSunday(day)).length;
  res.json({registered:true,vip:vipShape(vip),csrf_token:vip.csrf_token,today:today(),timezone:'Asia/Manila',month,validated_count:validatedCount,sundays_this_month:sundayCount,prize_unlocked:validatedCount>=sundayCount,checkins:[...map].sort((a,b)=>a[0].localeCompare(b[0])).map(([date_key,status])=>({date_key,status})),prize:await currentPrize()});
 });

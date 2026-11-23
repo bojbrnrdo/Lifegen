@@ -12,6 +12,7 @@ For a Vercel deployment, the project root must contain `package.json`, `vercel.j
 
 - `DATABASE_URL` — Supabase pooler connection URL (Session Pooler on port `5432`, or Transaction Pooler on `6543`).
 - `DATABASE_DIRECT_URL` — Supabase direct database URL when this host can reach it, otherwise the Session Pooler URL on port `5432` (not the transaction pooler). The direct `db.<project-ref>.supabase.co` host is IPv6-only on many projects, so Vercel commonly reports `ENETUNREACH` for it; the pooler host is IPv4-reachable.
+- `SERVICE_QR_SECRET` — **required for VIP Sunday check-in.** At least 32 characters of secret text. It signs the printed check-in QR, which is now the only way a VIP records attendance. Without it the *Sunday check-in QR* page reports that the QR is not configured yet; nothing else breaks.
 - `DATABASE_SSL_ROOT_CERT` — optional. The Supabase project CA in PEM form, used only when the deployment reports `self-signed certificate in certificate chain`. Certificate verification stays enabled; LIFEGEN adds this CA to Node's system root certificates.
 - `SETUP_KEY` — private random setup code of 32+ characters; needed only until the first Admin is created.
 

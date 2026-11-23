@@ -7,9 +7,6 @@ import { esc, html, icon, toast, errorState, ROLE_LABELS, closeModal } from './u
 import { renderLogin, renderSetup } from './views/auth.js';
 import { renderPrivacy, renderPublicPrivacy } from './views/privacy.js';
 import { renderDashboard } from './views/dashboard.js';
-import { renderAttendance } from './views/attendance.js';
-import { renderHistory, renderServiceDetail } from './views/history.js';
-import { renderReports } from './views/reports.js';
 import { renderPeople } from './views/people.js';
 import { renderPersonForm } from './views/personForm.js';
 import { renderPerson } from './views/person.js';
@@ -19,7 +16,7 @@ import {renderDeployment} from './views/deployment.js';
 import {renderDeveloper} from './views/developer.js';
 import {renderDevIDE,renderDevGit,renderDevPackaging} from './views/devWorkspace.js';
 import { renderCalendar } from './views/calendar.js';
-import { renderRegistrations, renderQrPoster, refreshPendingBadge } from './views/registrations.js';
+import { renderRegistrations, renderQrPoster, renderServiceQr, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
 import { renderCommunity } from './views/community.js';
 
@@ -50,16 +47,13 @@ const routes = [
   { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'lifegroups', perm: 'people:write' },
   { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
-  { path: /^\/attendance$/, view: renderAttendance, nav: 'attendance', perm: 'attendance:view' },
-  { path: /^\/attendance\/history$/, view: renderHistory, nav: 'attendance', perm: 'attendance:view' },
-  { path: /^\/attendance\/history\/(\d+)$/, view: (c, m) => renderServiceDetail(c, m[1]), nav: 'attendance', perm: 'attendance:view' },
-  { path: /^\/reports$/, view: renderReports, nav: 'reports', perm: 'reports:view' },
   { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/lifegroups\/(\d+)$/, view: (c, m) => renderLifegroup(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/networks\/(\d+)$/, view: (c, m) => renderNetwork(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
   { path: /^\/registrations$/, view: renderRegistrations, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/qr-poster$/, view: renderQrPoster, nav: 'settings', perm: 'registrations:manage' },
+  { path: /^\/checkin-qr$/, view: renderServiceQr, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/designs$/, view: renderDesigns, nav: 'designs', perm: 'settings:manage' },
   { path: /^\/community$/, view: renderCommunity, nav: 'community', perm: 'settings:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
@@ -134,7 +128,7 @@ function setActiveNav(key) {
   const devMenu=document.getElementById('devMenu');
   if(devMenu && key.startsWith('dev-')){devMenu.hidden=false;document.getElementById('devMenuToggle')?.setAttribute('aria-expanded','true');}
   const peopleMenu = document.getElementById('peopleMenu');
-  if (peopleMenu && ['lifegroups', 'attendance', 'registrations'].includes(key)) {
+  if (peopleMenu && ['lifegroups', 'registrations'].includes(key)) {
     peopleMenu.hidden = false;
     document.getElementById('peopleMenuToggle')?.setAttribute('aria-expanded', 'true');
   }
@@ -167,17 +161,15 @@ function renderShell() {
       </a>
       <nav class="nav" id="nav">
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        ${(can('lifegroups:view')||can('attendance:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
+        ${(can('lifegroups:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
           <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
             ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
           </button>
           <div class="nav__children" id="peopleMenu" hidden>
              ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
-            ${can('attendance:view') ? navLink('#/attendance', 'attendance', 'Attendance', 'check', true) : ''}
             ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
           </div>
         </div>`:''}
-        ${can('reports:view') ? navLink('#/reports', 'reports', 'Reports', 'chart') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}

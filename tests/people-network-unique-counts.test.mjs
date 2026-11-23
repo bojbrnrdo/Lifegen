@@ -8,7 +8,9 @@ const networkBlock = source.slice(source.indexOf('async function listNetworks(')
 test('Network People counts use unique IDs and only their Network membership', () => {
  const lines=networkBlock.split('\n');
  const indices=lines.flatMap((line,i) => line.includes('SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships') ? [i] : []);
- assert.equal(indices.length,3);
+ // people / boys / girls plus the leaders-in-this-Network count added for the
+ // Bishop -> Network Leader hierarchy.
+ assert.equal(indices.length,4);
  for(const i of indices){
   const sql=lines.slice(i,i+2).join(' ');
   assert.match(sql,/g\.network_id=n\.id/);

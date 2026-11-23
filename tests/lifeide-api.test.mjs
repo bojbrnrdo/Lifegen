@@ -120,8 +120,20 @@ test('isolated HTTP API: access, creation, save, conflict and Git review',async(
   await fs.writeFile(path.join(workspace,'src/other.js'),'unrelated');
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'x'}})).status,400);
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Change test file'},token:false})).status,403);
-  execFileSync('git',['checkout','-q','main'],{cwd:workspace});
-  assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Reject main branch'}})).status,409);
+  // Resolve the fixture repository's default branch before switching away from
+  // it: the protected-branch rule covers both `main` and `master`, but the
+  // checkout has to name the branch that actually exists.
+  execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
+  const defaultBranch=execFileSync('git',['for-each-ref','--format=%(refname:short)','refs/heads'],{cwd:workspace,encoding:'utf8'})
+   .split('\n').map(x=>x.trim()).find(x=>x==='main'||x==='master');
+  assert.ok(defaultBranch, 'the fixture repository has a main or master branch');
+  // An identity is configured here so the 409 below can only come from the
+  // protected-branch rule, never from a missing local git identity.
+  execFileSync('git',['config','user.name','Test'],{cwd:workspace});
+  execFileSync('git',['config','user.email','test@example.invalid'],{cwd:workspace});
+  execFileSync('git',['checkout','-q',defaultBranch],{cwd:workspace});
+  const rejected=await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Reject default branch'}});
+  assert.equal(rejected.status,409,`branch=${JSON.stringify(defaultBranch)} response=${JSON.stringify(rejected.data)}`);
   execFileSync('git',['checkout','-q','feature/test-lifeide'],{cwd:workspace});
   execFileSync('git',['checkout','-q','-b','release/test'],{cwd:workspace});
   assert.equal((await call('/git/commit',{method:'POST',body:{paths:['src/test.js'],message:'Blocked on release branch'}})).status,409);

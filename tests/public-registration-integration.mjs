@@ -82,7 +82,7 @@ async function cleanup() {
   // (non-deferrable) foreign keys, so they have to go first.
   if (ids.people.length) {
     await client.query('DELETE FROM lifegroup_memberships WHERE person_id=ANY($1::bigint[])', [ids.people]);
-    await client.query('DELETE FROM records WHERE person_id=ANY($1::bigint[])', [ids.people]);
+    await client.query('DELETE FROM vip_checkins WHERE registration_id IN (SELECT id FROM vip_registrations WHERE person_id=ANY($1::bigint[]))', [ids.people]);
   }
   if (ids.memberships.length) await client.query('DELETE FROM lifegroup_memberships WHERE id=ANY($1::bigint[])', [ids.memberships]);
   if (ids.vip.length) await client.query('DELETE FROM vip_registrations WHERE id=ANY($1::bigint[])', [ids.vip]);

@@ -121,17 +121,16 @@ test('Lifegroups displays Remove alongside Add New; tree and detail pages also o
  assert.match(view,/id="removeCellLeader"/);
  assert.match(view,/id="removeNetwork"/);
  assert.match(view,/onRemoved:afterRemove/);
- assert.match(view,/__lifegenTree\?\.members\.clear\(\)/);
- assert.match(view,/const removeContext=can\('lifegroups:manage'\)\?/);
- assert.match(graph,/typeof options\.onRemove==='function'/);
- assert.match(graph,/data-remove-node/);
- assert.match(graph,/aria-label="Interactive Lifegroup network/);
- assert.match(graph,/profileAvatar\(n\)/);
+ // The removed map exposed per-node Remove controls; the directory and the
+ // Network/Cell pages carry the same actions now.
+ assert.match(view,/openRemoveFromLifegroups\(\{\s*initialTab/);
+ assert.match(css,/\.lifegroups-page__cell-list/);
+ assert.doesNotMatch(view,/lifegenTree|lifegenReactVersion|react-lifegroups/);
 });
 
 test('removal dialog offers a three-tab, cascading selector with strong confirmation and safe output',()=>{
  assert.match(dialog,/role="tabpanel"/);
- assert.match(dialog,/const labels=\{network:'Network',cell:'Cell Leader',member:'Member'\}/);
+ assert.match(dialog,/const labels=\{network:'A whole Network',cell:'A Cell Leader and their Cell',member:'One person'\}/);
  assert.match(dialog,/role="tablist"/);
  assert.match(dialog,/api\.networks\(\{status:'active'\}\)/);
  assert.match(dialog,/api\.lifegroups\(\{status:'active'\}\)/);

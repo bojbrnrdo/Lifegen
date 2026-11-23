@@ -27,12 +27,9 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     memberCard.querySelector('.stat__label').textContent = 'Members';
     memberCard.querySelector('.small.muted')?.remove();
   }
-  if (attendanceCard) {
-    attendanceCard.querySelector('.stat__label').textContent = 'Meetings this week';
-    const summary = cal?.summary;
-    attendanceCard.querySelector('.stat__value').textContent = summary ? String(summary.met_this_week ?? 0) : '—';
-    attendanceCard.querySelector('.small.muted')?.remove();
-  }
+  // The "Meetings this week" figure was removed: it counted reported meetings,
+  // which is not what a leader opens this page to find out.
+  attendanceCard?.remove();
   extraCard?.remove();
   // Reuse existing cell-team records: only the leader and member count are
   // visible until the person opens that group.
@@ -55,8 +52,8 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
 
   const aside = document.createElement('aside');
   aside.className = 'card network-detail__actions';
-  aside.innerHTML = '<h2>Quick actions</h2>' +
-    '<p class="network-detail__secondary">Manage this network in a few clicks.</p>' +
+  aside.innerHTML = '<h2>What do you want to do?</h2>' +
+    '<p class="network-detail__secondary">Pick one of these to keep this Network up to date.</p>' +
     '<div class="network-detail__action-list" id="netActionList"></div>' +
     '<div id="netMemberChooser" class="network-detail__chooser" hidden></div>' +
     '<div id="netExtras" class="network-detail__extras"></div>';
@@ -74,9 +71,9 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     return button;
   };
   if (manage) {
-    if (!leaderRegistered) quickButton('netLinkLeader', 'Link / register leader', '↗');
-    quickButton('netCreateGroup', 'Add Cell Leader', '+');
-    quickButton('netQuickAddMember', 'Add member', '+', !cells.length);
+    if (!leaderRegistered) quickButton('netLinkLeader', 'Register or link the Network Leader', '↗');
+    quickButton('netCreateGroup', 'Add a Cell Leader', '+');
+    quickButton('netQuickAddMember', 'Add a member to a Cell', '+', !cells.length);
     if (leaderChips) {
       // Older Network Leader team assignments remain accessible without adding
       // a second, confusing Cell Leader button to the primary workflow.
@@ -85,12 +82,6 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
       leaders.innerHTML = '<summary>Existing leader team</summary>';
       leaders.append(leaderChips);
       aside.querySelector('#netExtras').append(leaders);
-    }
-    const report = header.querySelector('#netReport');
-    if (report) {
-      report.textContent = 'Report meeting';
-      report.classList.add('network-detail__action');
-      actions.append(report);
     }
   }
   if (!manage) {
@@ -103,15 +94,11 @@ export function simplifyNetworkDetail(main, { cells, cal, manage, leaderRegister
     actions.append(link);
   }
 
-  const history = document.createElement('details');
-  history.className = 'card network-detail__history';
-  history.id = 'netAttendanceHistory';
-  history.innerHTML = '<summary><span><strong>Attendance & meeting history</strong>' +
-    '<small>Last eight weeks · Open when you need the detailed report</small></span>' +
-    '<span class="network-detail__expand-arrow" aria-hidden="true">⌄</span></summary>';
-  workspace.after(history);
-  calendar.classList.add('network-detail__calendar');
-  history.append(calendar);
+  // "Attendance & meeting history" was removed along with the calendar behind
+  // it. The calendar data is still fetched for member tiers and the leader
+  // team, so the element is kept out of the page rather than left orphaned.
+  calendar.remove();
+  const history = null;
 
   if (!cells.length && manage) {
     const note = document.createElement('p');

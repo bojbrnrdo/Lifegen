@@ -13,7 +13,9 @@ test('linked staff global export denied regardless of active leadership',async()
  }};
  await assert.rejects(assertGlobalExportAccess(db,{id:5,role_id:'staff'}),{status:403});
 });
-test('both direct global export routes enforce same guard',()=>{
- assert.match(app,/reports:view'\);await assertGlobalExportAccess\(\{query\},req.actor\)/);
+test('the remaining global export route keeps the guard',()=>{
+ // The attendance CSV export (/api/reports/export) was removed with attendance
+ // itself; the administrator backup is the only global export left.
  assert.match(app,/settings:manage'\);await assertGlobalExportAccess\(\{query\},req.actor\)/);
+ assert.doesNotMatch(app,/\/api\/reports\/export/);
 });

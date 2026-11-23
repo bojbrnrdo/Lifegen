@@ -1,10 +1,10 @@
-// Lifegroup progress: solid/new members, weekly meeting calendar, leader report link,
-// per-network grid and the overall Progress tab. Shared by lifegroups.js.
+// Lifegroup progress: solid/new members, weekly meeting calendar and the
+// per-Cell report form. Shared by lifegroups.js.
 import { api } from '../api.js';
 import { can } from '../app.js';
-import { html, raw, esc, icon, fmtDate, toISODate, toast, openModal, closeModal, confirmDialog, withLoading, emptyState, debounce } from '../ui.js';
+import { html, raw, esc, icon, fmtDate, toISODate, toast, openModal, closeModal, confirmDialog, withLoading } from '../ui.js';
+import { createProgressGuard } from './progressGuard.js';
 
-const DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 export const weekLabel = (monday) => { const d = new Date(`${monday}T00:00:00`); return `${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}`; };
 
 /** Compact week strip: one cell per week — held / no meeting / nothing reported. */
@@ -19,12 +19,17 @@ export function weekStrip(calendar, { size = 'sm' } = {}) {
 
 export function solidBadge(solid, target, is_solid) {
   return is_solid
-    ? raw(`<span class="badge badge--present badge--nodot" title="${solid} in the closed cell (target ${target}) — solid Lifegroup">Solid · ${solid}/${target}</span>`)
-    : raw(`<span class="badge badge--nodot" title="${solid} in the closed cell (target ${target})">${solid}/${target} closed</span>`);
+    ? raw(`<span class="badge badge--present badge--nodot" title="${solid} settled members of ${target} — this Cell is thriving">Thriving · ${solid}/${target}</span>`)
+    : raw(`<span class="badge badge--nodot" title="${solid} settled members of ${target} needed to thrive">${solid}/${target} settled</span>`);
 }
-export const TIER_LABEL = { solid: 'Closed cell', new: 'Open cell' };
-export const TIER_HINT = { solid: 'matagal na, committed at consistent', new: 'mga bago / hindi pa consistent' };
-export const tierBadge = (t) => raw(t === 'solid' ? '<span class="badge badge--present badge--nodot" title="Closed cell — committed, consistent member">Closed cell</span>' : '<span class="badge badge--nodot" title="Open cell — newcomer / not yet consistent">Open cell</span>');
+// Plain words for the two member groups. "Closed / Open cell" is internal
+// jargon; staff talk about people who are settled and people who are new.
+export const TIER_LABEL = { solid: 'Settled', new: 'New or not yet regular' };
+export const TIER_HINT = {
+  solid: 'Attends regularly and is committed to the group',
+  new: 'Still getting to know the group — give them time and follow-up',
+};
+export const tierBadge = (t) => raw(t === 'solid' ? '<span class="badge badge--present badge--nodot" title="Attends regularly and is committed">Settled</span>' : '<span class="badge badge--nodot" title="Newcomer or not attending regularly yet">New</span>');
 /** Last-4-weeks cells for one member: attended / absent / no Lifegroup, with a dot when they had devotion. */
 export function memberDots(last4) {
   if (!last4) return '';
@@ -46,7 +51,7 @@ export function memberSections(rows, { manage = false, extraHead = raw(''), extr
         <td data-label="" class="nowrap"><a href="#/people/${m.id}"><b>${m.name || `${m.first_name} ${m.last_name}`}</b></a>${m.role && m.role !== 'member' ? html` <span class="badge badge--leader">${m.role === 'leader' ? 'Leader' : 'Assistant'}</span>` : ''}${m.person_code ? html`<div class="code">${m.person_code}</div>` : ''}${m.sub ? html`<div class="small" style="margin-top:3px">${m.sub}</div>` : ''}</td>
         <td data-label="Last 4 weeks" class="nowrap">${memberDots(m.last4)}${m.last4 && m.last4.consistency_pct != null ? html` <span class="small muted">${m.last4.consistency_pct}%</span>` : ''}</td>
         ${extra(m)}
-        ${manage ? html`<td data-label="" class="actions nowrap">${actions(m)}<button class="btn btn--sm" data-tier="${m.id}" data-to="${m.tier === 'solid' ? 'new' : 'solid'}" title="${m.tier === 'solid' ? 'Move to Open cell' : 'Move to Closed cell'}">${m.tier === 'solid' ? '← Open' : 'Closed →'}</button></td>` : ''}
+        ${manage ? html`<td data-label="" class="actions nowrap">${actions(m)}<button class="btn btn--sm" data-tier="${m.id}" data-to="${m.tier === 'solid' ? 'new' : 'solid'}" title="${m.tier === 'solid' ? 'They are new or not attending regularly any more' : 'They attend regularly and are committed'}">${m.tier === 'solid' ? '← Mark new' : 'Mark settled →'}</button></td>` : ''}
       </tr>`)}</tbody></table></div>` : raw('<div class="small muted" style="padding:14px 16px">No one here yet.</div>')}
   </section>`;
   return html`<div class="cells">${sect('new', rows.filter((m) => m.tier !== 'solid'))}${sect('solid', rows.filter((m) => m.tier === 'solid'))}</div>`;
@@ -56,27 +61,37 @@ export function memberSections(rows, { manage = false, extraHead = raw(''), extr
 // Group detail: Progress card
 // ---------------------------------------------------------------------------
 export async function renderProgressCard(card, groupId, { onChange, onLoaded } = {}) {
+  if (!card) return;
   const manage = can('lifegroups:manage');
   card.innerHTML = '<div class="card__header"><h2>Progress</h2></div><div class="card__body"><div class="loading">Loading…</div></div>';
+  // Only the newest request for this card may paint it, and nothing may paint a
+  // card the page has already replaced (a live update or a second rapid open).
+  const guard = createProgressGuard(card);
+  const current = guard.current;
   let p;
-  try { p = await api.lifegroupProgress(groupId, 12); } catch (e) { card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; }
+  try { p = await api.lifegroupProgress(groupId, 12); } catch (e) {
+    if (current() && card.querySelector('.card__body')) card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`;
+    return;
+  }
+  if (!current()) return;
   try { onLoaded?.(p); } catch { /* cosmetic */ }
   const draw = () => {
+    if (!current()) return;
     const last = p.calendar[p.calendar.length - 1];
     card.innerHTML = html`
-      <div class="card__header"><h2>Progress</h2>${solidBadge(p.solid, p.target, p.is_solid)}</div>
+      <div class="card__header"><h2>How this Cell is doing</h2>${solidBadge(p.solid, p.target, p.is_solid)}</div>
       <div class="card__body stack">
         <div>
           <div class="progress"><span style="width:${p.percent}%"></span></div>
-          <p class="small muted mt-1">${p.is_solid ? 'Solid Lifegroup' : `${p.target - p.solid} more solid member${p.target - p.solid === 1 ? '' : 's'} to become a solid Lifegroup`}</p>
+          <p class="small muted mt-1">${p.is_solid ? 'This Cell is thriving — enough members are settled and attending regularly.' : `${p.target - p.solid} more settled member${p.target - p.solid === 1 ? '' : 's'} and this Cell is thriving.`}</p>
         </div>
         <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
-          <div class="kpi"><b>${p.solid}<small>/${p.target}</small></b><span>Closed cell</span></div>
-          <div class="kpi"><b>${p.new_members}</b><span>Open cell</span></div>
-          <div class="kpi ${p.met_this_week ? '' : 'kpi--amber'}"><b>${p.met_this_week ? 'Yes' : last && last.meeting ? 'No' : '—'}</b><span>Met this week</span></div>
-          <div class="kpi"><b>${p.held_last_4}<small>/4</small></b><span>Last 4 weeks</span></div>
-          <div class="kpi"><b>${p.streak}</b><span>Week streak</span></div>
-          <div class="kpi"><b>${p.last_meeting ? fmtDate(p.last_meeting.meeting_date, { short: true }) : '—'}</b><span>Last report</span></div>
+          <div class="kpi" title="People who attend regularly and are committed"><b>${p.solid}<small>/${p.target}</small></b><span>Settled</span></div>
+          <div class="kpi" title="People who are new or not attending regularly yet"><b>${p.new_members}</b><span>New / not regular</span></div>
+          <div class="kpi ${p.met_this_week ? '' : 'kpi--amber'}" title="Did this Cell meet during this week?"><b>${p.met_this_week ? 'Yes' : last && last.meeting ? 'No' : '—'}</b><span>Met this week?</span></div>
+          <div class="kpi" title="How many of the last four weeks this Cell met"><b>${p.held_last_4}<small>/4</small></b><span>Met, last 4 weeks</span></div>
+          <div class="kpi" title="Consecutive weeks this Cell has met"><b>${p.streak}</b><span>Weeks in a row</span></div>
+          <div class="kpi" title="The date of the most recent meeting report"><b>${p.last_meeting ? fmtDate(p.last_meeting.meeting_date, { short: true }) : '—'}</b><span>Last reported</span></div>
         </div>
         <div><div class="row row--between small mb-1"><span class="muted">Last 12 weeks</span><span class="muted">${weekLabel(p.calendar[0].week_start)} → ${weekLabel(last.week_start)}</span></div>${weekStrip(p.calendar, { size: 'md' })}
           <div class="small muted mt-1"><span class="wk__c wk__c--held wk__c--key"></span> held (number = present) <span class="wk__c wk__c--skip wk__c--key"></span> no Lifegroup <span class="wk__c wk__c--none wk__c--key"></span> not reported</div></div>
@@ -134,7 +149,7 @@ export function meetingForm(groupId, p, existing, onSaved) {
       <div id="mtHeld" ${existing && !existing.held ? 'hidden' : ''}>
         <div class="field"><label>Topic <span class="opt">optional</span></label><input name="topic" value="${esc(existing?.topic || '')}" maxlength="160" placeholder="e.g. Prayer, Identity in Christ" /></div>
         <div class="field mt-1"><label>Who was present?</label>
-          ${p.members.length ? `<div class="checklist">${p.members.map((m) => `<label class="checklist__item"><input type="checkbox" name="present" value="${m.id}" ${presentIds.has(m.id) ? 'checked' : ''} /><span>${esc(m.first_name + ' ' + m.last_name)}</span>${m.tier === 'solid' ? '<span class="badge badge--present badge--nodot">Closed cell</span>' : ''}<label class="small muted" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" name="devotion" value="${m.id}" ${devoIds.has(m.id) ? 'checked' : ''} /> Devotion</label></label>`).join('')}</div>` : '<p class="small muted">No members yet.</p>'}
+          ${p.members.length ? `<div class="checklist">${p.members.map((m) => `<label class="checklist__item"><input type="checkbox" name="present" value="${m.id}" ${presentIds.has(m.id) ? 'checked' : ''} /><span>${esc(m.first_name + ' ' + m.last_name)}</span>${m.tier === 'solid' ? '<span class="badge badge--present badge--nodot" title="Settled member">Settled</span>' : ''}<label class="small muted" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center"><input type="checkbox" name="devotion" value="${m.id}" ${devoIds.has(m.id) ? 'checked' : ''} /> Devotion</label></label>`).join('')}</div>` : '<p class="small muted">No members yet.</p>'}
         </div>
       </div>
       <div class="field"><label>Notes <span class="opt">optional</span></label><textarea name="notes" rows="2" maxlength="1000">${esc(existing?.notes || '')}</textarea></div>
@@ -158,63 +173,4 @@ export function meetingForm(groupId, p, existing, onSaved) {
     catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
   modal.querySelector('#mtSave').onclick = save; form.onsubmit = save;
-}
-
-// ---------------------------------------------------------------------------
-// Network detail: weekly grid (network leader's own group first, then each group)
-// ---------------------------------------------------------------------------
-export async function renderNetworkCalendar(card, networkId, prefetched = null) {
-  card.innerHTML = '<div class="card__header"><h2>Weekly Lifegroups</h2></div><div class="card__body"><div class="loading">Loading…</div></div>';
-  let d = prefetched;
-  if (!d) { try { d = await api.networkCalendar(networkId, 8); } catch (e) { card.querySelector('.card__body').innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; } }
-  const s = d.summary;
-  card.innerHTML = html`
-    <div class="card__header"><h2>Weekly Lifegroups</h2><span class="hint">Last 8 weeks · ${s.met_this_week}/${s.groups} met this week · ${s.consistency_pct}% of the last 4 weeks</span></div>
-    <div class="card__body card__body--flush">
-      ${d.groups.length ? html`<div class="table-wrap"><table class="table table--grid">
-        <thead><tr><th>Lifegroup</th><th>Closed cell</th>${d.weeks.map((w) => html`<th class="num small">${weekLabel(w)}</th>`)}</tr></thead>
-        <tbody>${d.groups.map((g) => html`<tr>
-          <td><a href="#/lifegroups/${g.id}"><b>${g.name}</b></a>${g.is_leader_group ? raw(' <span class="badge badge--leader">Network leader’s group</span>') : ''}<div class="small muted">${g.leader_name || '—'}${g.schedule_day ? ` · ${DAY_SHORT[g.schedule_day]}` : ''}</div></td>
-          <td class="nowrap">${solidBadge(g.solid, g.target, g.is_solid)}</td>
-          ${g.calendar.map((w) => { const m = w.meeting; return html`<td class="num"><span class="wk__c wk__c--md ${!m ? 'wk__c--none' : m.held ? 'wk__c--held' : 'wk__c--skip'}" title="${!m ? 'Not reported' : m.held ? `Held ${fmtDate(m.date, { short: true })} · ${m.present} present` : 'No Lifegroup'}">${m && m.held ? m.present : m ? '×' : ''}</span></td>`; })}
-        </tr>`)}</tbody></table></div>` : html`<div class="empty" style="padding:28px"><p>No active Lifegroups under this network yet.</p></div>`}
-      <div class="card__footer small muted"><span class="wk__c wk__c--held wk__c--key"></span> held (number = present) <span class="wk__c wk__c--skip wk__c--key"></span> no Lifegroup <span class="wk__c wk__c--none wk__c--key"></span> not reported</div>
-    </div>`;
-}
-
-// ---------------------------------------------------------------------------
-// Lifegroups → Progress tab
-// ---------------------------------------------------------------------------
-export async function drawProgressTab(body) {
-  body.innerHTML = '<div class="loading">Loading…</div>';
-  let d;
-  try { d = await api.progressOverview(8); } catch (e) { body.innerHTML = html`<div class="alert alert--error">${e.message}</div>`; return; }
-  const s = d.summary;
-  let q = '';
-  body.innerHTML = html`
-    <div class="kpi-row mb-2" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
-      <div class="kpi"><b>${s.solid_groups}<small>/${s.groups}</small></b><span>Solid Lifegroups</span></div>
-      <div class="kpi"><b>${s.solid_members}</b><span>Closed cell</span></div>
-      <div class="kpi"><b>${s.new_members}</b><span>Open cell</span></div>
-      <div class="kpi ${s.met_this_week < s.groups ? 'kpi--amber' : ''}"><b>${s.met_this_week}<small>/${s.groups}</small></b><span>Met this week</span></div>
-      <div class="kpi"><b>${s.consistency_pct}%</b><span>Held, last 4 weeks</span></div>
-      <div class="kpi"><b>${s.networks}</b><span>Networks</span></div>
-    </div>
-    <div class="card"><div class="card__header"><h2>Every Lifegroup</h2><div class="gsearch" style="max-width:260px">${icon('search', 15)}<input id="pgq" placeholder="Filter…" autocomplete="off" aria-label="Filter groups" /></div></div><div class="card__body card__body--flush" id="pgAll"></div></div>`;
-  const all = body.querySelector('#pgAll');
-  const drawAll = () => {
-    const needle = q.toLowerCase();
-    const rows = needle ? d.groups.filter((g) => [g.name, g.leader_name, g.network_name].some((v) => v && v.toLowerCase().includes(needle))) : d.groups;
-    all.innerHTML = rows.length ? html`<div class="table-wrap"><table class="table table--grid">
-      <thead><tr><th>Lifegroup</th><th>Network</th><th>Closed cell</th><th class="num">Members</th>${d.weeks.map((w) => html`<th class="num small">${weekLabel(w)}</th>`)}</tr></thead>
-      <tbody>${rows.map((g) => html`<tr>
-        <td><a href="#/lifegroups/${g.id}"><b>${g.name}</b></a>${g.is_leader_group ? raw(' <span class="badge badge--leader">Network leader’s Lifegroup</span>') : ''}<div class="small muted">${g.leader_name || '—'}</div></td>
-        <td class="small">${g.network_name || raw('<span class="muted">—</span>')}</td>
-        <td class="nowrap">${g.is_leader_group ? html`<span class="small muted">${g.total} / 6 cell leaders</span>` : solidBadge(g.solid, g.target, g.is_solid)}</td>
-        <td class="num">${g.total}</td>
-        ${g.calendar.map((w) => { const m = w.meeting; return html`<td class="num"><span class="wk__c wk__c--md ${!m ? 'wk__c--none' : m.held ? 'wk__c--held' : 'wk__c--skip'}" title="${!m ? 'Not reported' : m.held ? `Held ${fmtDate(m.date, { short: true })} · ${m.present} present` : 'No Lifegroup'}">${m && m.held ? m.present : m ? '×' : ''}</span></td>`; })}
-      </tr>`)}</tbody></table></div><div class="card__footer small muted">${rows.length} group${rows.length === 1 ? '' : 's'} · <span class="wk__c wk__c--held wk__c--key"></span> held <span class="wk__c wk__c--skip wk__c--key"></span> no Lifegroup <span class="wk__c wk__c--none wk__c--key"></span> not reported</div>` : emptyState({ icon: 'group', title: 'No group matches', text: '' });
-  };
-  body.querySelector('#pgq').addEventListener('input', debounce((e) => { q = e.target.value.trim(); drawAll(); }, 150));
-  drawAll();
 }

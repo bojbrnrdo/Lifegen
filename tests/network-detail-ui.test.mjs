@@ -15,12 +15,25 @@ test('Network detail uses a separate compact workspace instead of removing real 
   assert.match(css, /network-detail__workspace/);
 });
 
-test('Detailed attendance remains available but is not shown on first load', () => {
-  assert.match(moduleCode, /document\.createElement\('details'\)/);
-  assert.match(moduleCode, /history\.id = 'netAttendanceHistory'/);
-  assert.match(moduleCode, /history\.append\(calendar\)/);
-  assert.match(view, /if \(!compact\.history\.open \|\| compact\.history\.dataset\.loaded\) return/);
-  assert.match(view, /renderNetworkCalendar\(main\.querySelector\('#netCalendar'\), n\.id, cal\)/);
+test('the attendance history and meeting report are gone from the Network page', () => {
+  // Removed on request: the "Attendance & meeting history" disclosure, its
+  // eight-week grid, the "Report meeting" action and the "Meetings this week"
+  // figure. The calendar data is still fetched because the structure and the
+  // leader team depend on it, so the element must be removed, not left orphaned.
+  // Assert on the markup, not on the words: the file explains the removal in a
+  // comment, and a bare phrase check would match that instead.
+  assert.doesNotMatch(moduleCode, /history\.id = 'netAttendanceHistory'/);
+  assert.doesNotMatch(moduleCode, /'<summary><span><strong>Attendance/);
+  assert.doesNotMatch(moduleCode, /textContent = 'Meetings this week'/);
+  assert.doesNotMatch(moduleCode, /textContent = 'Report meeting'/);
+  assert.doesNotMatch(moduleCode, /history\.append\(calendar\)/);
+  assert.match(moduleCode, /calendar\.remove\(\)/, 'the calendar element is removed from the page');
+  // The button is no longer built at all, so nothing has to remove it either.
+  assert.doesNotMatch(view, /id="netReport"/, 'no report button is rendered');
+  assert.doesNotMatch(view, /#netReport'\).onclick/, 'no handler is bound to the removed button');
+  // No on-demand loader may be registered for a disclosure that no longer exists.
+  assert.doesNotMatch(view, /compact\.history\.addEventListener/);
+  assert.doesNotMatch(view, /netAttendanceHistory/);
 });
 
 test('Creating a Lifegroup from its Network defaults to the correct Network and category', () => {

@@ -72,7 +72,7 @@ export function validateGroupInput(body = {}, existing = null) {
     is_active: asBool(src.is_active, existing?.is_active ?? true),
     is_demo: asBool(src.is_demo, existing?.is_demo ?? false),
   };
-  if (!['boys', 'girls'].includes(data.gender)) throw httpError(400, 'Choose whether this is a boys or girls Lifegroup.');
+  if (!['boys', 'girls'].includes(data.gender)) throw httpError(400, 'Choose whether this Cell is for boys or for girls.');
   if (data.schedule_day && !DAYS.has(data.schedule_day)) throw httpError(400, 'Choose a valid meeting day.');
   if (data.schedule_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data.schedule_time)) throw httpError(400, 'Meeting time must use HH:MM.');
   if (data.capacity !== null && (!Number.isInteger(data.capacity) || data.capacity < 1 || data.capacity > 999)) throw httpError(400, 'Capacity must be a whole number from 1 to 999, or blank.');
@@ -80,7 +80,7 @@ export function validateGroupInput(body = {}, existing = null) {
   return data;
 }
 
-export function validateNetworkInput(body = {}, existing = null) {
+export function validateNetworkInput(body = {}, existing = null, id = null) {
   const src = existing ? { ...existing, ...body } : body;
   const data = {
     name: stringField(src.name, 'Network name', { required: true, max: 120 }),
@@ -91,19 +91,24 @@ export function validateNetworkInput(body = {}, existing = null) {
     is_active: asBool(src.is_active, existing?.is_active ?? true),
     is_demo: asBool(src.is_demo, existing?.is_demo ?? false),
   };
-  if (!['boys', 'girls'].includes(data.gender)) throw httpError(400, 'Choose whether this is a boys or girls network.');
-  for (const key of ['parent_network_id', 'parent_id', 'parent']) {
+  if (!['boys', 'girls'].includes(data.gender)) throw httpError(400, 'Choose whether this Network is for boys or for girls.');
+  // Two levels only: a pastor (Bishop / Pastora) at the top, and their Network
+  // Leaders under them. A Network that already has a parent cannot be a parent.
+  const parentNetworkId = optionalId(body.parent_network_id, 'parent network ID');
+  for (const key of ['parent_id', 'parent']) {
     if (body[key] !== undefined && body[key] !== null && body[key] !== '' && body[key] !== 0 && body[key] !== '0') {
-      throw httpError(400, 'Networks are independent; they cannot be nested.');
+      throw httpError(400, 'Use parent_network_id to place a Network under a pastor.');
     }
   }
+  if (parentNetworkId && id && Number(parentNetworkId) === Number(id)) throw httpError(400, 'A Network cannot be under itself.');
+  data.parent_network_id = parentNetworkId;
   if (data.leader_person_id && data.leader_name) data.leader_name = null;
   return data;
 }
 
 export function validateTier(value) {
   const tier = clean(value);
-  if (!['new', 'solid'].includes(tier)) throw httpError(400, 'Choose Open cell or Closed cell.');
+  if (!['new', 'solid'].includes(tier)) throw httpError(400, 'Choose Settled or New for this person.');
   return tier;
 }
 
@@ -193,8 +198,15 @@ async function listNetworks(filters = {}) {
       (SELECT count(*)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND g.leader_person_id=n.leader_person_id) AS cell_leaders,
       (SELECT max(mt.meeting_date)::text FROM lifegroup_meetings mt JOIN lifegroups g ON g.id=mt.lifegroup_id
-        WHERE g.network_id=n.id AND mt.held) AS last_held
+        WHERE g.network_id=n.id AND mt.held) AS last_held,
+      n.parent_network_id,
+      coalesce(nullif(concat_ws(' ', plp.first_name, plp.last_name), ''), pn.name, pn.leader_name) AS parent_name,
+      (SELECT count(*)::int FROM networks c WHERE c.parent_network_id=n.id AND c.is_active) AS child_count,
+      (SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
+        WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL AND m.role<>'member') AS leaders_here
     FROM networks n LEFT JOIN people lp ON lp.id=n.leader_person_id
+    LEFT JOIN networks pn ON pn.id=n.parent_network_id
+    LEFT JOIN people plp ON plp.id=pn.leader_person_id
     WHERE ($1::text='all' OR ($1::text='active' AND n.is_active) OR ($1::text='inactive' AND NOT n.is_active))
       AND ($2::text IS NULL OR n.gender=$2)
     ORDER BY n.is_active DESC,n.gender,n.name`, [status, gender]);
@@ -210,6 +222,10 @@ async function listNetworks(filters = {}) {
     closed_cell: Number(r.closed_cell || 0),
     open_cell: Number(r.open_cell || 0),
     cell_leaders: Number(r.cell_leaders || 0),
+    parent_network_id: r.parent_network_id == null ? null : Number(r.parent_network_id),
+    parent_name: r.parent_name || null,
+    child_count: Number(r.child_count || 0),
+    leaders_here: Number(r.leaders_here || 0),
     is_active: Boolean(r.is_active),
     is_demo: Boolean(r.is_demo),
     total_groups: Number(r.group_count || 0),
@@ -224,8 +240,8 @@ async function activeMembers(groupId) {
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,
       (v.id IS NOT NULL) AS is_vip
     FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
-    LEFT JOIN LATERAL (SELECT count(*)::int AS sundays_attended,max(s.service_date)::text AS last_attended
-      FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status='present') stats ON true
+    LEFT JOIN LATERAL (SELECT count(DISTINCT c.date_key)::int AS sundays_attended,max(c.date_key)::text AS last_attended
+      FROM vip_checkins c JOIN vip_registrations vr ON vr.id=c.registration_id WHERE vr.person_id=p.id AND c.status='valid') stats ON true
     LEFT JOIN LATERAL (SELECT id,review_status,created_at FROM vip_registrations vr WHERE vr.person_id=p.id ORDER BY vr.created_at DESC,vr.id DESC LIMIT 1) v ON true
     WHERE m.lifegroup_id=$1 AND m.left_at IS NULL AND p.archived_at IS NULL
     ORDER BY CASE m.role WHEN 'leader' THEN 0 WHEN 'assistant' THEN 1 ELSE 2 END,lower(p.last_name),lower(p.first_name),p.id`, [groupId]);
@@ -244,7 +260,7 @@ async function formerMembers(groupId) {
 async function getGroup(id) {
   const groups = await listGroups({ status: 'all' });
   const group = groups.find((g) => g.id === Number(id));
-  if (!group) throw httpError(404, 'Lifegroup not found.');
+  if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
   const [members, former] = await Promise.all([activeMembers(group.id), formerMembers(group.id)]);
   let led_groups = [];
   if (group.leads_network && group.network_id) {
@@ -264,6 +280,54 @@ async function membershipForPerson(personId) {
   return { current: history.find((r) => !r.left_at) || null, history };
 }
 
+/**
+ * Everyone currently in a Cell, with where they sit (Cell, Cell Leader,
+ * Network). One read-only query powers the "Find a person" box on the
+ * Lifegroups page, which replaces hunting for a name on the network map.
+ * Members with no Cell are not here — they are the "People to connect" queue.
+ */
+async function peopleInCells(limit = 4000) {
+  const max = Math.max(1, Math.min(Number(limit) || 4000, 8000));
+  // Members of a Cell, plus the Cell Leaders and Network Leaders who may not
+  // hold a membership row of their own. A leader's own membership wins when
+  // both exist, so nobody is listed twice.
+  const { rows } = await query(`WITH cell_rows AS (
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.sex,
+        CASE WHEN m.role <> 'leader' THEN 'member'
+             WHEN EXISTS(SELECT 1 FROM networks xn WHERE xn.leader_person_id=g.leader_person_id AND xn.is_active)
+               THEN 'network_leader' ELSE 'cell_leader' END AS role,
+        g.id AS cell_id,g.name AS cell_name,n.id AS network_id,n.name AS network_name,
+        l.full_name AS cell_leader_name
+      FROM lifegroup_memberships m
+      JOIN people p ON p.id=m.person_id
+      JOIN lifegroups g ON g.id=m.lifegroup_id
+      LEFT JOIN networks n ON n.id=g.network_id
+      LEFT JOIN people l ON l.id=g.leader_person_id
+      WHERE m.left_at IS NULL AND p.archived_at IS NULL AND g.is_active
+    ), leader_rows AS (
+      SELECT p.id,p.person_code,p.first_name,p.last_name,p.sex,
+        CASE WHEN EXISTS(SELECT 1 FROM networks xn WHERE xn.leader_person_id=g.leader_person_id AND xn.is_active)
+          THEN 'network_leader' ELSE 'cell_leader' END AS role,
+        g.id AS cell_id,g.name AS cell_name,n.id AS network_id,n.name AS network_name,
+        p.full_name AS cell_leader_name
+      FROM lifegroups g
+      JOIN people p ON p.id=g.leader_person_id
+      LEFT JOIN networks n ON n.id=g.network_id
+      WHERE g.is_active AND p.archived_at IS NULL
+    )
+    SELECT * FROM cell_rows
+    UNION ALL
+    SELECT * FROM leader_rows WHERE id NOT IN (SELECT id FROM cell_rows)
+    ORDER BY first_name,last_name,id LIMIT $1`, [max]);
+  return rows.map((r) => ({
+    id: Number(r.id), person_code: r.person_code, first_name: r.first_name, last_name: r.last_name, sex: r.sex,
+    role: r.role,
+    cell_id: Number(r.cell_id), cell_name: r.cell_name,
+    network_id: r.network_id == null ? null : Number(r.network_id), network_name: r.network_name,
+    cell_leader_name: r.cell_leader_name,
+  }));
+}
+
 async function needsLifegroup(filters = {}) {
   const q = clean(filters.q);
   const limit = Math.max(1, Math.min(Number(filters.limit) || 500, 1000));
@@ -273,8 +337,8 @@ async function needsLifegroup(filters = {}) {
       v.id AS vip_registration_id,v.review_status AS vip_review_status,v.created_at AS vip_registered_at,
       (v.id IS NOT NULL) AS is_vip
     FROM people p
-    LEFT JOIN LATERAL (SELECT count(*)::int AS sundays_attended,max(s.service_date)::text AS last_attended
-      FROM records r JOIN services s ON s.id=r.service_id WHERE r.person_id=p.id AND r.status='present') stats ON true
+    LEFT JOIN LATERAL (SELECT count(DISTINCT c.date_key)::int AS sundays_attended,max(c.date_key)::text AS last_attended
+      FROM vip_checkins c JOIN vip_registrations vr ON vr.id=c.registration_id WHERE vr.person_id=p.id AND c.status='valid') stats ON true
     LEFT JOIN LATERAL (SELECT id,review_status,created_at FROM vip_registrations vr WHERE vr.person_id=p.id ORDER BY vr.created_at DESC,vr.id DESC LIMIT 1) v ON true
     WHERE p.archived_at IS NULL AND p.status<>'inactive'
       AND NOT EXISTS(SELECT 1 FROM lifegroup_memberships m WHERE m.person_id=p.id AND m.left_at IS NULL)
@@ -369,7 +433,7 @@ async function validateGroupReferences(client, data, groupId = null) {
 async function saveGroup(body, actor, id = null) {
   return transaction(async (client) => {
     const existing = id ? (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [id])).rows[0] : null;
-    if (id && !existing) throw httpError(404, 'Lifegroup not found.');
+    if (id && !existing) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
     const data = validateGroupInput(body, existing);
     await validateGroupReferences(client, data, id);
     if (data.network_id && data.leader_person_id && data.is_active) {
@@ -379,11 +443,11 @@ async function saveGroup(body, actor, id = null) {
           WHERE network_id=$1 AND is_active AND id<>coalesce($2,0)
             AND (leader_person_id IS DISTINCT FROM $3)`,
           [data.network_id,id,network.leader_person_id])).rows[0].n);
-        if (used >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409,'Network has reached its 12 Cell Leader limit.');
+        if (used >= NETWORK_CELL_LEADER_LIMIT) throw httpError(409,'This Network already has 12 Cell Leaders — the most it can hold.');
         const duplicate = (await client.query(`SELECT id FROM lifegroups WHERE network_id=$1 AND is_active
           AND leader_person_id=$2 AND id<>coalesce($3,0) LIMIT 1`,
           [data.network_id,data.leader_person_id,id])).rows[0];
-        if (duplicate) throw httpError(409,'This Cell Leader already leads a Cell in the Network.');
+        if (duplicate) throw httpError(409,'This person already leads a Cell in this Network.');
       }
     }
     if (id) {
@@ -418,20 +482,20 @@ export function validateNetworkStructureInput(body = {}) {
   const leader_person_id = asId(body.leader_person_id, 'Network Leader');
   const cells = body.cell_leaders == null ? [] : body.cell_leaders;
   if (!Array.isArray(cells) || cells.length > NETWORK_CELL_LEADER_LIMIT) {
-    throw httpError(400, 'A Network can have up to 12 Cell Leaders.');
+    throw httpError(400, 'A Network can hold up to 12 Cell Leaders.');
   }
   const selected = new Set([leader_person_id]);
   const normalized = cells.map((cell, i) => {
     const leaderId = asId(cell?.person_id, 'Cell Leader');
-    if (selected.has(leaderId)) throw httpError(400, 'A person can be selected only once in the Network.');
+    if (selected.has(leaderId)) throw httpError(400, 'Each person can be chosen only once in a Network.');
     selected.add(leaderId);
     const members = cell?.members == null ? [] : cell.members;
     if (!Array.isArray(members) || members.length > CELL_MEMBER_LIMIT) {
-      throw httpError(400, 'Each Cell Leader can have up to 12 Members.');
+      throw httpError(400, 'A Cell can hold up to 12 people.');
     }
     const ids = members.map(value => asId(value,'Member'));
     for (const id of ids) {
-      if (selected.has(id)) throw httpError(400, 'A person can be selected only once in the Network.');
+      if (selected.has(id)) throw httpError(400, 'Each person can be chosen only once in a Network.');
       selected.add(id);
     }
     return { person_id: leaderId, members: ids };
@@ -448,15 +512,15 @@ async function createNetworkStructure(body, actor) {
     const found = new Map(rows.map(p => [Number(p.id),p]));
     for (const id of input.person_ids) {
       const person = found.get(id);
-      if (!person || person.archived_at) throw httpError(400,'Select an active registered person for every role.');
+      if (!person || person.archived_at) throw httpError(400,'Choose one active person for every place in the Network.');
       if (person.sex && person.sex !== SEX_OF[input.gender]) {
-        throw httpError(409, 'The selected people must match the Network gender.');
+        throw httpError(409, 'Everyone chosen must be the same gender as this Network.');
       }
     }
     const existingNetwork = (await client.query(
       'SELECT id FROM networks WHERE leader_person_id=ANY($1::int[]) AND is_active LIMIT 1',
       [input.person_ids])).rows[0];
-    if (existingNetwork) throw httpError(409,'One of the selected people already leads an active Network.');
+    if (existingNetwork) throw httpError(409,'One of these people already leads another Network.');
     const currentMemberships = (await client.query(
       'SELECT person_id FROM lifegroup_memberships WHERE person_id=ANY($1::int[]) AND left_at IS NULL LIMIT 1',
       [input.person_ids])).rows;
@@ -465,7 +529,7 @@ async function createNetworkStructure(body, actor) {
     const otherLeaders = (await client.query(
       'SELECT leader_person_id FROM lifegroups WHERE leader_person_id=ANY($1::int[]) AND is_active LIMIT 1',
       [input.person_ids])).rows;
-    if (otherLeaders.length) throw httpError(409,'One of the selected people already leads a Cell.');
+    if (otherLeaders.length) throw httpError(409,'One of these people already leads a Cell.');
     for (const person of rows) {
       if (!person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2',
         [SEX_OF[input.gender],person.id]);
@@ -517,8 +581,14 @@ async function saveNetwork(body, actor, id = null) {
   return transaction(async (client) => {
     const existing = id ? (await client.query('SELECT * FROM networks WHERE id=$1 FOR UPDATE', [id])).rows[0] : null;
     if (id && !existing) throw httpError(404, 'Network not found.');
-    const data = validateNetworkInput(body, existing);
+    const data = validateNetworkInput(body, existing, id);
     await validateLeader(client, data.leader_person_id, data.gender, 'network');
+    if (data.parent_network_id) {
+      const parent = (await client.query('SELECT id,name,parent_network_id,is_active FROM networks WHERE id=$1', [data.parent_network_id])).rows[0];
+      if (!parent) throw httpError(400, 'That pastor Network was not found.');
+      if (parent.parent_network_id) throw httpError(400, 'Only a pastor can hold other Networks; this one already sits under a pastor.');
+      if (!parent.is_active) throw httpError(409, 'Switch that pastor Network back on before placing a Network under it.');
+    }
     if (data.leader_person_id) {
       const duplicate = (await client.query(`SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active AND id<>coalesce($2,0) LIMIT 1`, [data.leader_person_id,id])).rows[0];
       if (duplicate && data.is_active) throw httpError(409, `This person already leads ${duplicate.name}. A network leader can lead only one active network.`);
@@ -548,15 +618,15 @@ async function saveNetwork(body, actor, id = null) {
         if (secondary) throw httpError(409,'Reassign the current Network Leader\'s Cell before changing or deactivating Network leadership.');
       }
       const mismatch = Number((await client.query(`SELECT count(*)::int AS n FROM lifegroups WHERE network_id=$1 AND is_active AND gender<>$2`, [id,data.gender])).rows[0].n);
-      if (mismatch) throw httpError(409, `Move the ${mismatch} mismatched Lifegroup(s) before changing this network's gender.`);
-      await client.query(`UPDATE networks SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,notes=$5,is_active=$6,updated_at=now() WHERE id=$7`,
-        [data.name,data.gender,data.leader_person_id,data.leader_name,data.notes,data.is_active,id]);
+      if (mismatch) throw httpError(409, `Move the ${mismatch} Cell(s) for the other gender before changing this Network.`);
+      await client.query(`UPDATE networks SET name=$1,gender=$2,leader_person_id=$3,leader_name=$4,notes=$5,is_active=$6,parent_network_id=$7,updated_at=now() WHERE id=$8`,
+        [data.name,data.gender,data.leader_person_id,data.leader_name,data.notes,data.is_active,data.parent_network_id,id]);
       await logAction(client, actor, 'networks', id, 'update', { name: data.name, gender: data.gender });
       return Number(id);
     }
     const newId = await allocateId(client, 'networks');
-    await client.query(`INSERT INTO networks(id,name,gender,leader_person_id,leader_name,notes,is_active,is_demo,created_by)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [newId,data.name,data.gender,data.leader_person_id,data.leader_name,data.notes,data.is_active,data.is_demo,actor?.id || null]);
+    await client.query(`INSERT INTO networks(id,name,gender,leader_person_id,leader_name,notes,is_active,is_demo,created_by,parent_network_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [newId,data.name,data.gender,data.leader_person_id,data.leader_name,data.notes,data.is_active,data.is_demo,actor?.id || null,data.parent_network_id]);
     await logAction(client, actor, 'networks', newId, 'create', { name: data.name, gender: data.gender });
     return newId;
   });
@@ -587,8 +657,8 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       }
     }
     const group = (await client.query('SELECT * FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
-    if (!group) throw httpError(404, 'Lifegroup not found.');
-    if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Lifegroup is inactive. Activate it before assigning members.') : httpError(409, 'This Lifegroup is inactive. Activate it before assigning members.'));
+    if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
+    if (!group.is_active) throw (extra.auto_assign ? retryableVipCellConflict('This Cell is switched off. Turn it back on before adding people.') : httpError(409, 'This Cell is switched off. Turn it back on before adding people.'));
     // Revalidate auto-placement eligibility under the group's row lock.
     // The recommendation list is advisory and may become stale before assignment.
     if (extra.auto_assign) {
@@ -629,18 +699,18 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       if (!['male','female'].includes(selectedSex)) throw httpError(400, 'Choose Boy or Girl to continue.');
       sex = selectedSex;
     }
-    if (!sex) throw httpError(400, 'Set Boy or Girl on this person’s profile before assigning a gender-specific Lifegroup.');
-    if (sex !== SEX_OF[group.gender]) throw httpError(409, `${person.first_name} ${person.last_name} does not match this ${group.gender} Lifegroup.`);
+    if (!sex) throw httpError(400, 'Set Boy or Girl on this person’s profile before adding them to a boys or girls Cell.');
+    if (sex !== SEX_OF[group.gender]) throw httpError(409, `${person.first_name} ${person.last_name} is not the same gender as this ${group.gender} Cell.`);
     const joined = clean(extra.joined_at) || today();
     if (!dateOk(joined)) throw httpError(400, 'Joined date must be a valid date.');
     const roleInput = clean(extra.role);
-    if (roleInput && !['member','leader','assistant'].includes(roleInput)) throw httpError(400, 'Choose a valid group role.');
+    if (roleInput && !['member','leader','assistant'].includes(roleInput)) throw httpError(400, 'Choose Member, Leader or Assistant.');
     const tierInput = clean(extra.tier);
-    if (tierInput && !['new','solid'].includes(tierInput)) throw httpError(400, 'Choose Open cell or Closed cell.');
+    if (tierInput && !['new','solid'].includes(tierInput)) throw httpError(400, 'Choose Settled or New for this person.');
+    // A Network Leader is normally a *member* of their pastor's Cell, so joining
+    // any Cell is allowed. What they may not do is take a leadership role in a
+    // Cell that is not theirs — that is checked below.
     const networkLeadership = (await client.query('SELECT id,name FROM networks WHERE leader_person_id=$1 AND is_active LIMIT 1', [personId])).rows[0];
-    if (networkLeadership && group.leader_person_id !== personId) {
-      throw httpError(409, `${person.first_name} ${person.last_name} leads ${networkLeadership.name} and cannot be a member under another Lifegroup leader.`);
-    }
     const current = (await client.query(`SELECT m.id,m.lifegroup_id,m.joined_at::text AS joined_at,m.role,m.tier,g.name AS group_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id
       WHERE m.person_id=$1 AND m.left_at IS NULL FOR UPDATE OF m`, [personId])).rows[0];
@@ -654,7 +724,7 @@ async function assignMember(groupId, personId, extra = {}, actor) {
         const solidCount = Number((await client.query(
           "SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'",[groupId]
         )).rows[0].n);
-        if (solidCount >= SOLID_TARGET) throw httpError(409, 'Closed cell is already at its six-member target.');
+        if (solidCount >= SOLID_TARGET) throw httpError(409, 'This Cell already has its six Settled members.');
       }
       const changed = current.role !== role || current.tier !== tier;
       if (sex !== person.sex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
@@ -676,7 +746,7 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       const leaders = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
       const capacity = effectiveGroupCapacity(group);
       if (leaders >= capacity) {
-        if (capacity === NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Network has reached its 12 Cell Leader limit.') : httpError(409, 'Network has reached its 12 Cell Leader limit.'));
+        if (capacity === NETWORK_CELL_LEADER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('This Network already has 12 Cell Leaders — the most it can hold.') : httpError(409, 'This Network already has 12 Cell Leaders — the most it can hold.'));
         const message = `Network has reached its ${capacity} Cell Leader limit.`;
         throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
       }
@@ -685,14 +755,14 @@ async function assignMember(groupId, personId, extra = {}, actor) {
       const members = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL', [groupId])).rows[0].n);
       const capacity = effectiveGroupCapacity(group);
       if (members >= capacity) {
-        if (capacity === CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('Cell Leader has reached the 12-member limit.') : httpError(409, 'Cell Leader has reached the 12-member limit.'));
-        const message = `Cell Leader has reached the ${capacity}-member limit.`;
+        if (capacity === CELL_MEMBER_LIMIT) throw (extra.auto_assign ? retryableVipCellConflict('This Cell already has 12 people — the most it can hold.') : httpError(409, 'This Cell already has 12 people — the most it can hold.'));
+        const message = `This Cell already has ${capacity} people — the most it can hold.`;
         throw (extra.auto_assign ? retryableVipCellConflict(message) : httpError(409, message));
       }
     }
     if (tier === 'solid') {
       const solid = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
-      if (solid >= SOLID_TARGET) throw httpError(409, `Closed cell is already at its ${SOLID_TARGET}-member target. Add this person to the Open cell instead.`);
+      if (solid >= SOLID_TARGET) throw httpError(409, `This Cell already has its ${SOLID_TARGET} Settled members. Add this person as New instead.`);
     }
     if (!person.sex && selectedSex) await client.query('UPDATE people SET sex=$1,updated_at=now() WHERE id=$2', [sex,personId]);
     if (current) await client.query('UPDATE lifegroup_memberships SET left_at=$1 WHERE id=$2', [joined,current.id]);
@@ -772,7 +842,7 @@ async function leaveMember(groupId, personId, leftAt = today(), actor) {
     const current = (await client.query(`SELECT m.id,m.joined_at,g.name,p.first_name,p.last_name
       FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
       WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
-    if (!current) throw httpError(404, 'No current membership in that Lifegroup.');
+    if (!current) throw httpError(404, 'This person is not in a Cell right now.');
     if (leftAt < String(current.joined_at).slice(0,10)) throw httpError(400, 'Left date cannot be before the joined date.');
     if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
     await client.query('UPDATE lifegroup_memberships SET left_at=$1 WHERE id=$2', [leftAt,current.id]);
@@ -790,7 +860,7 @@ async function removeNetworkFromTree(networkId, actor) {
   return transaction(async (client) => {
     const net=(await client.query('SELECT id,name,is_active FROM networks WHERE id=$1 FOR UPDATE',[networkId])).rows[0];
     if (!net) throw httpError(404,'Network not found.');
-    if (!net.is_active) throw httpError(409,'This Network has already been removed from the active tree.');
+    if (!net.is_active) throw httpError(409,'This Network has already been removed.');
     const {rows:groups}=await client.query(
       'SELECT id FROM lifegroups WHERE network_id=$1 ORDER BY id FOR UPDATE',[networkId]);
     const groupIds=groups.map(g=>Number(g.id));
@@ -815,11 +885,11 @@ async function removeCellLeaderFromTree(groupId, actor) {
     const g=(await client.query(
       'SELECT id,name,network_id,leader_person_id,is_active FROM lifegroups WHERE id=$1 FOR UPDATE',[groupId])).rows[0];
     if (!g) throw httpError(404,'Cell Leader not found.');
-    if (!g.is_active) throw httpError(409,'This Cell Leader has already been removed from the active tree.');
+    if (!g.is_active) throw httpError(409,'This Cell Leader has already been removed.');
     const net=g.network_id?(await client.query(
       'SELECT id,leader_person_id FROM networks WHERE id=$1',[g.network_id])).rows[0]:null;
     if (net?.leader_person_id && Number(net.leader_person_id)===Number(g.leader_person_id)) {
-      throw httpError(409,'This is the Network Leader’s own Cell. Remove the Network instead.');
+      throw httpError(409,'This is the Network Leader’s own Cell. Remove the whole Network instead.');
     }
     const when=today();
     const ended=await client.query(
@@ -857,18 +927,18 @@ async function removeMemberFromTree(groupId,personId,actor) {
     const group=(await client.query(
       'SELECT g.id,g.name,g.leader_person_id,g.is_active,g.network_id FROM lifegroups g WHERE g.id=$1 FOR UPDATE',[groupId])).rows[0];
     if (!group) throw httpError(404,'Cell not found.');
-    if (!group.is_active) throw httpError(409,'This Cell is inactive.');
+    if (!group.is_active) throw httpError(409,'This Cell is switched off.');
     const net=group.network_id?(await client.query(
       'SELECT leader_person_id FROM networks WHERE id=$1',[group.network_id])).rows[0]:null;
     if (Number(group.leader_person_id)===personId ||
         (net?.leader_person_id && Number(net.leader_person_id)===Number(group.leader_person_id))) {
-      throw httpError(409,'Remove a Cell Leader or Network Leader using the corresponding tab.');
+      throw httpError(409,'Use the matching tab to remove a Cell Leader or a Network Leader.');
     }
     const current=(await client.query(`SELECT m.id,m.joined_at
       FROM lifegroup_memberships m
       WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`,
       [groupId,personId])).rows[0];
-    if (!current) throw httpError(404,'Member is not assigned to this Cell.');
+    if (!current) throw httpError(404,'This person is not in this Cell.');
     const when=today();
     await client.query('UPDATE lifegroup_memberships SET left_at=GREATEST(joined_at,$2::date) WHERE id=$1',[current.id,when]);
     await logAction(client,actor,'lifegroup_memberships',current.id,'leave',{
@@ -904,7 +974,7 @@ async function saveMeeting(groupId, body = {}, actor) {
   if (date < addDays(today(), -120)) throw httpError(400, 'Meeting reports can only be entered for the last 120 days.');
   const held = asBool(body.held, true);
   const reason = stringField(body.no_meeting_reason, 'Reason for no meeting', { max: 500 });
-  if (!held && !reason) throw httpError(400, 'Tell us why there was no Lifegroup this week.');
+  if (!held && !reason) throw httpError(400, 'Tell us why the Cell did not meet this week.');
   const topic = stringField(body.topic, 'Topic', { max: 160 });
   const notes = stringField(body.notes, 'Notes', { max: 1000 });
   const presentIds = [...new Set((Array.isArray(body.present_ids) ? body.present_ids : []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))];
@@ -913,8 +983,8 @@ async function saveMeeting(groupId, body = {}, actor) {
   if (!held && (presentIds.length || devotionIds.length)) throw httpError(400, 'Attendance marks are only allowed when a meeting was held.');
   const result = await transaction(async (client) => {
     const group = (await client.query('SELECT id,name,is_active FROM lifegroups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
-    if (!group) throw httpError(404, 'Lifegroup not found.');
-    if (!group.is_active) throw httpError(409, 'This Lifegroup is inactive. Activate it before reporting attendance.');
+    if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
+    if (!group.is_active) throw httpError(409, 'This Cell is switched off. Turn it back on before reporting a meeting.');
     const current = (await client.query(`SELECT m.person_id FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
       WHERE m.lifegroup_id=$1 AND m.left_at IS NULL AND p.archived_at IS NULL`, [groupId])).rows.map((r) => Number(r.person_id));
     const currentSet = new Set(current);
@@ -1001,7 +1071,7 @@ async function membersWithLast4(groupId) {
 
 async function progress(groupId, weeks = 12) {
   const group = (await listGroups({ status: 'all' })).find((g) => g.id === Number(groupId));
-  if (!group) throw httpError(404, 'Lifegroup not found.');
+  if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
   const count = Math.max(4, Math.min(Number(weeks) || 12, 26));
   const [members, calendar, meetings] = await Promise.all([membersWithLast4(groupId),groupWeeks(groupId,count),meetingRows(groupId,30)]);
   const solid = members.filter((m) => m.tier === 'solid').length;
@@ -1052,6 +1122,7 @@ async function networkDetail(id) {
   const networks = await listNetworks({ status: 'all' });
   const net = networks.find((n) => n.id === Number(id));
   if (!net) throw httpError(404, 'Network not found.');
+  const child_networks = networks.filter((n) => Number(n.parent_network_id) === Number(id) && n.is_active);
   const groups = await listGroups({ status: 'all', network_id: id });
   const withMembers = [];
   for (const group of groups) {
@@ -1065,7 +1136,7 @@ async function networkDetail(id) {
   const cells = withMembers.filter((g) => !g.is_leader_group);
   const leaderGroup = withMembers.find((g) => g.is_leader_group) || null;
   const cellLeaders = leaderGroup?.members.length ?? Number(net.cell_leaders || 0);
-  return { ...net, groups: withMembers, group_count: cells.filter((g) => g.is_active).length,
+  return { ...net, groups: withMembers, child_networks, group_count: cells.filter((g) => g.is_active).length,
     people_count: cells.reduce((sum,g) => sum + g.member_count,0),
     boys: cells.reduce((sum,g) => sum + g.boys,0), girls: cells.reduce((sum,g) => sum + g.girls,0),
     cell_leaders: cellLeaders,
@@ -1083,10 +1154,29 @@ export function hasOutOfNetworkCellLeadership(networks,cells){
  return cells.some(c=>!ids.has(String(c.network_id)));
 }
 
+/** A Network Leader is also a *member* of their pastor's Cell (Bishop / Pastora
+ * -> Network Leaders -> Cell Leaders -> Members). A Cell Leader leads one Cell
+ * inside their own Network. Returns the first rule that is broken, or null. */
+export function leaderHierarchyProblem({networks,cells,memberships}){
+ // Leading a Cell somewhere else (for example in someone else's Cell) is never
+ // allowed for a Network Leader; being a plain *member* of a pastor's cell is
+ // exactly what this hierarchy is for.
+ const own=new Set(cells.map(c=>String(c.id)));
+ const leadingElsewhere=memberships.filter(m=>m.role!=='member'&&!own.has(String(m.lifegroup_id)));
+ if(leadingElsewhere.length) return 'A Network Leader may lead only Cells inside their own Network.';
+ // Only a Network Leader has a Network to lead Cells inside of; a Cell Leader
+ // simply leads their own Cell.
+ if(networks.length){
+  const outsideTheirNetwork=cells.filter(c=>!networks.some(n=>String(n.id)===String(c.network_id)));
+  if(outsideTheirNetwork.length) return 'A Network Leader’s Cells must belong to their own Network.';
+ }
+ return null;
+}
+
 async function setDiscipleshipClassification(personId, requested, reason, actor) {
   const target=clean(requested);
-  if(!['network_leader','cell_leader','member','vip'].includes(target))
-    throw httpError(400,'Choose Network Leader, Cell Leader, Member or VIP.');
+  if(!['bishop','pastora','network_leader','cell_leader','member','vip'].includes(target))
+    throw httpError(400,'Choose Bishop, Pastora, Network Leader, Cell Leader, Member or VIP.');
   const note=stringField(reason,'Reason',{max:500});
   return transaction(async client=>{
     const p=(await client.query('SELECT id,archived_at,extras FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
@@ -1094,13 +1184,18 @@ async function setDiscipleshipClassification(personId, requested, reason, actor)
     const current=clean(p.extras?.discipleship_classification);
     const networks=(await client.query('SELECT id FROM networks WHERE leader_person_id=$1 AND is_active',[personId])).rows;
     const cells=(await client.query('SELECT id,network_id FROM lifegroups WHERE leader_person_id=$1 AND is_active',[personId])).rows;
-    if(target==='network_leader'){
-      if(!networks.length)throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
-      if(hasOutOfNetworkCellLeadership(networks,cells))
-        throw httpError(409,'Network Leaders may only lead Cells within their own active Networks.');
+    if(['bishop','pastora'].includes(target)&&!networks.length)
+      throw httpError(409,'Give this person a pastor Network before setting that role.');
+    if(['network_leader','cell_leader'].includes(target)){
+      const memberships=(await client.query(
+        'SELECT role,lifegroup_id FROM lifegroup_memberships WHERE person_id=$1 AND left_at IS NULL',[personId])).rows;
+      const problem=leaderHierarchyProblem({networks,cells,memberships});
+      if(problem)throw httpError(409,problem);
     }
-    if(target==='cell_leader'&&(!cells.length||networks.length))
-      throw httpError(409,'Cell Leader classification requires an active Cell and no active Network leadership.');
+    if(target==='network_leader'&&!networks.length)
+      throw httpError(409,'Connect this person to an active Network before promoting to Network Leader.');
+    if(target==='cell_leader'&&!cells.length)
+      throw httpError(409,'Give this person an active Cell before promoting to Cell Leader.');
     if(['member','vip'].includes(target)&&(networks.length||cells.length))
       throw httpError(409,'Reassign active leadership relationships before changing this person to Member or VIP.');
     // Even an unchanged classification must satisfy current leadership relationships.
@@ -1121,6 +1216,7 @@ async function lifegroupMethod(name, args, actor) {
   if (name === 'lifegroups') return listGroups(args[0] || {});
   if (name === 'lifegroupOptions') return options();
   if (name === 'lifegroupNeeds') return needsLifegroup(args[0] || {});
+  if (name === 'lifegroupPeopleIndex') return peopleInCells(args[0]);
   if (name === 'lifegroupRecommend') {
     const prefs = args[0] || {};
     const sex = clean(prefs.sex);
@@ -1161,10 +1257,10 @@ async function lifegroupMethod(name, args, actor) {
     const id = asId(args[0], 'group ID');
     return transaction(async (client) => {
       const group = (await client.query('SELECT id,name FROM lifegroups WHERE id=$1 FOR UPDATE', [id])).rows[0];
-      if (!group) throw httpError(404, 'Lifegroup not found.');
+      if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
       const hasHistory = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1', [id])).rows[0].n);
       const hasMeetings = Number((await client.query('SELECT count(*)::int AS n FROM lifegroup_meetings WHERE lifegroup_id=$1', [id])).rows[0].n);
-      if (hasHistory || hasMeetings) throw httpError(409, 'This Lifegroup has history and cannot be deleted. Mark it inactive instead.');
+      if (hasHistory || hasMeetings) throw httpError(409, 'This Cell has past meetings, so it cannot be deleted. Switch it off instead.');
       await client.query('DELETE FROM lifegroups WHERE id=$1', [id]);
       await logAction(client, actor, 'lifegroups', id, 'delete', { name: group.name });
       return {};
@@ -1188,10 +1284,10 @@ async function lifegroupMethod(name, args, actor) {
       }
       const membership = (await client.query(`SELECT m.id,m.tier,p.first_name,p.last_name FROM lifegroup_memberships m JOIN people p ON p.id=m.person_id
         WHERE m.lifegroup_id=$1 AND m.person_id=$2 AND m.left_at IS NULL FOR UPDATE OF m`, [groupId,personId])).rows[0];
-      if (!membership) throw httpError(404, 'Current group membership not found.');
+      if (!membership) throw httpError(404, 'This person is no longer in a Cell.');
       if (tier === 'solid' && membership.tier !== 'solid') {
         const count = Number((await client.query("SELECT count(*)::int AS n FROM lifegroup_memberships WHERE lifegroup_id=$1 AND left_at IS NULL AND tier='solid'", [groupId])).rows[0].n);
-        if (count >= SOLID_TARGET) throw httpError(409, `Closed cell has reached its ${SOLID_TARGET}-member target.`);
+        if (count >= SOLID_TARGET) throw httpError(409, `This Cell already has its ${SOLID_TARGET} Settled members.`);
       }
       if(actor?.role_id!=='admin')await assertNotLeaderMembership(client,personId,groupId);
       await client.query('UPDATE lifegroup_memberships SET tier=$1 WHERE id=$2', [tier,membership.id]);
@@ -1211,7 +1307,7 @@ async function lifegroupMethod(name, args, actor) {
       const net = (await client.query('SELECT id,name FROM networks WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!net) throw httpError(404, 'Network not found.');
       const count = Number((await client.query('SELECT count(*)::int AS n FROM lifegroups WHERE network_id=$1', [id])).rows[0].n);
-      if (count) throw httpError(409, 'This network still has Lifegroups. Move them first or mark the network inactive.');
+      if (count) throw httpError(409, 'This Network still has Cells. Move them first, or switch the Network off.');
       await client.query('DELETE FROM networks WHERE id=$1', [id]);
       await logAction(client,actor,'networks',id,'delete',{name:net.name});
       return {};

@@ -1,14 +1,19 @@
 import { api } from '../api.js';
 import { can } from '../app.js';
-import { html, raw, icon, avatar, statusBadge, classBadge, fmtDate, fmtDateTime, fmtNum, fmtPct, age, toast, confirmDialog, openModal, closeModal, withLoading, STATUS_LABELS, DAY_LABELS, DAY_SHORT, TIME_LABELS, fmtSchedule } from '../ui.js';
+import { html, raw, icon, avatar, statusBadge, classBadge, fmtDate, age, toast, confirmDialog, openModal, closeModal, withLoading, STATUS_LABELS, DAY_LABELS, DAY_SHORT, TIME_LABELS, fmtSchedule } from '../ui.js';
 
-/** Person profile: who they are, how often they attend, and their Sunday history. */
+/**
+ * Person profile: who they are and their contact details.
+ *
+ * Sunday attendance was removed for everyone except VIPs, so there is no
+ * attendance stat block or Sunday timeline here. A VIP's check-ins show on the
+ * Registration screen, where that attendance is actually recorded.
+ */
 export async function renderPerson({ main }, id) {
   const p = await api.person(id);
   const locked = p.private_hidden;
   const inactive = p.status === 'inactive';
   const archived = Boolean(p.archived_at);
-  const present = p.history.filter((h) => h.status === 'present');
 
   const row = (label, value, fmt = (x) => x, sensitive = false) => {
     if (locked && (sensitive || value === undefined)) return html`<div><dt>${label}</dt><dd class="locked">${icon('lock', 13)} Restricted</dd></div>`;
@@ -31,18 +36,8 @@ export async function renderPerson({ main }, id) {
       </div>` : ''}
     </div>
 
-    <div class="grid grid--stats mb-2" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-      <div class="card stat"><span class="stat__label">Attendance</span><span class="stat__value">${fmtNum(p.sundays_attended)}<small> / ${p.services_since} Sundays</small></span></div>
-      <div class="card stat"><span class="stat__label">Attendance rate</span><span class="stat__value">${fmtPct(p.attendance_rate)}</span></div>
-      <div class="card stat"><span class="stat__label">First attended</span><span class="stat__value" style="font-size:1.15rem">${p.date_first_attended ? fmtDate(p.date_first_attended) : '—'}</span></div>
-      <div class="card stat"><span class="stat__label">Last attended</span><span class="stat__value" style="font-size:1.15rem">${p.last_attended ? fmtDate(p.last_attended) : '—'}</span></div>
-    </div>
 
 
-    <nav class="people-profile__tabs" aria-label="Profile sections">
-      <button type="button" data-profile-section="personDetails" class="people-profile__tab">Personal details</button>
-      <button type="button" data-profile-section="personAttendance" class="people-profile__tab">Attendance history</button>
-    </nav>
     <div class="grid grid--2">
       <div class="card" id="personDetails">
         <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
@@ -63,35 +58,22 @@ export async function renderPerson({ main }, id) {
         </dl></div>
       </div>
 
-      <div class="card" id="personAttendance">
-        <div class="card__header"><h2>Attendance history</h2><span class="hint">${present.length} Sunday${present.length === 1 ? '' : 's'} present</span></div>
-        <div class="card__body card__body--flush">
-          ${p.history.length ? html`<ul class="timeline" style="padding:4px 20px">
-            ${p.history.map((h) => html`<li>
-              <span class="date">${fmtDate(h.service_date, { short: true })}</span>
-              ${h.status === 'present' ? raw(classBadge(h.classification)) : raw('<span class="badge badge--absent">Absent</span>')}
-              <span class="when">${h.recorded_by || ''}<br>${fmtDateTime(h.recorded_at)}</span>
-            </li>`)}
-          </ul>` : html`<div class="empty" style="padding:32px"><p>No attendance recorded yet.</p></div>`}
-        </div>
-      </div>
     </div>
 
-    ${archived ? html`<div class="alert alert--info mt-3">This person is archived — hidden from People, search and the Sunday roster. Attendance history is kept.${can('people:write') ? html` <button class="btn btn--sm" id="restoreBtn" style="margin-left:8px">Restore</button>` : ''}</div>` : ''}
+    ${archived ? html`<div class="alert alert--info mt-3">This person is archived — hidden from People and search. Their records are kept.${can('people:write') ? html` <button class="btn btn--sm" id="restoreBtn" style="margin-left:8px">Restore</button>` : ''}</div>` : ''}
     ${can('people:write') && !archived ? html`<div class="row row--between mt-3" style="padding:0 4px">
-      <span class="small muted">${inactive ? 'This person is inactive and not shown on the Sunday roster.' : 'Deactivating keeps all history but removes the person from the Sunday roster.'}</span>
+      <span class="small muted">${inactive ? 'This person is inactive and not shown in the active lists.' : "Deactivating keeps the details but hides them from the active lists."}</span>
       <span class="row">
         <button class="btn ${inactive ? '' : 'btn--danger-ghost'}" id="toggleActive">${inactive ? 'Reactivate' : 'Deactivate'}</button>
         <button class="btn btn--ghost small" id="archiveBtn" style="color:var(--muted)" title="Hide from lists; keep history">Archive</button>
       </span>
     </div>` : ''}`;
 
-  main.querySelectorAll('[data-profile-section]').forEach(button=>button.addEventListener('click',()=>main.querySelector('#'+button.dataset.profileSection)?.scrollIntoView({behavior:'smooth',block:'start'})));
 
   main.querySelector('#archiveBtn')?.addEventListener('click', async (e) => {
     const ok = await confirmDialog({
       title: `Archive ${p.first_name}?`,
-      message: 'Archived people disappear from People, search and the Sunday roster but <b>all attendance history is kept</b> and past totals do not change. You can restore them anytime from People → Archived.',
+      message: 'Archived people disappear from People, search and the Sunday roster. Their profile and records are kept and can be restored anytime from People → Archived.',
       confirmText: 'Archive',
     });
     if (!ok) return;

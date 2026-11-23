@@ -40,9 +40,9 @@ test('network starts collapsed; expands Cell Leaders and then Members only on cl
  assert.equal(complete[0].children[0].children.length,2);
 });
 
-test('no separate Lifegroup title appears in the interactive diagram',()=>{
- assert.match(treeSource,/Network Leader → Cell Leader → Member/);
+test('the shared tree model keeps the three levels and never invents a Lifegroup node',()=>{
  assert.match(treeSource,/subtitle:'Cell Leader'/);
+ assert.match(treeSource,/subtitle:'Network Leader'/);
  assert.doesNotMatch(treeSource,/subtitle:g\.name\|\|'Lifegroup'/);
 });
 
@@ -50,7 +50,7 @@ test('new Cell Leader creation links a registered person to the Network',()=>{
  const start=view.indexOf('async function groupForm(');
  const end=view.indexOf('export async function findLifegroup(',start);
  const form=view.slice(start,end);
- assert.match(form,/title: g \? 'Edit Cell Leader' : 'Add Cell Leader'/);
+ assert.match(form,/title: g \? 'Edit this Cell' : 'Add a Cell Leader'/);
  assert.match(form,/type="hidden" name="name"/);
  assert.doesNotMatch(form,/<label>Group name/);
  assert.match(form,/name="network_id" required/);
@@ -62,8 +62,8 @@ test('new Cell Leader creation links a registered person to the Network',()=>{
 test('navigation and actions show Cell Leaders and Members without a separate group step',()=>{
  assert.match(nav,/'Lifegroups'/);
  assert.match(view,/id="addNew"[^\n]+Add New/);
- assert.match(detail,/quickButton\('netCreateGroup', 'Add Cell Leader'/);
- assert.match(detail,/Add member/);
+ assert.match(detail,/quickButton\('netCreateGroup', 'Add a Cell Leader'/);
+ assert.match(detail,/Add a member/);
  assert.doesNotMatch(detail,/Add Lifegroup/);
  assert.match(detail,/Meetings this week/);
 });
@@ -71,7 +71,8 @@ test('navigation and actions show Cell Leaders and Members without a separate gr
 test('existing database operations and history are retained',()=>{
  assert.match(view,/api\.updateLifegroup\(g\.id, d\)/);
  assert.match(view,/api\.assignLifegroup\(g\.id, pid/);
- assert.match(view,/renderNetworkCalendar\(/);
+ // The weekly meeting grid was removed; tier changes remain.
+ assert.doesNotMatch(view,/renderNetworkCalendar\(/);
  assert.match(view,/api\.setTier\(/);
  assert.match(view,/#\/lifegroups\/\$\{g\.id\}/);
 });

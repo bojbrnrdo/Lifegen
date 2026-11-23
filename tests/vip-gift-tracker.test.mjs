@@ -29,10 +29,12 @@ test('four Sunday attendances make a VIP eligible for the gift', () => {
   assert.equal(GIFT_SUNDAYS_REQUIRED, 4);
 });
 
-test('the tracker counts attendance that is already recorded', () => {
-  assert.match(GIFT_ROWS_SQL, /count\(DISTINCT s\.service_date\)/);
-  assert.match(GIFT_ROWS_SQL, /FROM records r JOIN services s/);
-  assert.match(GIFT_ROWS_SQL, /r\.status = 'present'/);
+test('the tracker counts the VIP check-ins that are already recorded', () => {
+  // Attendance is only tracked for VIPs now; a validated check-in is the record.
+  assert.match(GIFT_ROWS_SQL, /count\(DISTINCT c\.date_key\)/);
+  assert.match(GIFT_ROWS_SQL, /FROM vip_checkins c JOIN vip_registrations vr/);
+  assert.match(GIFT_ROWS_SQL, /c\.status = 'valid'/);
+  assert.doesNotMatch(GIFT_ROWS_SQL, /FROM records r/);
   assert.match(GIFT_ROWS_SQL, /LEFT JOIN vip_gift_handouts/);
   assert.match(GIFT_ROWS_SQL, /EXISTS \(SELECT 1 FROM vip_registrations/);
   assert.match(GIFT_ROWS_SQL, /p\.archived_at IS NULL/);

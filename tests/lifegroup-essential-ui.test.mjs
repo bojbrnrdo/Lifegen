@@ -51,7 +51,10 @@ test('Group overview focuses on people and leadership, without optional logistic
     assert.doesNotMatch(groupPage, new RegExp('<dt>' + key + '</dt>'));
   }
   assert.match(groupPage, /Former members/);
-  assert.match(groupPage, /<details class="card mt-2"[^>]*>/);
+  // The progress section is a collapsed <details> card; its modifier class and
+  // id may change without changing that meaning (verified in the browser-level
+  // pass: collapsed by default, loaded on open).
+  assert.match(groupPage, /<details class="card mt-2[^"]*"[^>]*id="progressDisclosure"/);
   assert.match(groupPage, /renderProgressCard\(/);
 });
 
@@ -61,7 +64,9 @@ test('Existing schedule, venue and notes are preserved by server-side update sem
   assert.match(server, /schedule_time: clean\(src\.schedule_time\)/);
   assert.match(server, /venue: stringField\(src\.venue/);
   assert.match(server, /notes: stringField\(src\.notes/);
-  assert.match(networkPage, /renderNetworkCalendar\(/);
+  // The attendance & meeting history (and its eight-week grid) was removed from
+  // the Network page, so the calendar is no longer rendered there.
+  assert.doesNotMatch(networkPage, /renderNetworkCalendar\(/);
   assert.doesNotMatch(networkPage, /\$\{n\.notes \? html/);
 });
 

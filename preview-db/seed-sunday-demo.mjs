@@ -40,11 +40,8 @@ await c.connect();
 await c.query('BEGIN');
 const nextId = async (entity) => (await c.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id', [entity])).rows[0].last_id;
 
-// Make sure the Sunday exists as a service, like the regular demo seed does.
-if (!(await c.query('SELECT 1 FROM services WHERE service_date=$1', [SUNDAY])).rows.length) {
-  await c.query(`INSERT INTO services(id,service_date,service_type,is_demo,notes)
-                 VALUES($1,$2,'lifegen',true,'Sunday demo seed for preview')`, [await nextId('services'), SUNDAY]);
-}
+// A Sunday is a calendar fact now that the services table is gone; nothing has
+// to be created here before VIP registrations can be attributed to it.
 
 // A 2-hour board window so the demo does not hand back to the countdown mid-service.
 await c.query(`INSERT INTO settings(key,value) VALUES('vip_announce_minutes', to_jsonb($1::int))

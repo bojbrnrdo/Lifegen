@@ -32,6 +32,14 @@ LOCAL_DEMO=true LOCAL_DEMO_CLOCK=2026-10-18T13:05:00+08:00 PORT=3000 npm start
 
 Sign in to the main Admin preview: `demo@lifegen.local` / `LifegenDemo2026!`.
 
+The demo seed leaves the Lifegroup Tracker empty. With the app running, fill it
+with synthetic Networks, Cell Leaders and Cells (six members each, two of them
+Closed-cell) so **Admin → Lifegroups** can be reviewed:
+
+```bash
+node preview-db/seed-lifegroup-demo.mjs   # talks to the app over HTTP, local only
+```
+
 Youth Welfare preview: open `/youth-welfare` and use `demo-youth@lifegen.local` / `DemoYouthWelfare2026!`. The seed creates fictional ministry categories, a few administrative review tasks, a personal saved view, and a report template. This account and its fictional member records exist only in the disposable local demo database; they are not production credentials. Apply the numbered migrations through `015_youth_welfare_records.sql` before seeding; this includes the protected answer/review schema required by the portal. The access table and portal-only roles never replace primary LIFEGEN roles. Never apply these preview instructions to production.
 
 ## Gateway invariants (do not regress)
@@ -50,3 +58,19 @@ Youth Welfare preview: open `/youth-welfare` and use `demo-youth@lifegen.local` 
 - Never run migrations/seeds over the wire while a transaction from another
   client could interleave; apply-migrations/seed-demo open PGlite directly
   with the gateway stopped.
+
+## Realistic names in the demo
+
+The seeders used to write stand-ins such as `Friend1 Kai`, `Demo Person 01` and
+`Test VIP`. `seed-pastoral-hierarchy.mjs` now generates real-looking Filipino
+names instead, matched to sex and unique across the church.
+
+For a database seeded before that change, run:
+
+```bash
+BASE_URL=http://127.0.0.1:3000 node preview-db/rename-demo-people.mjs
+```
+
+It renames only people who still carry a placeholder name and changes nothing
+else: person codes, Cell membership and status all stay. Safe to
+re-run — it reports "No placeholder names left" once there is nothing to do.
