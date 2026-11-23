@@ -7,6 +7,8 @@ import {
   YOUTH_WELFARE_CATEGORIES, YOUTH_REPORT_TEMPLATES, YOUTH_WELFARE_PEOPLE_TABS, validateYouthCategory,
   youthWelfareEligibilitySql, normalizeYouthFilters, youthWelfareRegistrationTrend,
   isPossibleSimilarYouthName, shapeYouthProfileForViewer, shapeYouthProfileForStaff,
+  YOUTH_WELFARE_TASK_PRIORITIES, YOUTH_WELFARE_TASK_OUTCOMES,
+  validateYouthWelfareTaskPriority, validateYouthWelfareTaskOutcome, requireYouthWelfareTaskOutcomeForClosure,
 } from '../src/youth-welfare.js';
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -89,6 +91,24 @@ test('Youth Welfare categories are explicit and unknown values cannot be assigne
   assert.throws(() => validateYouthCategory('inferred_from_age'), error => error.status === 400);
 });
 
+test('follow-up priority is bounded and a newly resolved task requires an explicit outcome', () => {
+  assert.deepEqual(YOUTH_WELFARE_TASK_PRIORITIES,['low','normal','high','urgent']);
+  assert.deepEqual(YOUTH_WELFARE_TASK_OUTCOMES,['reached_no_need','reached_support_arranged','unreachable','referred','declined']);
+  for(const priority of YOUTH_WELFARE_TASK_PRIORITIES)assert.equal(validateYouthWelfareTaskPriority(priority),priority);
+  for(const invalid of ['','medium','critical','URGENT',null])assert.throws(()=>validateYouthWelfareTaskPriority(invalid),error=>error.status===400);
+  assert.equal(validateYouthWelfareTaskPriority(undefined),'normal');
+  for(const outcome of YOUTH_WELFARE_TASK_OUTCOMES)assert.equal(validateYouthWelfareTaskOutcome(outcome),outcome);
+  for(const invalid of ['success','closed','']){
+    if(invalid==='')assert.equal(validateYouthWelfareTaskOutcome(invalid),null);
+    else assert.throws(()=>validateYouthWelfareTaskOutcome(invalid),error=>error.status===400);
+  }
+  assert.equal(validateYouthWelfareTaskOutcome(null),null);
+  assert.throws(()=>requireYouthWelfareTaskOutcomeForClosure('resolved','needs_review',null),error=>error.status===400&&/outcome/i.test(error.message));
+  assert.throws(()=>requireYouthWelfareTaskOutcomeForClosure('resolved','in_progress',null),error=>error.status===400);
+  assert.equal(requireYouthWelfareTaskOutcomeForClosure('resolved','needs_review','unreachable'),true);
+  assert.equal(requireYouthWelfareTaskOutcomeForClosure('resolved','resolved',null),true,'legacy resolved tasks do not need to acquire a retroactive outcome');
+});
+
 test('questionnaire validation keeps consent/guardian requirements and conditional school-stop multi-selects', () => {
   const valid={consent:true,complete_address:'21 Maharlika Street, Bulacan',contact_number:'+639171234567',parent_guardian_name:'Maria Cruz',parent_guardian_contact_number:'+639181234567',education_status:'currently_studying',grade_year_level:'senior_high_grade_12',lcsol_enrolled:true,lcsol_status:'currently_in_consolidation'};
   const studying=normalizeYouthWelfareAnswers(valid);
@@ -111,6 +131,8 @@ test('eligible records are selected by regular registration evidence, never name
   assert.match(live, /action = 'public_registration'/);
   assert.match(live, /NOT EXISTS\s*\(\s*SELECT 1 FROM public\.vip_registrations vip WHERE vip\.person_id = p\.id/s);
   assert.match(live, /p\.archived_at IS NULL/);
+  assert.match(live,/youth_welfare_eligibility_policy configured_age/);
+  assert.match(live,/COALESCE\(CASE WHEN p\.birthdate IS NULL THEN NULL ELSE EXTRACT\(YEAR FROM age\(current_date,p\.birthdate\)\)::int END,p\.age\)/);
   assert.doesNotMatch(live, /ILIKE|first_name.*=.*last_name/i);
   assert.doesNotMatch(live, /p\.is_demo/);
   assert.match(youthWelfareEligibilitySql({ localDemo: true }), /p\.is_demo = true/);
@@ -173,10 +195,39 @@ test('Youth Welfare API protects private profiles, correction review, record wri
   assert.match(app, /youthWelfareApi\.get\('\/updates\/pending',requireYouthPrivate/);
   assert.match(app, /youthWelfareApi\.post\('\/updates\/:id\/review',protectYouthWrite\('youth_welfare:profile:private'\)/);
   assert.match(app, /youthWelfareApi\.get\('\/tasks',requireYouthManage/);
+  assert.match(app,/youthWelfareApi\.get\('\/tasks\/metrics',requireYouthManage/);
   assert.match(app, /youthWelfareApi\.get\('\/reminders',requireYouthManage/);
   assert.match(app, /youthWelfareApi\.get\('\/activity',requireYouthManage/);
+  assert.match(app, /youthWelfareApi\.get\('\/attention',requireYouthManage/);
+  assert.match(app, /eligibility-policy',requireYouthManage/);
+  assert.match(app, /people\/:id\/timeline',requireYouthRecordsManage/);
   assert.match(app, /youthWelfareApi\.get\('\/cell-leaders',requireYouthRecordsManage/);
   assert.match(app, /reports\/export\.csv',requireYouthManage/);
+});
+
+test('Attention Queue and eligibility controls are suggested/admin-only, and the timeline excludes private source fields', () => {
+  const app=read('../src/app.js');
+  const service=read('../src/youth-welfare.js');
+  const dashboard=read('../public/youth-welfare/index.html');
+  assert.match(app,/eligibility-policy',requireYouthManage/);
+  assert.match(app,/attention',requireYouthManage/);
+  assert.match(app,/people\/:id\/timeline',requireYouthRecordsManage/);
+  assert.match(service,/export async function youthWelfareAttentionQueue/);
+  assert.match(service,/Out-of-School — no follow-up in 60 days/);
+  assert.match(service,/Correction pending more than 7 days/);
+  assert.match(service,/export async function youthWelfareTimeline/);
+  assert.match(service,/export async function youthWelfareTaskMetrics/);
+  assert.match(dashboard,/Workload and effectiveness/);
+  assert.match(dashboard,/Closure outcomes/);
+  const timeline=service.slice(service.indexOf('export async function youthWelfareTimeline'),service.indexOf('export async function youthWelfareTrackerAssignment'));
+  assert.doesNotMatch(timeline,/school_stop_reasons|record_snapshot|proposed_answers/);
+  assert.match(dashboard,/Attention Queue/);
+  assert.match(dashboard,/function followUpHistorySection\(history\)/);
+  assert.match(dashboard,/Outcome: \$\{esc\(taskOutcomeLabel\(item\.outcome\)\)\}/);
+  assert.match(dashboard,/nothing is changed automatically/i);
+  assert.match(dashboard,/data-attention-task/);
+  assert.match(dashboard,/id="eligibilityPolicyForm"/);
+  assert.match(dashboard,/Save eligibility rule/);
 });
 
 test('Education/LCSOL dashboard tools, corrections review, and role-shaped edit controls are present', () => {
@@ -208,7 +259,7 @@ test('Youth Welfare responsive shell keeps navigation, dialogs, tables, and mobi
     'aria-label="Youth Welfare sections"', 'id="changePassword" aria-label="Change password"',
     'id="logout" aria-label="Sign out"',
   ]) assert.ok(dashboard.includes(rule), `responsive UI includes ${rule}`);
-  for (const destination of ['overview', 'directory', 'corrections', 'education', 'lcsol', 'tasks', 'analytics', 'reports', 'status', 'quality', 'activity', 'views', 'access', 'settings']) {
+  for (const destination of ['overview', 'attention', 'directory', 'corrections', 'education', 'lcsol', 'tasks', 'analytics', 'reports', 'status', 'quality', 'activity', 'views', 'access', 'settings']) {
     assert.ok(dashboard.includes(`['${destination}'`), `navigation keeps the ${destination} destination`);
   }
   assert.doesNotMatch(dashboard, /font-size:0;gap:0/);
@@ -642,4 +693,28 @@ test('Youth Welfare migration 015 stores answers separately and protects correct
   assert.match(migration, /ALTER TABLE public\.%I ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL ON TABLE public\.%I FROM %I/);
   assert.doesNotMatch(migration, /UPDATE public\.people|ALTER TABLE public\.people|DROP TABLE|TRUNCATE/i);
+});
+
+test('migration 016 adds bounded task fields with safe defaults and declares the application-required schema', () => {
+  const migration=read('../database/016_youth_welfare_improvement_foundation.sql');
+  const service=read('../src/youth-welfare.js');
+  const backup=read('../src/db.js');
+  assert.match(migration,/ADD COLUMN IF NOT EXISTS priority text NOT NULL DEFAULT 'normal'/);
+  assert.match(migration,/ADD COLUMN IF NOT EXISTS outcome text/);
+  assert.match(migration,/ADD COLUMN IF NOT EXISTS closure_note text/);
+  assert.match(migration,/ADD COLUMN IF NOT EXISTS closed_by bigint REFERENCES public\.staff_users\(id\) ON DELETE SET NULL/);
+  assert.match(migration,/CHECK \(priority IN \('low','normal','high','urgent'\)\)/);
+  assert.match(migration,/CHECK \(outcome IS NULL OR outcome IN \([\s\S]*?'declined'/);
+  assert.match(migration,/CHECK \(closure_note IS NULL OR length\(closure_note\) <= 500\)/);
+  assert.match(migration,/ADD COLUMN IF NOT EXISTS care_status text/);
+  assert.match(migration,/minimum_age smallint CHECK \(minimum_age IS NULL OR minimum_age BETWEEN 0 AND 120\)/);
+  assert.match(migration,/VALUES \(1,NULL,NULL\)/,'new deployments start with no age restriction');
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS public\.youth_welfare_status_history/);
+  assert.match(migration,/ENABLE ROW LEVEL SECURITY/);
+  assert.doesNotMatch(migration,/DROP TABLE|TRUNCATE|DELETE FROM public\.people|UPDATE public\.people/i);
+  assert.match(service,/INSERT INTO public\.youth_welfare_follow_up_tasks\(person_id,task_type,title,notes,status,priority,assigned_to,due_date,created_by,updated_by\)/);
+  assert.match(service,/outcome=\$6,closure_note=\$7,closed_by=\$8/);
+  assert.match(service,/Choose an outcome before closing this follow-up/);
+  assert.match(backup,/state\.youth_welfare_eligibility_policy=/);
+  assert.match(backup,/state\.youth_welfare_status_history=/);
 });

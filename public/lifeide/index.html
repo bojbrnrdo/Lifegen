@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><title>LifeIDE · LIFEGEN</title>
+<meta name="color-scheme" content="dark"><title>LifeIDE · LIFEGEN</title>
 <link rel="stylesheet" href="/lifeide/styles.css">
 </head>
 <body>
@@ -11,6 +11,28 @@
     <a class="brand" href="/admin" title="Back to LIFEGEN admin"><span class="brandmark">L</span><span>Life<span class="accent">IDE</span></span></a>
     <span class="project-tag" id="modeLabel">LOCAL WORKSPACE</span><button type="button" id="repositoryMode" title="Connect to project source files">Repository</button>
     <div class="top-actions"><button id="newFile" type="button">▣ <span>New File</span></button><button id="newFolder" type="button">▰ <span>New Folder</span></button></div>
+    <div class="merch-action-cluster">
+      <details class="editor-menu merch-actions" id="editorActions">
+        <summary title="Editor Action Tools" aria-label="Editor Action Tools">☰ <span>Actions</span></summary>
+        <div class="editor-menu-panel" role="group" aria-label="Editor actions">
+          <button id="formatLongLine" type="button" title="Find next line over 80 characters">80&gt; Char Scan</button>
+          <button id="formatTabs" type="button" title="Convert indentation tabs to four spaces">Tabs → Spaces</button>
+          <button id="goToLine" type="button">Go To Line</button>
+          <button id="copyCode" type="button">Copy Editor Content</button>
+          <button id="formatLint" type="button">Check Syntax</button>
+          <button id="formatWrap" type="button" aria-pressed="false">Wrap: Off</button>
+          <button id="closeAllTabs" type="button">Close All Tabs</button>
+          <div class="menu-divider"></div>
+          <button id="renameFile" type="button" disabled>Rename File</button>
+          <button id="gitChanges" type="button">Git Changes</button>
+          <button id="commit" type="button" disabled>Commit Selected Changes</button>
+          <button id="editGithub" type="button" hidden>Edit Source</button>
+          <button id="saveGithubDraft" type="button" hidden disabled>Save Draft</button>
+          <button id="githubNative" type="button" hidden>GitHub Workflow</button>
+        </div>
+      </details>
+      <button id="editorSettings" type="button" title="Editor settings and font controls" aria-label="Editor settings">⚙</button>
+    </div>
     <label class="explorer-search-label" for="explorerSearch"><span class="sr-only">Search files and folders</span><input id="explorerSearch" type="search" placeholder="Search files…" autocomplete="off" aria-label="Search files and folders"></label>
   </header>
   <div class="workspace">
@@ -25,9 +47,16 @@
     <main class="main">
       <div class="editor-toolbar">
         <span class="editor-heading">Editor</span><div class="file-title" id="fileTitle">No file selected</div>
-        <div class="editor-tools"><button id="saveFile" type="button" disabled title="Save the current file (Ctrl+S)">Save</button><button id="editGithub" type="button" hidden title="Edit a GitHub source file in a draft">Edit source</button><button id="saveGithubDraft" type="button" hidden disabled title="Save a draft of your source changes in this browser">Save draft</button><button id="githubNative" type="button" hidden title="Open branch-based GitHub workflow when secure developer writes are configured">GitHub</button><button id="renameFile" type="button" disabled title="Rename selected browser-local file">Rename</button><button id="smaller" type="button" title="Smaller font">A−</button><button id="larger" type="button" title="Larger font">A+</button><button id="refresh" type="button" title="Reload saved workspace">↻</button><button id="gitChanges" type="button" title="View local Git changes">Git Changes</button><button id="commit" type="button" disabled title="Select files in Git Changes to commit">⇩ Commit</button></div>
+        <div class="editor-tools">
+          <div class="font-controls" aria-label="Editor font size">
+            <button id="smaller" type="button" title="Decrease font size">A−</button>
+            <button id="larger" type="button" title="Increase font size">A+</button>
+          </div>
+          <button id="refresh" type="button" title="Reload files (unsaved changes require confirmation)">↻</button>
+          <button id="saveFile" class="editor-primary-save" type="button" disabled title="Save active file (Ctrl+S / Cmd+S)">Save</button>
+        </div>
       </div>
-      <section id="githubWorkflow" class="github-workflow" aria-label="GitHub branch and commit workflow" hidden>
+      <section id="githubWorkflow" class="github-workflow" role="dialog" aria-label="GitHub branch and commit workflow" hidden>
         <strong>Commit to a development branch</strong><button id="closeGithubWorkflow" type="button" title="Close GitHub workflow" aria-label="Close GitHub workflow">×</button>
         <p id="githubWorkflowHelp">Only feature/* and fix/* branches are supported. Production main stays protected.</p><div class="github-handoff"><button id="publishGithub" type="button" hidden disabled title="Continue this change on GitHub in a feature branch">Commit via GitHub ↗</button></div>
         <div class="github-workflow-fields"><label>Branch <input id="githubBranch" value="feature/lifeide-change" autocomplete="off" spellcheck="false"></label><button id="createGithubBranch" type="button">Create branch</button><label>Commit message <input id="githubCommitMessage" placeholder="fix: describe the source change" maxlength="160"></label><button id="commitGithubDraft" type="button">Commit to branch</button></div>
@@ -35,8 +64,14 @@
         <p id="githubWorkflowStatus" role="status" aria-live="polite"></p>
       </section>
       <div class="tabs" id="tabs"></div>
+      <div class="editor-overlays" role="group" aria-label="Editor navigation controls">
+        <button id="copyEditorOverlay" type="button" title="Copy editor contents" aria-label="Copy editor content">⧉</button>
+        <button id="scrollEditorTop" type="button" title="Scroll to first line" aria-label="Scroll to top">↑</button>
+        <button id="scrollEditorBottom" type="button" title="Scroll to last line" aria-label="Scroll to bottom">↓</button>
+      </div>
       <div class="editor-wrap" id="editorWrap"><div id="lineNumbers" class="lines" aria-hidden="true">1<br>2</div><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code editor" disabled># Welcome to LifeIDE!
 # Create or select a file to begin.</textarea></div>
+      <div class="format-feedback"><span id="formatMessage" role="status" aria-live="polite"></span></div>
       <div class="statusbar"><span id="status">Ready</span><span id="language">Plain text</span><span id="position">Ln 1, Col 1</span><span>UTF-8</span></div>
     </main>
     <div class="ide-panel-resizer" id="toolsResizer" role="separator" aria-label="Resize project tools" aria-orientation="vertical" tabindex="0"></div>
@@ -64,7 +99,7 @@
           <h3>Editor Actions</h3>
           <button type="button" id="toolsScrollTop">Scroll to Top</button>
           <button type="button" id="toolsScrollBottom">Scroll to Bottom</button>
-          <p class="project-tools__subtle">Ctrl+S saves the active file. GitHub source drafts remain local until committed through an authorized development branch.</p>
+          <p class="project-tools__subtle">Ctrl+S or Cmd+S saves the active file. In GitHub mode, confirm a commit to your selected development branch.</p>
         </section>
       </div>
     </aside>
@@ -72,4 +107,5 @@
 </div>
 <div id="dialog" class="modal" hidden><form id="dialogForm" class="dialog"><h2 id="dialogTitle">New File</h2><label for="dialogInput" id="dialogLabel">Name</label><input id="dialogInput" maxlength="120" required autocomplete="off"><p class="error" id="dialogError" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary" id="confirm">Create</button></div></form></div>
 <script src="/lifeide/app.js" defer></script>
+<script src="/lifeide/codemirror.bundle.js" defer></script>
 </body></html>

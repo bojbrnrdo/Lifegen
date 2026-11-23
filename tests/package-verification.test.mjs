@@ -85,7 +85,7 @@ test('ZIP inspector rejects mismatched filenames in local file header',()=>{
 test('ZIP inspector rejects incompatible local header flags and methods',()=>{
  const flags=makeStoredZip();
  new DataView(flags.buffer).setUint16(6,1,true);
- assert.throws(()=>inspectPackageZip(flags),/local header/);
+ assert.throws(()=>inspectPackageZip(flags),/local header|encrypted/);
  const method=makeStoredZip();
  new DataView(method.buffer).setUint16(8,8,true);
  assert.throws(()=>inspectPackageZip(method),/local header/);

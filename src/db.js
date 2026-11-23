@@ -83,7 +83,17 @@ export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCE
  u.port='6543';
  return u.toString();
 }
-export function getPool() { return pool ||= new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()}); }
+export function getPool() {
+ if(!pool) {
+  const instance=new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()});
+  // pg emits errors from idle clients on the Pool itself. Without a listener, Node
+  // treats them as uncaught exceptions and can terminate the running API process.
+  // Never include connection strings or credentials in the error output.
+  instance.on('error',(error)=>console.error('Idle database connection error:',String(error?.code||'UNKNOWN')));
+  pool=instance;
+ }
+ return pool;
+}
 export function directClient() {
  const url=process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL;
  if(url){const u=new URL(url);if(u.hostname.toLowerCase().includes('pooler')&&!['','5432'].includes(u.port))throw httpError(503,'Push updates and schema setup need a direct Supabase URL or the session pooler on port 5432. Automatic refresh will continue instead.');}
@@ -227,13 +237,17 @@ export async function databaseBackup(client) {
   to_regclass('public.youth_welfare_record_updates') IS NOT NULL AS updates,
   to_regclass('public.youth_welfare_record_history') IS NOT NULL AS history,
   to_regclass('public.public_registration_requests') IS NOT NULL AS requests,
-  to_regclass('public.youth_welfare_access') IS NOT NULL AS access`)).rows[0];
+  to_regclass('public.youth_welfare_access') IS NOT NULL AS access,
+  to_regclass('public.youth_welfare_eligibility_policy') IS NOT NULL AS eligibility_policy,
+  to_regclass('public.youth_welfare_status_history') IS NOT NULL AS status_history`)).rows[0];
  state.youth_welfare_response_schema_available=Boolean(youthWelfareSchema.records&&youthWelfareSchema.updates&&youthWelfareSchema.history&&youthWelfareSchema.requests);
  state.youth_welfare_records=youthWelfareSchema.records?(await client.query('SELECT * FROM youth_welfare_records ORDER BY person_id')).rows:null;
  state.youth_welfare_record_updates=youthWelfareSchema.updates?(await client.query('SELECT * FROM youth_welfare_record_updates ORDER BY id')).rows:null;
  state.youth_welfare_record_history=youthWelfareSchema.history?(await client.query('SELECT * FROM youth_welfare_record_history ORDER BY id')).rows:null;
  state.public_registration_requests=youthWelfareSchema.requests?(await client.query('SELECT * FROM public_registration_requests ORDER BY created_at,request_hash')).rows:null;
  state.youth_welfare_access=youthWelfareSchema.access?(await client.query('SELECT * FROM youth_welfare_access ORDER BY user_id')).rows:null;
+ state.youth_welfare_eligibility_policy=youthWelfareSchema.eligibility_policy?(await client.query('SELECT * FROM youth_welfare_eligibility_policy ORDER BY id')).rows:null;
+ state.youth_welfare_status_history=youthWelfareSchema.status_history?(await client.query('SELECT * FROM youth_welfare_status_history ORDER BY id')).rows:null;
  state.youth_welfare_follow_up_tasks=(await client.query('SELECT * FROM youth_welfare_follow_up_tasks ORDER BY id')).rows;
  state.youth_welfare_saved_views=(await client.query('SELECT * FROM youth_welfare_saved_views ORDER BY user_id,id')).rows;
  state.youth_welfare_report_templates=(await client.query('SELECT * FROM youth_welfare_report_templates ORDER BY user_id,id')).rows;

@@ -4,7 +4,17 @@ import {readFileSync} from 'node:fs';
 
 const view=readFileSync(new URL('../public/admin/js/views/lifegroups.js',import.meta.url),'utf8');
 const modal=readFileSync(new URL('../public/admin/js/views/unifiedAddNew.js',import.meta.url),'utf8');
+const app=readFileSync(new URL('../public/admin/js/app.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/admin/styles.css',import.meta.url),'utf8');
+
+test('background route refreshes defer while the Add New registration modal is open',()=>{
+ const start=app.indexOf('async function route(options = {})');
+ const end=app.indexOf('function setActiveNav(',start);
+ const route=app.slice(start,end);
+ const modalGuard=route.indexOf("if (live && document.querySelector('#modalRoot .modal'))");
+ const modalTeardown=route.indexOf('closeModal();');
+ assert.ok(modalGuard>=0&&modalGuard<modalTeardown,'the live-refresh guard must return before route teardown can close the modal');
+});
 
 test('one Add New action replaces New Network and Add Cell Leader',()=>{
  const section=view.slice(view.indexOf('export async function renderLifegroups('),view.indexOf('const genderButtons=',view.indexOf('export async function renderLifegroups(')));

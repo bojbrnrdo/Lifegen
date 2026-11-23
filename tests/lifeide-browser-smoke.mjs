@@ -70,6 +70,13 @@ if(realAuth){
  app.get('/api/auth/status',(req,res)=>res.json({user:{role_id:'admin'},csrf_token:'test-csrf'}));
  app.use('/api/lifeide',createLifeIdeRouter({workspace,access:(req,res,next)=>next(),authenticate:(req,res,next)=>{req.actor={role_id:'admin',csrf_token:'test-csrf'};next();},origin:(req)=>{},csrf:(req)=>{if(req.get('x-csrf-token')!=='test-csrf')throw Error('Missing test CSRF');}}));
 }
+if(!realAuth){
+ app.get('/api/admin/dev/file',(req,res)=>{
+  if(req.query.branch!=='feature/browser-acceptance'||req.query.path!=='src/components/Example.js')
+   return res.status(403).json({error:'Branch file not available'});
+  res.json({path:req.query.path,branch:req.query.branch,sha:'branch-source-sha',content:'export const branchSpecific = true;',editable:true});
+ });
+}
 app.use('/lifeide',express.static(new URL('../public/lifeide/',import.meta.url).pathname));
 app.use((err,req,res,next)=>res.status(err.status||500).json({message:err.message}));
 const server=app.listen(0,'127.0.0.1');
@@ -105,6 +112,18 @@ try {
  }
  assert.equal(await evaluate("document.documentElement.dataset.lifeideReady"),'true','LifeIDE event listeners must be initialized before browser actions');
  assert.equal(await evaluate("Boolean(document.getElementById('newFile'))"),true);
+
+ // MerchIDE-style actions are in one top-level menu.
+ assert.equal(await evaluate("Boolean(document.getElementById('editorActions'))"),true,'Editor Actions menu exists');
+ assert.equal(await evaluate("document.getElementById('editorActions').open"),false,'Editor Actions collapsed by default');
+ await evaluate("document.querySelector('#editorActions summary').click()");
+ assert.equal(await evaluate("document.getElementById('editorActions').open"),true,'Editor Actions opens');
+ assert.equal(await evaluate("Boolean(document.getElementById('formatTabs')&&document.getElementById('gitChanges')&&document.getElementById('goToLine'))"),true,'Actions include MerchIDE formatting and Git tools');
+ await evaluate("document.querySelector('#editorActions summary').click()");
+ assert.equal(await evaluate("Boolean(document.getElementById('smaller')&&document.getElementById('larger')&&document.getElementById('saveFile'))"),true,'Editor header has font controls and save');
+ assert.equal(await evaluate("Boolean(document.getElementById('copyEditorOverlay')&&document.getElementById('scrollEditorTop')&&document.getElementById('scrollEditorBottom'))"),true,'Editor overlays available');
+ console.log('PASS LifeIDE MerchIDE-style toolbar: Editor Actions, font controls, save and overlays');
+
  // TransferBuilder-inspired IDE layout: explorer, editor and project tools.
  assert.equal(await evaluate("Boolean(document.getElementById('projectTools'))"),true,'Project tools panel is present');
  assert.equal(await evaluate("Boolean(document.getElementById('explorerResizer')&&document.getElementById('toolsResizer'))"),true,'Both IDE panel resizers are present');
@@ -120,6 +139,10 @@ try {
  await evaluate("document.getElementById('dialogInput').value='browser-smoke.js';document.getElementById('dialogForm').requestSubmit()");
  for(let i=0;i<50;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='browser-smoke.js'"))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'browser-smoke.js');
+ assert.equal(await evaluate("Boolean(window.lifeideCodeMirror&&document.querySelector('.cm-editor'))"),true,'CodeMirror 6 must be mounted');
+ await evaluate("(()=>{const v=window.lifeideCodeMirror;v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'const fromCodeMirror = 77;'}})})()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'const fromCodeMirror = 77;','CodeMirror edits must update the original LifeIDE save source');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const fromCodeMirror = 77;','CodeMirror typing must persist through existing local save handler');
  await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content"),'const smoke = true;');
  // The dialog submit and editor opening may settle on separate browser tasks.
@@ -129,6 +152,36 @@ try {
   await new Promise(r=>setTimeout(r,100));
  }
  assert.equal(await evaluate("document.querySelectorAll('.tab-open').length"),1,'New file tab should become visible after creation');
+ for(const modifier of ['ctrlKey','metaKey']){
+  const shortcutHandled=await evaluate("!document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',"+modifier+":true,bubbles:true,cancelable:true}))");
+  assert.equal(shortcutHandled,true,'Local Workspace must handle '+modifier+'+S instead of invoking browser Save Page');
+ }
+ // CodeMirror formatting controls must modify the real file content, not only the display.
+ await evaluate("(()=>{const v=window.lifeideCodeMirror;v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'\\tconst name = 42;\\n'+'x'.repeat(85)}})})()");
+ assert.equal(await evaluate("document.getElementById('editor').value.startsWith('\\t')"),true,'Fixture starts with a real tab');
+ assert.equal(await evaluate("parseFloat(getComputedStyle(document.querySelector('.cm-content')).maxWidth)<800"),true,'Code display should limit reading width');
+ assert.equal(await evaluate("document.querySelector('.cm-line:nth-child(2)').getBoundingClientRect().height > parseFloat(getComputedStyle(document.querySelector('.cm-line')).lineHeight)*1.5"),true,'Long logical lines should wrap visually into multiple rows');
+ assert.equal(await evaluate("window.lifeideCodeMirror.state.doc.lines"),2,'Visual wrapping must not insert actual line breaks');
+ await evaluate("document.getElementById('formatTabs').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value.startsWith('    const name')"),true,'Tabs to spaces must change the active file');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.workspace.v1')).find(f=>f.name==='browser-smoke.js')?.content.startsWith('    const name')"),true,'Tab conversion must use the normal save path');
+ await evaluate("document.getElementById('formatLongLine').click()");
+ assert.match(await evaluate("document.getElementById('formatMessage').textContent"),/Line 2 has 85 characters/);
+ await evaluate("document.getElementById('formatWrap').click()");
+ assert.equal(await evaluate("document.getElementById('formatWrap').getAttribute('aria-pressed')"),'false');
+ await evaluate("document.getElementById('formatLint').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value.includes('    const name')"),true,'Syntax checking must not edit file content');
+ // MerchIDE navigation and font limits must retain expected controls.
+ await evaluate("window.prompt=()=> '2';document.getElementById('goToLine').click()");
+ assert.equal(await evaluate("window.lifeideCodeMirror.state.doc.lineAt(window.lifeideCodeMirror.state.selection.main.head).number"),2,'Go To Line selects the requested line');
+ for(let i=0;i<12;i++)await evaluate("document.getElementById('smaller').click()");
+ assert.equal(await evaluate("document.getElementById('editor').style.fontSize"),'8px','MerchIDE minimum editor font is 8px');
+ for(let i=0;i<35;i++)await evaluate("document.getElementById('larger').click()");
+ assert.equal(await evaluate("document.getElementById('editor').style.fontSize"),'32px','MerchIDE maximum editor font is 32px');
+ for(let i=0;i<16;i++)await evaluate("document.getElementById('smaller').click()");
+ await evaluate("document.getElementById('editor').value='const smoke = true;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ console.log('PASS LifeIDE MerchIDE navigation: Go To Line and 8–32px font limits');
+ console.log('PASS LifeIDE browser: formatting buttons, save path, line length, wrapping, diagnostics');
  console.log('PASS LifeIDE browser: create, open, save, accessible file tab');
  await evaluate("document.getElementById('newFile').click()");
  await evaluate("document.getElementById('dialogInput').value='second-smoke.js';document.getElementById('dialogForm').requestSubmit()");
@@ -237,8 +290,12 @@ try {
  assert.equal(await evaluate("document.getElementById('fileTitle').textContent"),'root-note.txt');
  console.log('PASS LifeIDE browser: root selection creates files and folders at workspace root');
 
- // TransferBuilder-style IDE: three panels with working Explorer search and LIFEGEN's light palette.
- assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(255, 255, 255)','Main editor must retain the LIFEGEN light theme');
+ // LIFEGEN LifeIDE uses a cohesive dark theme across all three panels.
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.main')).backgroundColor"),'rgb(16, 23, 30)','Main editor must use dark theme');
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.sidebar')).backgroundColor"),'rgb(17, 26, 32)','Explorer must be dark');
+ assert.equal(await evaluate("getComputedStyle(document.querySelector('.project-tools')).backgroundColor"),'rgb(17, 26, 32)','Project Tools must be dark');
+ assert.equal(await evaluate("document.querySelector('meta[name=color-scheme]').content"),'dark','Browser native controls must be dark');
+ assert.equal(await evaluate("Boolean(document.querySelector('#tree .tree-icon--folder')&&document.querySelector('#tree .tree-icon--file'))"),true,'Explorer must render vector folder and file icons');
  assert.equal(await evaluate("document.querySelectorAll('.workspace > aside, .workspace > main').length"),3,'Workspace should have Explorer, editor and project tools');
  assert.equal(await evaluate("!document.querySelector('[id*=aiAgent], .ai-agent, .agent-panel')"),true,'No AI panel should be displayed');
  await evaluate("document.getElementById('explorerSearch').value='root-note';document.getElementById('explorerSearch').dispatchEvent(new Event('input',{bubbles:true}))");
@@ -382,6 +439,10 @@ try {
  await evaluate("window.prompt=()=> 'Verify browser commit';window.confirm=()=>true;document.getElementById('commit').click()");
  for(let i=0;i<50;i++){if(git('ls-tree','--name-only','HEAD').split('\n').includes('browser-repository.js'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(git('show','HEAD:browser-repository.js'),'const browserRepository = true;');
+ // The Git write may finish before its HTTP response clears commitBusy.
+ const commitSettled="(/Created local commit|before reviewing Git changes/.test(document.getElementById('status').textContent))";
+ for(let i=0;i<50;i++){if(await evaluate(commitSettled))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate(commitSettled),true,'Wait for the commit handler before starting file and Git review races');
  console.log('PASS LifeIDE repository browser: mode, create, save, Git selection and commit ('+(realAuth?'database-backed admin':'mock admin')+')');
  // A slow Git status response must not replace a file selected after review began.
  await evaluate("window.__statusFetch=window.fetch;window.fetch=(url,opts)=>String(url).includes('/api/lifeide/git/status')?new Promise(resolve=>setTimeout(()=>resolve(window.__statusFetch(url,opts)),350)):window.__statusFetch(url,opts)");
@@ -424,14 +485,14 @@ try {
 
 
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:390,height:844,deviceScaleFactor:3,mobile:true}}));});
- const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:document.getElementById('editor').getBoundingClientRect().width})");
+ const mobile=await evaluate("({viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editorWidth:(document.querySelector('.cm-editor')||document.getElementById('editor')).getBoundingClientRect().width})");
  assert.equal(mobile.viewport,390);
  assert.equal(mobile.overflow,false,'Mobile view has horizontal page overflow');
  assert.ok(mobile.editorWidth>80,'Mobile editor must remain usable');
  assert.equal(await evaluate("[...document.querySelectorAll('.explorer-entry')].every(el=>el.scrollWidth<=el.clientWidth+1)"),true,'Explorer entries must not overflow their own width');
  console.log('PASS LifeIDE mobile viewport: 390px, no page overflow, editor visible');
  await new Promise(resolve=>{const n=++id;pending.set(n,resolve);ws.send(JSON.stringify({id:n,method:'Emulation.setDeviceMetricsOverride',params:{width:320,height:700,deviceScaleFactor:2,mobile:true}}));});
- const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:document.getElementById('editor').getBoundingClientRect().width})");
+ const narrow=await evaluate("({width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,editor:(document.querySelector('.cm-editor')||document.getElementById('editor')).getBoundingClientRect().width})");
  assert.equal(narrow.width,320,'Small phones must use their real viewport width');
  assert.equal(narrow.overflow,false,'Small phones must not overflow horizontally');
  assert.ok(narrow.editor>80,'Editor must remain visible on small phones');
@@ -479,16 +540,63 @@ try {
  assert.equal(githubFileRequests,upstreamBeforeOpen,'Opening prefetched and previously viewed files must not call GitHub again');
  assert.equal(await evaluate("document.getElementById('editor').disabled"),false,'GitHub source files should open editable');
  assert.equal(await evaluate("document.getElementById('editGithub').hidden"),true,'Legacy Edit source control is hidden');
- assert.equal(await evaluate("document.getElementById('saveGithubDraft').hidden"),true,'Legacy Save draft control is hidden');
+ assert.equal(await evaluate("document.getElementById('saveGithubDraft').hidden"),false,'Browser draft remains available as a separate action');
  assert.equal(await evaluate("document.getElementById('saveFile').disabled"),false,'Save is enabled when a source file is open');
  assert.equal(await evaluate("document.getElementById('publishGithub').closest('.github-workflow')!==null"),true,'GitHub handoff is in advanced workflow');
  await evaluate("document.getElementById('editor').value='export const example = 42;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ // Exercise both shortcuts through the real editor with mocked GitHub responses.
+ await evaluate(`(() => {
+  const fetchOriginal=window.fetch;
+  window.confirm=()=>true;
+  window.testGithubWrites=[];
+  let remoteContent='export const example = true;';
+  window.fetch=async (url, options={})=>{
+   if(url==='/api/admin/dev/status')return Response.json({writesEnabled:true});
+   if(url.startsWith('/api/admin/dev/file?'))return Response.json({editable:true,content:remoteContent,sha:'branch-sha'});
+   if(url==='/api/admin/dev/file'&&options.method==='PUT'){
+    const write=JSON.parse(options.body);window.testGithubWrites.push(write);remoteContent=write.content;
+    return Response.json({ok:true,commit:'1234567890'});
+   }
+   return fetchOriginal(url,options);
+  };
+ })()`);
+ // Save is a safe draft action, never a GitHub commit form.
  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
- const storedDraft=await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js'))");
- assert.equal(storedDraft.content,'export const example = 42;','Ctrl+S persists GitHub source draft in browser only');
- assert.equal(await evaluate("document.getElementById('status').textContent.includes('Not committed to GitHub')"),true);
- await evaluate("document.getElementById('editor').value='export const example = 43;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('saveFile').click()");
- assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Save button persists same draft as Ctrl+S');
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Save must not open the GitHub workflow over the code');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 42;','Ctrl+S saves a recoverable draft');
+ assert.equal(await evaluate("window.testGithubWrites.length"),0,'Save must not silently commit to GitHub');
+ // Explicit GitHub action is the only way to open the branch/commit dialog.
+ await evaluate("document.getElementById('githubNative').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("document.getElementById('githubWorkflowStatus').textContent.includes('Connected to isolated')"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),false,'Explicit GitHub action opens the commit dialog');
+ assert.equal(await evaluate("getComputedStyle(document.getElementById('githubWorkflow')).position"),'fixed','Commit dialog overlays rather than shrinks editor');
+ assert.equal(await evaluate("window.testGithubWrites.length"),0);
+ await evaluate("document.getElementById('githubCommitMessage').value='fix: save test file';document.getElementById('commitGithubDraft').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("document.getElementById('status').textContent.includes('12345678')"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ assert.deepEqual(await evaluate("window.testGithubWrites"),[{branch:'feature/lifeide-change',path:'src/components/Example.js',sha:'branch-sha',content:'export const example = 42;',message:'fix: save test file'}]);
+ await evaluate("document.getElementById('closeGithubWorkflow').click()");
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true);
+ await evaluate("document.getElementById('editor').value='export const example = 43;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,bubbles:true,cancelable:true}))");
+ assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Cmd+S also keeps the editor clear');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Cmd+S saves a draft too');
+ await evaluate("document.getElementById('githubNative').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("document.getElementById('githubWorkflowStatus').textContent.includes('Connected to isolated')"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ await evaluate("document.getElementById('commitGithubDraft').click()");
+ for(let i=0;i<40;i++){
+  if(await evaluate("window.testGithubWrites.length===2"))break;
+  await new Promise(r=>setTimeout(r,50));
+ }
+ assert.equal(await evaluate("window.testGithubWrites[1]?.content"),'export const example = 43;','Explicit GitHub action commits updated draft');
+ await evaluate("document.getElementById('closeGithubWorkflow').click()");
  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Saved draft restores automatically when source file reopens');
@@ -498,14 +606,61 @@ try {
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 43;','Old-version draft must remain recoverable after source changes');
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Stale draft must display upstream-change warning');
- await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}))");
- assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).base"),'old-github-sha','Ctrl+S must preserve stale draft provenance');
+ await evaluate("document.getElementById('saveGithubDraft').click()");
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).base"),'old-github-sha','Save draft must preserve stale draft provenance');
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('GitHub source has changed')"),true,'Save must retain stale draft warning');
  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
  await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
  assert.equal(await evaluate("document.getElementById('status').textContent.includes('older browser draft')"),true,'Reopening after save must retain upstream-change warning');
- console.log('PASS LifeIDE simplified editor: editable on open; Save and Ctrl+S preserve safe GitHub drafts');
+ // Unsaved input must have a recovery copy even if a tab closes without an unload event.
+ const recoveryKey='lifegen.lifeide.github-recovery.v1:src/components/Example.js';
+ await evaluate("document.getElementById('editor').value='export const example = 44;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ const recovery=await evaluate("localStorage.getItem("+JSON.stringify(recoveryKey)+")");
+ assert.equal(JSON.parse(recovery).content,'export const example = 44;');
+ assert.equal(JSON.parse(recovery).base,'old-github-sha');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Recovery must keep the last explicit save intact');
+ await evaluate("window.confirm=()=>true;document.querySelector('#tree .node[title=\"README.md\"]').click()");
+ assert.equal(await evaluate("localStorage.getItem("+JSON.stringify(recoveryKey)+")"),null,'Discard must clear the recovery copy');
+ await evaluate("localStorage.setItem("+JSON.stringify(recoveryKey)+","+JSON.stringify(recovery)+")");
+ await evaluate("document.querySelector('#tree .node[title=\"src/components/Example.js\"]').click()");
+ assert.equal(await evaluate("document.getElementById('editor').value"),'export const example = 44;','Reopening must recover edits that were never explicitly saved');
+ await evaluate("window.__draftSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw new Error('Test storage failure');};document.getElementById('editor').value='retain this text';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}))");
+ assert.match(await evaluate("document.getElementById('status').textContent"),/Browser recovery unavailable/);
+ await evaluate("document.getElementById('saveGithubDraft').click()");
+ assert.match(await evaluate("document.getElementById('status').textContent"),/Unable to save draft: Test storage failure/);
+ assert.equal(await evaluate("document.getElementById('editor').value"),'retain this text');
+ await evaluate("Storage.prototype.setItem=window.__draftSetItem");
+ console.log('PASS LifeIDE GitHub saving: Ctrl+S and Cmd+S save drafts; explicit GitHub action commits; recovery preserves edits');
  console.log('PASS LifeIDE GitHub files: background prefetch, cached opening, no repeated source fetches');
+
+ if(!realAuth){
+  // Git -> branch file MUST use CodeMirror, not the old plain textarea editor.
+  await evaluate("location.href='/lifeide/?source=github&branch=feature%2Fbrowser-acceptance&path=src%2Fcomponents%2FExample.js'");
+  for(let i=0;i<80;i++){
+   if(await evaluate("document.getElementById('editor')?.value==='export const branchSpecific = true;'"))break;
+   await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(await evaluate("document.getElementById('editor').value"),'export const branchSpecific = true;','Deep link must read the requested feature branch, not main');
+  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'GITHUB · FEATURE/BROWSER-ACCEPTANCE');
+  assert.equal(await evaluate("Boolean(window.lifeideCodeMirror&&document.querySelector('.cm-editor'))"),true);
+  assert.equal(await evaluate("document.getElementById('githubBranch').value"),'feature/browser-acceptance');
+  await evaluate("document.getElementById('editor').value='export const branchSpecific = 42;';document.getElementById('editor').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('saveFile').click()");
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:feature/browser-acceptance:src/components/Example.js')).content"),'export const branchSpecific = 42;','Feature draft must be namespaced by branch');
+  assert.equal(await evaluate("document.getElementById('githubWorkflow').hidden"),true,'Branch Save never opens a commit form');
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('lifegen.lifeide.github-draft.v1:src/components/Example.js')).content"),'export const example = 43;','Main source draft must stay isolated');
+  await evaluate("location.href='/lifeide/?source=github&branch=feature%2Fbrowser-acceptance&path=src%2Fcomponents%2FExample.js'");
+  for(let i=0;i<80;i++){
+   if(await evaluate("document.getElementById('editor')?.value==='export const branchSpecific = 42;'"))break;
+   await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(await evaluate("document.getElementById('editor').value"),'export const branchSpecific = 42;','Feature draft must survive refresh');
+  await evaluate("document.querySelector('#tree .node[title=\"README.md\"]').click()");
+  for(let i=0;i<40;i++){if(await evaluate("document.getElementById('fileTitle').textContent==='README.md'"))break;await new Promise(r=>setTimeout(r,100));}
+  assert.equal(await evaluate("document.getElementById('modeLabel').textContent"),'GITHUB · MAIN','Explorer switch must clearly return to main');
+  assert.equal(await evaluate("document.getElementById('editor').value"),'# LIFEGEN source');
+  console.log('PASS LifeIDE Git branch deep link: correct source, CodeMirror editor, isolated draft, refresh and return to main');
+ }
+
 
 
 

@@ -29,7 +29,8 @@ import {assertGlobalExportAccess} from './leader-export-policy.js';
 import { sundaysBetween, attendedByPerson } from './vip-attendance.js';
 import {
   youthWelfareSummary, youthWelfarePeople, youthWelfarePerson, youthWelfareCellLeaderOptions, youthWelfareCheckPersonDuplicates, youthWelfareAddMember, setYouthWelfareCategory,
-  youthWelfareDataQuality, youthWelfareTasks, youthWelfareAssignees, createYouthWelfareTask,
+  youthWelfareDataQuality, youthWelfareTasks, youthWelfareTaskMetrics, youthWelfareAssignees, createYouthWelfareTask, youthWelfareAttentionQueue,
+  youthWelfareEligibilityPolicy, setYouthWelfareEligibilityPolicy, youthWelfareTimeline,
   updateYouthWelfareTask, youthWelfareReminders, dismissYouthWelfareReminder,
   youthWelfareSavedViews, createYouthWelfareSavedView, updateYouthWelfareSavedView,
   deleteYouthWelfareSavedView, youthWelfareReportTemplates, createYouthWelfareReportTemplate,
@@ -41,7 +42,7 @@ import {
   revokeYouthWelfareAccess, youthWelfareAccessActivity, youthWelfareDataStatus,
 } from './youth-welfare.js';
 const app=express();
-const ADMIN_ASSET_VERSION='2.4.8';
+const ADMIN_ASSET_VERSION='2.4.9';
 // VIP profile status is promoted to Member at five distinct present Sundays.
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const production=process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL);
@@ -113,11 +114,15 @@ const requireYouthPrivate=(req,res,next)=>{try{requirePermission(req.actor,'yout
 const requireYouthPeopleAdd=(req,res,next)=>{try{const permissions=req.actor?.permissions||[];if(!permissions.includes('youth_welfare:people:add')&&!permissions.includes('people:write'))throw httpError(req.actor?403:401,'Your account cannot add or link People records.');next();}catch(e){next(e);}};
 const protectYouthPeopleAdd=(req,res,next)=>{try{checkOrigin(req);checkCsrf(req);next();}catch(e){next(e);}};
 youthWelfareApi.get('/summary',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareSummary(req.actor)));
+youthWelfareApi.get('/eligibility-policy',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareEligibilityPolicy()));
+youthWelfareApi.put('/eligibility-policy',protectYouthWrite('youth_welfare:manage'),async(req,res)=>res.json(await setYouthWelfareEligibilityPolicy(req.body,req.actor)));
+youthWelfareApi.get('/attention',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareAttentionQueue({limit:Number(req.query.limit)||100})));
 youthWelfareApi.get('/cell-leaders',requireYouthRecordsManage,async(req,res)=>res.set('Cache-Control','no-store').json({leaders:await youthWelfareCellLeaderOptions()}));
 youthWelfareApi.get('/people',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfarePeople({q:req.query.q,category:req.query.category,missing:req.query.missing,education_status:req.query.education_status,lcsol_enrolled:req.query.lcsol_enrolled,tab:req.query.tab,age_min:req.query.age_min,age_max:req.query.age_max,cell_leader:req.query.cell_leader,lcsol_status:req.query.lcsol_status,verification_status:req.query.verification_status,sort:req.query.sort,limit:req.query.limit,offset:req.query.offset},req.actor)));
 youthWelfareApi.post('/people/duplicate-check',protectYouthPeopleAdd,requireYouthPeopleAdd,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareCheckPersonDuplicates(req.body,req.actor)));
 youthWelfareApi.post('/people',protectYouthPeopleAdd,requireYouthPeopleAdd,async(req,res)=>{const result=await youthWelfareAddMember(req.body,req.actor);res.status(result.linked_existing?200:201).set('Cache-Control','no-store').json(result);});
 youthWelfareApi.get('/people/:id',async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfarePerson(req.params.id,req.actor)));
+youthWelfareApi.get('/people/:id/timeline',requireYouthRecordsManage,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareTimeline(req.params.id,{limit:Number(req.query.limit)||100})));
 youthWelfareApi.get('/people/:id/lifegroup-tracker',requireYouthTrackerView,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareTrackerAssignment(req.params.id)));
 youthWelfareApi.put('/people/:id/welfare-record',protectYouthWrite('youth_welfare:records:manage'),async(req,res)=>res.json(await updateYouthWelfareRecord(req.params.id,req.body,req.actor)));
 youthWelfareApi.put('/people/:id/verification',protectYouthWrite('youth_welfare:manage'),async(req,res)=>res.json(await setYouthWelfareVerification(req.params.id,req.body?.status,req.actor)));
@@ -136,6 +141,7 @@ youthWelfareApi.delete('/access/:userId',protectYouthAccess,async(req,res)=>res.
 youthWelfareApi.get('/activity',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({events:await youthWelfareActivity({limit:Number(req.query.limit)||100})}));
 youthWelfareApi.get('/tasks/assignees',requireYouthManage,async(req,res)=>res.json({assignees:await youthWelfareAssignees()}));
 youthWelfareApi.get('/tasks',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({tasks:await youthWelfareTasks({status:req.query.status,q:req.query.q,assignee:req.query.assignee,limit:Number(req.query.limit)||100})}));
+youthWelfareApi.get('/tasks/metrics',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json(await youthWelfareTaskMetrics()));
 youthWelfareApi.post('/tasks',protectYouthWrite(),async(req,res)=>res.status(201).json(await createYouthWelfareTask(req.body,req.actor)));
 youthWelfareApi.patch('/tasks/:id',protectYouthWrite(),async(req,res)=>res.json(await updateYouthWelfareTask(req.params.id,req.body,req.actor)));
 youthWelfareApi.get('/reminders',requireYouthManage,async(req,res)=>res.set('Cache-Control','no-store').json({reminders:await youthWelfareReminders(req.actor)}));
@@ -280,6 +286,23 @@ async function customMethod(req,name,args) {
  if(name==='giftTracker')return listGiftTracker();
  if(name==='markGiftGiven')return transaction(async client=>await markGiftGiven({personId:args[0],actor},client),{write:true});
  if(name==='undoGiftGiven')return transaction(async client=>await undoGiftGiven({personId:args[0],actor},client),{write:true});
+ if(name==='archivePerson'){
+  const personId=validId(args[0]);
+  return transaction(async client=>{
+    const person=(await client.query('SELECT id,archived_at FROM people WHERE id=$1 FOR UPDATE',[personId])).rows[0];
+    if(!person)throw httpError(404,'Person not found.');
+    if(person.archived_at)return person;
+    const {rows:[{leads_network,leads_cell}]}=await client.query(`SELECT
+      EXISTS(SELECT 1 FROM networks WHERE leader_person_id=$1 AND is_active) AS leads_network,
+      EXISTS(SELECT 1 FROM lifegroups WHERE leader_person_id=$1 AND is_active) AS leads_cell`,[personId]);
+    if(leads_network||leads_cell)
+      throw httpError(409,'Reassign or deactivate active Network and Cell leadership before archiving this person.');
+    const {rows:[archived]}=await client.query(`UPDATE people SET archived_at=now(),updated_at=now()
+      WHERE id=$1 RETURNING id,archived_at`,[personId]);
+    await logAction(client,actor,'people',personId,'update',{fields:['archived_at','updated_at']});
+    return archived;
+  },{write:true});
+ }
  if(name==='setPersonStatus'&&args[1]==='inactive'){
   const personId=validId(args[0]);
   return transaction(async client=>{

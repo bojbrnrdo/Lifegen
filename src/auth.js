@@ -4,6 +4,13 @@ import { query, transaction, logAction } from './db.js';
 import { httpError } from './domain.js';
 import {normalizeLinkedPersonId,assertLinkablePerson} from './leader-account-link.js';
 const scrypt=promisify(crypto.scrypt);
+const STAFF_SESSION_TTL_MINUTES=12*60;
+const STAFF_SESSION_TTL_MS=STAFF_SESSION_TTL_MINUTES*60*1000;
+const STAFF_SESSION_RENEWAL_WINDOW_MS=60*60*1000;
+export function shouldRenewStaffSession(expiresAt,now=Date.now()) {
+ const timestamp=expiresAt instanceof Date?expiresAt.getTime():typeof expiresAt==='number'?expiresAt:Date.parse(expiresAt);
+ return Number.isFinite(timestamp)&&timestamp-now<=STAFF_SESSION_RENEWAL_WINDOW_MS;
+}
 export const hashToken=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 export const randomToken=()=>crypto.randomBytes(32).toString('base64url');
 export const PERMISSIONS={
@@ -42,7 +49,7 @@ export async function passwordMatches(password,encoded) {
 }
 export const previewSessionTokensEnabled=()=>(process.env.HOSTED_PREVIEW==='true'||process.env.LOCAL_DEMO==='true')&&process.env.NODE_ENV!=='production'&&!process.env.VERCEL;
 export const cookieOptions=req=>{const host=String(req.get('x-forwarded-host')||req.get('host')||'');const preview=process.env.LOCAL_DEMO==='true'||process.env.HOSTED_PREVIEW==='true'||host.endsWith('.e2b.app');return {httpOnly:true,secure:preview||process.env.NODE_ENV==='production'||Boolean(process.env.VERCEL)||req.secure,path:'/',sameSite:preview?'none':'lax',...(preview?{partitioned:true}:{})};};
-export const setStaffCookie=(req,res,token)=>{if(!previewSessionTokensEnabled())res.cookie('lg_staff',token,{...cookieOptions(req),maxAge:12*60*60*1000});};
+export const setStaffCookie=(req,res,token)=>{if(!previewSessionTokensEnabled())res.cookie('lg_staff',token,{...cookieOptions(req),maxAge:STAFF_SESSION_TTL_MS});};
 export const setVipCookie=(req,res,token)=>res.cookie('lg_vip',token,{...cookieOptions(req),maxAge:90*24*60*60*1000});
 export const clearStaffCookie=(req,res)=>res.clearCookie('lg_staff',cookieOptions(req));
 export function checkOrigin(req) {
@@ -84,16 +91,29 @@ export async function readStaff(req) {
     WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_active=true`,[hashToken(token)]));
  }
  if(!rows[0])return null;
- return {...publicUser(rows[0]),csrf_token:rows[0].csrf_token,session_hash:rows[0].token_hash};
+ return {...publicUser(rows[0]),csrf_token:rows[0].csrf_token,session_hash:rows[0].token_hash,expires_at:rows[0].expires_at};
+}
+async function renewStaffSession(req,res,actor) {
+ if(!shouldRenewStaffSession(actor.expires_at))return;
+ const {rows}=await query("UPDATE staff_sessions SET expires_at=now()+($2::int*interval '1 minute') WHERE token_hash=$1 AND expires_at>now() RETURNING expires_at",[actor.session_hash,STAFF_SESSION_TTL_MINUTES]);
+ if(!rows[0])throw httpError(401,'Your session has expired. Please sign in again.');
+ actor.expires_at=rows[0].expires_at;
+ const cookieToken=req.cookies?.lg_staff;
+ if(cookieToken)setStaffCookie(req,res,cookieToken);
 }
 export async function requireStaff(req,res,next) {
- try {req.actor=await readStaff(req);if(!req.actor)throw httpError(401,'Please sign in to the tracker.');next();}catch(e){next(e);}
+ try {
+  req.actor=await readStaff(req);
+  if(!req.actor)throw httpError(401,'Please sign in to the tracker.');
+  await renewStaffSession(req,res,req.actor);
+  next();
+ }catch(e){next(e);}
 }
 export function requirePermission(actor,permission) {if(!actor?.permissions?.includes(permission))throw httpError(actor?403:401,'Your account is not allowed to do that.');}
 export function checkCsrf(req) {if(!safeEqual(req.get('x-csrf-token'),req.actor?.csrf_token))throw httpError(403,'Session verification failed. Reload the page and try again.');}
 async function newSession(client,user) {
  const token=randomToken(),csrf=randomToken();
- await client.query('INSERT INTO staff_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval \'12 hours\')',[hashToken(token),user.id,csrf]);
+ await client.query("INSERT INTO staff_sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+($4::int*interval '1 minute'))",[hashToken(token),user.id,csrf,STAFF_SESSION_TTL_MINUTES]);
  let access={};
  const accessTable=(await client.query("SELECT to_regclass('public.youth_welfare_access') IS NOT NULL AS available")).rows[0]?.available;
  if(accessTable)access=(await client.query('SELECT role_id AS youth_welfare_access_role_id,status AS youth_welfare_access_status FROM public.youth_welfare_access WHERE user_id=$1',[user.id])).rows[0]||{};
@@ -137,10 +157,42 @@ export async function changePassword(actor,current,next) {
   await logAction(client,actor,'staff_users',u.id,'password_changed');return {};
  });
 }
+// Staff-account CRUD predates this optional identity link, so older schemas must remain usable.
+const STAFF_PERSON_LINK_MIGRATION='database/011_staff_people_link.sql';
+const STAFF_PERSON_LINK_UNAVAILABLE=`Staff account People linking is unavailable until ${STAFF_PERSON_LINK_MIGRATION} is applied.`;
+export async function staffPersonLinkColumnAvailable(db) {
+ const {rows}=await db.query(`SELECT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='staff_users' AND column_name='person_id'
+ ) AS available`);
+ return rows[0]?.available===true;
+}
+export async function listStaffAccounts(db) {
+ const hasPersonLink=await staffPersonLinkColumnAvailable(db);
+ const personIdColumn=hasPersonLink?'person_id':'NULL::bigint AS person_id';
+ const {rows}=await db.query(`SELECT id,username,display_name,role_id,${personIdColumn},is_active,created_at,last_login_at FROM staff_users ORDER BY id`);
+ return rows.map(u=>({...u,role_name:u.role_id}));
+}
+export async function insertStaffAccountRow(client,{hasPersonLink,username,display,roleId,hash,personId}) {
+ if(!hasPersonLink) {
+  if(personId!==undefined&&personId!==null)throw httpError(503,STAFF_PERSON_LINK_UNAVAILABLE);
+  return (await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash) VALUES($1,$2,$3,$4) RETURNING *',[username,display,roleId,hash])).rows[0];
+ }
+ await assertLinkablePerson(client,personId);
+ return (await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash,person_id) VALUES($1,$2,$3,$4,$5) RETURNING *',[username,display,roleId,hash,personId??null])).rows[0];
+}
+export async function updateStaffAccountRow(client,{hasPersonLink,current,username,display,roleId,active,hash,personId}) {
+ if(!hasPersonLink) {
+  if(personId!==undefined&&personId!==null)throw httpError(503,STAFF_PERSON_LINK_UNAVAILABLE);
+  return (await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash) WHERE id=$6 RETURNING *',[username,display,roleId,active,hash,current.id])).rows[0];
+ }
+ await assertLinkablePerson(client,personId,current.id);
+ return (await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash),person_id=$7 WHERE id=$6 RETURNING *',[username,display,roleId,active,hash,current.id,personId])).rows[0];
+}
 export async function userAccounts(actor,method,args) {
  requirePermission(actor,'users:manage');
  if(method==='roles')return Object.entries(PERMISSIONS).map(([id,permissions])=>({id,name:({admin:'Admin',staff:'Attendance Staff',viewer:'Viewer / Leader',youth_welfare_admin:'Youth Welfare Admin (portal-only)',youth_welfare_staff:'Youth Welfare Staff (portal-only)',youth_welfare_viewer:'Youth Welfare Viewer (portal-only)'})[id]||id,permissions}));
- if(method==='users')return (await query('SELECT id,username,display_name,role_id,person_id,is_active,created_at,last_login_at FROM staff_users ORDER BY id')).rows.map(u=>({...u,role_name:u.role_id}));
+ if(method==='users')return listStaffAccounts({query});
  const [idOrBody,bodyMaybe]=args;const editing=method==='updateUser';const body=editing?bodyMaybe:idOrBody;
  if(!body||!PERMISSIONS[body.role_id])throw httpError(400,'Choose a valid staff role.');
  const username=String(body.username||'').trim().toLowerCase();const display=String(body.display_name||'').trim();
@@ -148,18 +200,17 @@ export async function userAccounts(actor,method,args) {
  const hash=body.password?await passwordHash(body.password):null;if(!editing&&!hash)throw httpError(400,'A password is required.');
  return transaction(async client=>{
   let u;
+  const hasPersonLink=await staffPersonLinkColumnAvailable(client);
   const requestedPersonId=normalizeLinkedPersonId(body.person_id);
   if(editing) {
    const current=(await client.query('SELECT * FROM staff_users WHERE id=$1 FOR UPDATE',[Number(idOrBody)])).rows[0];if(!current)throw httpError(404,'User not found.');
    const active=body.is_active===undefined?current.is_active:Boolean(body.is_active);
    const linkedPersonId=requestedPersonId===undefined?current.person_id:requestedPersonId;
-   await assertLinkablePerson(client,linkedPersonId,current.id);
    if(current.role_id==='admin'&&current.is_active&&(!active||body.role_id!=='admin')&&(await client.query('SELECT id FROM staff_users WHERE role_id=\'admin\' AND is_active=true')).rows.length===1)throw httpError(409,'The last active administrator cannot be disabled or demoted.');
-   u=(await client.query('UPDATE staff_users SET username=$1,display_name=$2,role_id=$3,is_active=$4,password_hash=COALESCE($5,password_hash),person_id=$7 WHERE id=$6 RETURNING *',[username,display,body.role_id,active,hash,current.id,linkedPersonId])).rows[0];
+   u=await updateStaffAccountRow(client,{hasPersonLink,current,username,display,roleId:body.role_id,active,hash,personId:linkedPersonId});
    await client.query('DELETE FROM staff_sessions WHERE user_id=$1 AND token_hash<>$2',[u.id,actor.session_hash]);
   }else {
-   await assertLinkablePerson(client,requestedPersonId);
-   u=(await client.query('INSERT INTO staff_users(username,display_name,role_id,password_hash,person_id) VALUES($1,$2,$3,$4,$5) RETURNING *',[username,display,body.role_id,hash,requestedPersonId??null])).rows[0];
+   u=await insertStaffAccountRow(client,{hasPersonLink,username,display,roleId:body.role_id,hash,personId:requestedPersonId});
   }
   await logAction(client,actor,'staff_users',u.id,editing?'update':'create',{role:u.role_id});return publicUser(u);
  });
