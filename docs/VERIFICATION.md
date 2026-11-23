@@ -10,7 +10,7 @@ Bishop Arsie (boys)            Pastora Jane (girls)
   ├─ Roxxane   ┐                 ├─ Grace   ┐
   ├─ Zeff      │  Network Leaders│─ Faith   │ 3 Network Leaders each
   └─ Red       ┘                 └─ Hope    ┘
-        each leads 3 Cell Leaders, each with 6 people
+        each leads 6 Cell Leaders, each with 6 people
 ```
 
 **How it is modelled.** A Network may now sit *under a pastor Network*
@@ -57,7 +57,7 @@ Network**, and the Network form gained "Who is this Network under?".
 **Seed for this preview:** `preview-db/seed-pastoral-hierarchy.mjs` builds the
 real structure through the public API — Bishop Arsie Borromeo and Pastora Jane
 Borromeo, their six Network Leaders (Roxxane, Zeff, Red / Grace, Faith, Hope),
-three Cell Leaders each and six people per Cell (18 Cells, 108 people).
+six Cell Leaders each and six people per Cell (36 Cells, 258 people).
 
 **Defects found while building this, fixed:**
 
@@ -136,7 +136,8 @@ React stays for the carousel.
 - Live database (`preview-db` + `seed-pastoral-hierarchy.mjs`), numbers
   rendered through the same `lifegroupHeadline` the page uses:
   active 2 pastors / 18 Cell Leaders / 132 people / 26 Cells / 0 attention;
-  Boys and Girls 9 / 66 / 13 each.
+  Boys and Girls 9 / 66 / 13 each. (Superseded — see the six-per-Network entry
+  at the top of this file.)
 - `/admin/`, `/admin/styles.css` and the view modules serve 200 from the
   running app; admin and youth logins verified.
 - **Not verified visually:** no headless browser is available in this
