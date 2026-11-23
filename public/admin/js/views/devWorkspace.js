@@ -13,6 +13,25 @@ const devTabs=(current,branch='develop')=>`<nav class="dev-tabs" aria-label="Dev
  <a class="dev-tabs__link ${current==='git'?'is-active':''}" href="${devLink('git',branch)}" ${current==='git'?'aria-current="page"':''}>Git</a>
  <a class="dev-tabs__link ${current==='packaging'?'is-active':''}" href="${devLink('packaging',branch)}" ${current==='packaging'?'aria-current="page"':''}>Packaging</a>
  </nav>`;
+// A short-lived, same-tab handoff; Packaging rechecks paths against GitHub.
+const reviewKey='lifegen.dev.reviewed-package-files.v1';
+const readReview=branch=>{
+ try{
+  const raw=sessionStorage.getItem(reviewKey);
+  sessionStorage.removeItem(reviewKey);
+  if(!raw)return null;
+  const payload=JSON.parse(raw);
+  if(payload.branch!==branch||Date.now()-payload.createdAt>10*60*1000||
+     !Array.isArray(payload.paths)||!payload.paths.length||payload.paths.length>40||
+     new Set(payload.paths).size!==payload.paths.length||
+     payload.paths.some(path=>typeof path!=='string'||!path||path.length>400))return null;
+  return payload.paths;
+ }catch{return null;}
+};
+const saveReview=(branch,paths)=>{
+ try{sessionStorage.setItem(reviewKey,JSON.stringify({branch,paths,createdAt:Date.now()}));return true;}
+ catch{return false;}
+};
 const field=branch=>`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="${esc(safeBranch(branch))}" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
 
 export async function renderDevGit({main,query={}}){
@@ -42,6 +61,10 @@ export async function renderDevGit({main,query={}}){
   <section class="card devgit__section"><div class="card__header"><h2>Branch Status</h2><button class="btn btn--sm" id="gitCheck" ${connected?'':'disabled'}>✓ Check Status</button></div>
    <div class="card__body"><p class="small muted">Compare remote branch changes against develop.</p>
     <div class="devgit__status" id="gitStatus" role="status">Click Check Status to inspect the selected branch.</div>
+    <div class="devgit__review-controls">
+      <span id="gitSelectedCount" class="small muted">Select changed source files to review in Packaging (up to 40).</span>
+      <button class="btn btn--sm" id="gitReviewPackage" type="button" disabled>Review Selected in Packaging</button>
+    </div>
    </div></section>
   <section class="card devgit__section" id="gitDiffPanel" hidden><div class="card__header"><h2 id="gitDiffTitle">File Changes</h2><button class="btn btn--sm" type="button" id="gitCloseDiff">Close</button></div>
    <div class="card__body"><p id="gitDiffMessage" role="status" class="small muted"></p><pre id="gitDiffContent" class="devgit__patch" tabindex="0" aria-label="File differences"></pre></div>
@@ -71,6 +94,19 @@ export async function renderDevGit({main,query={}}){
   }
   window.location.hash='#/dev/ide?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file);
  };
+ const selectedFiles=new Set();
+ const updateReview=()=>{
+  el('gitSelectedCount').textContent=selectedFiles.size
+   ?selectedFiles.size+' file(s) selected · max 40'
+   :'Select changed source files to review in Packaging (up to 40).';
+  el('gitReviewPackage').disabled=!selectedFiles.size;
+ };
+ el('gitReviewPackage').onclick=()=>{
+  const paths=[...selectedFiles];
+  if(!paths.length||paths.length>40)return;
+  if(!saveReview(branch,paths)){note('Browser storage unavailable; cannot transfer selected files.');return;}
+  window.location.hash=devLink('packaging',branch)+'&review=selected';
+ };
  const showFileDiff=async(selected,file)=>{
   const request=++diffRequest,seq=revision;
   el('gitDiffPanel').hidden=false;
@@ -95,7 +131,7 @@ export async function renderDevGit({main,query={}}){
   try{
    const result=await api('branch-status?branch='+encodeURIComponent(which));
    if(seq!==revision||request!==statusRequest)return false;
-   host.replaceChildren();
+   selectedFiles.clear();updateReview();host.replaceChildren();
    const text=document.createElement('p');text.textContent=result.branch+' vs develop — '+result.ahead+' ahead, '+result.behind+' behind';host.append(text);
    const status=document.createElement('p');status.className='small muted';status.textContent=result.files.length+' changed files'+(result.truncated?' (first 100 shown)':'');host.append(status);
    for(const file of result.files){
@@ -103,6 +139,19 @@ export async function renderDevGit({main,query={}}){
     const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
     const counts=document.createElement('span');counts.className='small muted';counts.textContent='+'+file.additions+' / -'+file.deletions;
     row.append(name,counts);
+    if(file.status!=='removed'){
+     const checkbox=document.createElement('input');checkbox.type='checkbox';
+     checkbox.className='devgit__select-file';
+     checkbox.setAttribute('aria-label','Select '+file.path+' for packaging review');
+     checkbox.addEventListener('change',()=>{
+      if(checkbox.checked){
+       if(selectedFiles.size>=40){checkbox.checked=false;note('Select at most 40 source files.');return;}
+       selectedFiles.add(file.path);
+      }else selectedFiles.delete(file.path);
+      updateReview();
+     });
+     row.prepend(checkbox);
+    }
     const view=document.createElement('button');view.type='button';view.className='btn btn--sm devgit__view-diff';
     view.textContent='View Diff';view.setAttribute('aria-label','View changes for '+file.path+' on '+which);
     view.onclick=()=>showFileDiff(which,file.path);row.append(view);
@@ -171,7 +220,7 @@ export async function renderDevGit({main,query={}}){
   }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
-  branch=value;el('gitPackageBranch').href=devLink('packaging',value);revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
+  selectedFiles.clear();updateReview();branch=value;el('gitPackageBranch').href=devLink('packaging',value);revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
   return Promise.all([check(),loadHistory()]);
  };
  el('gitPull').onclick=async()=>{const request=++refreshRequest;note('Refreshing remote GitHub data…');const seq=revision+1;const results=await choose(branch);if(seq!==revision||request!==refreshRequest)return;note(results.every(Boolean)?'Branch status and history refreshed. No local files were changed.':'Remote refresh incomplete. Review the Branch Status and Commit History errors; no local files were changed.');};
@@ -391,6 +440,10 @@ export async function renderDevPackaging({main,query={}}){
  };
 
  let stagedBranch='',stageSequence=0,packagePending=false;
+ // Consume the one-time review handoff only when branch and expiry match.
+ const reviewBranch=branchInput.value.trim();
+ let reviewedPaths=query.review==='selected'?readReview(reviewBranch):null;
+
  const selected=()=>[...stage.querySelectorAll('.package-file:checked')].map(cb=>cb.value);
  const updateStage=()=>{
   const count=stage.querySelectorAll('.package-file').length;
@@ -410,6 +463,10 @@ export async function renderDevPackaging({main,query={}}){
    if(seq!==stageSequence||branch!==branchInput.value.trim())return;
    if(result.truncated)throw Error('More than 100 changed files. Staged exports cannot be safely verified; use a full-source package.');
    const files=result.files.filter(file=>file.status!=='removed');
+   const eligible=new Set(files.map(file=>file.path));
+   const currentReview=branch===reviewBranch?reviewedPaths:null;
+   const validatedReview=currentReview?.filter(path=>eligible.has(path))||null;
+
    if(!files.length){stageStatus.textContent='No changed source files found. You can still export the full source.';return;}
    stagedBranch=branch;
    const all=document.createElement('label');all.className='row';
@@ -418,7 +475,7 @@ export async function renderDevPackaging({main,query={}}){
    const list=document.createElement('div');list.className='stack';stage.append(list);
    files.forEach((file,index)=>{
     const label=document.createElement('label');label.className='row';
-    const check=document.createElement('input');check.type='checkbox';check.className='package-file';check.value=file.path;check.checked=index<40;
+    const check=document.createElement('input');check.type='checkbox';check.className='package-file';check.value=file.path;check.checked=validatedReview?validatedReview.includes(file.path):index<40;
     const name=document.createElement('span');name.textContent=file.status+' · '+file.path;
     label.append(check,name);list.append(label);
     check.addEventListener('change',()=>{
@@ -426,13 +483,20 @@ export async function renderDevPackaging({main,query={}}){
      toggle.checked=selected().length===files.length;updateStage();
     });
    });
-   toggle.checked=files.length<=40;
+   toggle.checked=validatedReview?selected().length===files.length:files.length<=40;
    toggle.addEventListener('change',()=>{
     const checks=[...list.querySelectorAll('input[type=checkbox]')];
     checks.forEach((cb,index)=>{cb.checked=toggle.checked&&index<40;});
     updateStage();
    });
    updateStage();
+   if(currentReview){
+    reviewedPaths=null;
+    selectedOnly.checked=Boolean(validatedReview?.length);
+    stageStatus.textContent=validatedReview?.length
+     ?validatedReview.length+' reviewed file(s) selected from Git. '+(validatedReview.length!==currentReview.length?'Some changed files are no longer available. Review before packaging.':'Review your selection before starting packaging.')
+     :'The Git selection is no longer available on this branch. Review current changes.';
+   }
   }catch(error){if(seq===stageSequence){stageStatus.textContent='Cannot stage files: '+error.message;stagedBranch='';selectedOnly.disabled=true;}}
  };
  let artifactRequest=0;
@@ -479,6 +543,7 @@ export async function renderDevPackaging({main,query={}}){
  };
  el('refreshPackageRuns').onclick=refreshRuns;
  if(data.connected)refreshRuns();
+ if(reviewedPaths)el('findPackageFiles').click();
  el('runPackage').onclick=async()=>{
   if(packagePending)return;
   const button=el('runPackage'),status=el('packageStatus');
