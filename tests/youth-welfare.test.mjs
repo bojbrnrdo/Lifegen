@@ -138,6 +138,16 @@ test('eligible records are selected by regular registration evidence, never name
   assert.match(youthWelfareEligibilitySql({ localDemo: true }), /p\.is_demo = true/);
 });
 
+test('admin login redirects Youth Welfare assigned users without redirecting primary admins', () => {
+  const client = read('../public/admin/js/app.js');
+  assert.match(client, /const shouldOpenYouthWelfare = user =>/);
+  assert.match(client, /isYouthWelfareRole\(user\.role_id\)/);
+  assert.match(client, /user\.role_id !== 'admin' && isYouthWelfareRole\(user\.youth_welfare_role\)/);
+  assert.match(client, /user\.permissions\?\.includes\('youth_welfare:view'\)/);
+  assert.match(client, /if\(shouldOpenYouthWelfare\(signedInUser\)\)/);
+  assert.match(client, /if\(shouldOpenYouthWelfare\(status\.user\)\)/);
+});
+
 test('dashboard and API pages use the existing authentication with server-side permission checks', () => {
   const app = read('../src/app.js');
   const dashboard = read('../public/youth-welfare/index.html');
