@@ -46,8 +46,10 @@ WHERE r.status = 'present'
 ON CONFLICT (registration_id, date_key) DO NOTHING;
 
 -- Any id handed out above must not be reissued by the id allocator later.
+-- coalesce: on a fresh database vip_checkins is empty, so max(id) is NULL and
+-- the counter row already exists from 001_init with last_id = 0.
 INSERT INTO id_counters(entity, last_id)
-SELECT 'vip_checkins', max(id) FROM vip_checkins
+SELECT 'vip_checkins', coalesce(max(id), 0) FROM vip_checkins
 ON CONFLICT (entity) DO UPDATE SET last_id = GREATEST(id_counters.last_id, EXCLUDED.last_id);
 
 -- 2. A VIP's earliest verified Sunday is their "date first attended".

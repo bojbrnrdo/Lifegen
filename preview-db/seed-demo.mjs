@@ -90,14 +90,94 @@ await db.query(`INSERT INTO youth_welfare_report_templates(user_id,name,config)
   VALUES($1,'Demo · Monthly registration events','{"type":"registration_summary","period":"month","category":"all"}'::jsonb)
   ON CONFLICT(user_id,lower(btrim(name))) DO NOTHING`,[youthUserId]);
 
+// ---- Youth Welfare people -------------------------------------------------
+// The VIP block below gives every demo person a VIP registration, and the Youth
+// Welfare portal intentionally excludes VIP-linked people. Without regular
+// members of its own the portal would open empty, so add a small set of People
+// who went through a regular registration and never became VIPs.
+const YOUTH_PEOPLE = [
+  ['Angelica', 'Bautista', 'currently_studying', 'college_first_year', 'female', 19],
+  ['Bryan', 'Delos Santos', 'currently_studying', 'senior_high_grade_11', 'male', 17],
+  ['Cristine', 'Pascual', 'out_of_school', 'junior_high_grade_10', 'female', 16],
+  ['Dennis', 'Navarro', 'working_student', 'college_second_year', 'male', 20],
+  ['Erika Mae', 'Salazar', 'currently_als', 'als_senior_high', 'female', 18],
+  ['Francis', 'Ibarra', 'out_of_school', null, 'male', 21],
+  ['Grace Ann', 'Quiambao', 'currently_studying', 'junior_high_grade_9', 'female', 15],
+  ['Harvey', 'Magbanua', 'currently_studying', 'college_third_year', 'male', 21],
+  ['Isabel', 'Soriano', 'out_of_school', 'senior_high_grade_12', 'female', 18],
+  ['Jerome', 'Valdez', 'working_student', 'college_fourth_year', 'male', 22],
+  ['Katrina', 'Fajardo', 'currently_studying', 'senior_high_grade_12', 'female', 17],
+  ['Lorenzo', 'Domingo', 'currently_studying', 'college_first_year', 'male', 18],
+];
+const YOUTH_CATEGORIES = ['student', 'student', 'not_studying', 'working_student', 'student', 'unable_to_continue', 'student', 'student', 'not_studying', 'working_student', 'student', 'young_professional'];
+const demoYouthIds = [];
+const haveYouth = new Set((await db.query('SELECT person_id FROM youth_welfare_categories')).rows.map((r) => String(r.person_id)));
+// Candidate for conversion on an already-seeded database: a demo person who is
+// not a VIP and has no Youth Welfare category yet. `converting` turns a few of
+// those into Youth Welfare people in place instead of requiring a rebuild.
+const youthCandidate = async () => (await db.query(
+  `SELECT p.id FROM people p
+   WHERE p.is_demo=true AND NOT EXISTS (SELECT 1 FROM vip_registrations v WHERE v.person_id=p.id)
+     AND NOT EXISTS (SELECT 1 FROM youth_welfare_categories y WHERE y.person_id=p.id)
+   ORDER BY p.id LIMIT 1`)).rows[0]?.id;
+for (let i = 0; i < YOUTH_PEOPLE.length; i++) {
+  const [first, last, education, grade, sex, age] = YOUTH_PEOPLE[i];
+  const code = `2026-Y${String(i + 1).padStart(3, '0')}`;
+  let row = (await db.query('SELECT id FROM people WHERE person_code=$1', [code])).rows[0];
+  if (!row) {
+    row = (await db.query(
+      `INSERT INTO people(id,person_code,first_name,last_name,full_name,status,sex,age,date_registered,registration_source,is_demo)
+       VALUES($1,$2,$3,$4,$5,'regular',$6,$7,$8,'public',true) RETURNING id`,
+      [await nextId('people'), code, first, last, `${first} ${last}`, sex, age,
+        iso(new Date(Date.now() - (i * 4 + 11) * 86400000))])).rows[0];
+  } else {
+    const converted = (await youthCandidate()) ?? row.id;
+    await db.query("UPDATE people SET first_name=$2,last_name=$3,full_name=$4,status='regular',sex=$5,age=$6,registration_source='public' WHERE id=$1",
+      [converted, first, last, `${first} ${last}`, sex, age]);
+    await db.query('DELETE FROM vip_registrations WHERE person_id=$1', [converted]);
+    row = { id: converted };
+  }
+  demoYouthIds.push(row.id);
+  if (haveYouth.has(String(row.id))) continue; // a category override already marks this person as Youth Welfare
+  await db.query(`INSERT INTO youth_welfare_categories(person_id,category) VALUES($1,$2) ON CONFLICT(person_id) DO NOTHING`,
+    [row.id, YOUTH_CATEGORIES[i]]);
+  const hasConsent = i % 3 !== 0;
+  await db.query(
+    `INSERT INTO youth_welfare_records(person_id,education_status,grade_year_level,continue_studies,
+       school_stop_reasons,verification_status,verified_at,source,welfare_consent_at,welfare_consent_version)
+     VALUES($1,$2,$3,$4,$5,$6,$7,'staff_entry',$8,$9)
+     ON CONFLICT(person_id) DO NOTHING`,
+    [row.id, education, grade,
+      education === 'out_of_school' ? (i % 2 ? 'yes_need_help' : 'not_right_now') : null,
+      education === 'out_of_school' ? ['financial_problem'] : [],
+      i % 2 ? 'verified' : 'pending', i % 2 ? new Date() : null,
+      hasConsent ? new Date() : null, hasConsent ? 'demo-v1' : null]);
+}
+console.log('seeded Youth Welfare people:', demoYouthIds.length);
+
+// The tasks above were written before those people were known not to be VIPs.
+// Re-point them (and any other demo task) at Youth Welfare people so the task
+// list the portal filters on is not empty. Safe to re-run.
+if (demoYouthIds.length >= 2) {
+  await db.query(
+    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$3 AND task_type='data_verification'`,
+    [demoYouthIds[0], demoYouthIds[1], personIds[0]]);
+  await db.query(
+    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$3 AND task_type='registration_review'`,
+    [demoYouthIds[1], demoYouthIds[0], personIds[1]]);
+}
+
 // ---- VIP attendance: last 10 Sundays --------------------------------------
 // Attendance is tracked only for VIPs, so each demo person is given a VIP
 // registration and a validated check-in per Sunday they "attended". There is no
-// general Sunday roster any more.
+// general Sunday roster any more. People seeded for the Youth Welfare portal are
+// skipped: that portal excludes anyone with a VIP registration.
 const sundays = lastSundays(10);
+const youthOnly = new Set(demoYouthIds.map(String));
 let recCount = 0;
 for (let i = 0; i < personIds.length; i++) {
   const pid = personIds[i];
+  if (youthOnly.has(String(pid))) continue;
   const keep = 3 + ((i * 7) % 8); // attends 3..10 most recent Sundays
   let reg = (await db.query('SELECT id FROM vip_registrations WHERE person_id=$1 ORDER BY id LIMIT 1', [pid])).rows[0];
   if (!reg) {

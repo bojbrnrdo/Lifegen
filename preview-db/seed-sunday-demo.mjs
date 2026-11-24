@@ -17,6 +17,11 @@ function sundayFor(d) {
   s.setDate(s.getDate() + off);
   return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
 }
+// Match the app: src/domain.js pins its own TZ to Asia/Manila, so the app's
+// "today" is the Manila date. The seeder is usually started from a UTC sandbox,
+// where `new Date()` names the previous day, so pin the same timezone here or
+// the seeded board lands one Sunday too late for the LOCAL_DEMO_CLOCK.
+process.env.TZ = process.env.TZ || process.env.APP_TIMEZONE || 'Asia/Manila';
 const demoClock = process.env.LOCAL_DEMO_CLOCK ? new Date(process.env.LOCAL_DEMO_CLOCK) : new Date();
 const SUNDAY = sundayFor(demoClock);
 const SATURDAY = (() => { const d = new Date(SUNDAY + 'T12:00:00+08:00'); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
