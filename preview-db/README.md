@@ -32,13 +32,19 @@ LOCAL_DEMO=true LOCAL_DEMO_CLOCK=2026-10-18T13:05:00+08:00 PORT=3000 npm start
 
 Sign in to the main Admin preview: `demo@lifegen.local` / `LifegenDemo2026!`.
 
-The demo seed leaves the Lifegroup Tracker empty. With the app running, fill it
-with synthetic Networks, Cell Leaders and Cells (six members each, two of them
-Closed-cell) so **Admin → Lifegroups** can be reviewed:
+The demo seed leaves the Lifegroup Tracker empty. With the app running, build the
+pastoral hierarchy so **Admin → Lifegroups** can be reviewed:
 
 ```bash
-node preview-db/seed-lifegroup-demo.mjs   # talks to the app over HTTP, local only
+node preview-db/seed-pastoral-hierarchy.mjs      # 2 pastors, 6 Networks, 48 Cells
+node preview-db/seed-pastoral-hierarchy.mjs --new-leader-names   # give every Cell Leader their own surname
 ```
+
+Two pastors sit at the top (Bishop Arsie Borromeo, Pastora Jane Borromeo) and
+**every Network is under one of them** — the seed no longer creates the old
+QA Networks/Cells, which used to sit outside any pastor. Every Cell Leader has
+their own Cell, and the members in it have a leader. Leaders are generated with
+their own surnames, so a review does not show 44 people all called Borromeo.
 
 Youth Welfare preview: open `/youth-welfare` and use `demo-youth@lifegen.local` / `DemoYouthWelfare2026!`. The seed creates fictional ministry categories, a few administrative review tasks, a personal saved view, and a report template. This account and its fictional member records exist only in the disposable local demo database; they are not production credentials. Apply the numbered migrations through `015_youth_welfare_records.sql` before seeding; this includes the protected answer/review schema required by the portal. The access table and portal-only roles never replace primary LIFEGEN roles. Never apply these preview instructions to production.
 
@@ -65,10 +71,12 @@ The seeders used to write stand-ins such as `Friend1 Kai`, `Demo Person 01` and
 `Test VIP`. `seed-pastoral-hierarchy.mjs` now generates real-looking Filipino
 names instead, matched to sex and unique across the church.
 
-For a database seeded before that change, run:
+Cell Leaders used to be created as `<FirstName> Borromeo`, so all 44 shared the
+pastor's surname. Their surnames are generated from the same pool now. For a
+database seeded before that change, run:
 
 ```bash
-BASE_URL=http://127.0.0.1:3000 node preview-db/rename-demo-people.mjs
+BASE_URL=http://127.0.0.1:3000 node preview-db/seed-pastoral-hierarchy.mjs --new-leader-names
 ```
 
 It renames only people who still carry a placeholder name and changes nothing

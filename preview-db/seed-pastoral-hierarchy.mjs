@@ -8,12 +8,20 @@
 //
 // Every Network Leader is ALSO a member of their pastor's cell, which is the
 // point of the structure: Bishop -> Network Leaders -> Cell Leaders -> Members.
+// Every Network is under a pastor: the seed creates no Network that sits on its
+// own, so the Lifegroups directory never shows a "not under a pastor" card.
 //
 // Safe to re-run: it tops up any Network Leader who has fewer than six Cells
 // and never duplicates an existing Cell.
 //
 // Usage (local app running, demo database seeded):
 //   node preview-db/seed-pastoral-hierarchy.mjs
+//   node preview-db/seed-pastoral-hierarchy.mjs --new-leader-names
+//     Older seeds created every Cell Leader as "<FirstName> Borromeo", so all
+//     of them shared the pastor's surname. The flag gives each Cell Leader their
+//     own surname from the same pool. It only touches people who still carry the
+//     pastor's surname and are not pastors themselves; the Cell name keeps its
+//     leader's first name, so nothing in the tree moves.
 // Synthetic data only; refuses any non-local BASE_URL.
 const base = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const username = process.env.LIFEGEN_DEMO_USERNAME || 'demo@lifegen.local';
@@ -59,6 +67,10 @@ const CELL_LEADERS = {
   Hope: ['Nina', 'Bea', 'Liza', 'Maricel', 'Nadine', 'Odette'],
 };
 const PER_CELL = 6;
+// The pastors' own surname. Cell Leaders must NOT all share it: a real church
+// has a variety of surnames, and 44 identical ones make the demo read as fake.
+const PASTOR_SURNAME = 'Borromeo';
+const NEW_LEADER_NAMES = process.argv.includes('--new-leader-names');
 
 async function person(first, last, sex) {
   const created = await call('createPerson', {
@@ -91,7 +103,7 @@ async function topUpToSix(existingNets) {
       if (!missing.length) continue;
       const leaderCell = await call('ensureNetworkLeaderGroup', Number(leader.id));
       for (const cellName of missing) {
-        const cellLeader = await person(cellName, 'Borromeo', sex);
+        const cellLeader = await person(cellName, nextName(sex).lastName, sex);
         const cell = await call('createLifegroup', {
           name: `${cellName} Cell`, gender: group.gender, network_id: Number(leader.id),
           network_manual: true, leader_person_id: Number(cellLeader.id), capacity: 12, is_demo: true,
@@ -133,6 +145,48 @@ function nextName(sex) {
   throw new Error('Ran out of unused names.');
 }
 
+/**
+ * Older seeds created every Cell Leader (and Network Leader) with the pastors'
+ * surname. Give each of them a surname of their own. Only people who still carry
+ * that surname AND lead a Cell or Network are touched; the two pastors keep it,
+ * and nobody's Cell, code, status or membership changes. Idempotent: a leader
+ * already renamed no longer matches, so a second run reports nothing to do.
+ */
+async function giveLeadersTheirOwnSurnames(existingNets) {
+  const allCells = await call('lifegroups', { status: 'all' });
+  const leaderIds = new Set();
+  for (const g of allCells) if (g.is_active && g.leader_person_id) leaderIds.add(Number(g.leader_person_id));
+  for (const n of existingNets) if (n.leader_person_id) leaderIds.add(Number(n.leader_person_id));
+
+  const fetched = await call('people', { limit: 5000, status: 'all' });
+  const people = Array.isArray(fetched) ? fetched : fetched.people || [];
+  const pastors = new Set(STAFF.map((g) => `${g.pastor[0]} ${g.pastor[1]}`));
+  const taken = new Set(people.map((p) => `${p.first_name} ${p.last_name}`));
+  const targets = people.filter((p) => leaderIds.has(Number(p.id))
+    && String(p.last_name || '') === PASTOR_SURNAME
+    && !pastors.has(`${p.first_name} ${p.last_name}`));
+
+  if (!targets.length) {
+    console.log('\nLeader names: every Cell Leader and Network Leader already has their own surname.');
+    return 0;
+  }
+  let renamed = 0;
+  for (const leader of targets) {
+    let surname = null;
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      const candidate = SURNAMES[Math.floor(nameRand() * SURNAMES.length)];
+      if (candidate !== PASTOR_SURNAME && !taken.has(`${leader.first_name} ${candidate}`)) { surname = candidate; break; }
+    }
+    if (!surname) continue;
+    taken.add(`${leader.first_name} ${surname}`);
+    // Only the surname is sent, so code, sex, status and Cell stay as they are.
+    await call('updatePerson', Number(leader.id), { last_name: surname });
+    renamed += 1;
+  }
+  console.log(`\nLeader names: gave ${renamed} Cell/Network Leader(s) their own surname (only the ${pastors.size} pastors keep ${PASTOR_SURNAME}).`);
+  return renamed;
+}
+
 async function run() {
   await request('/api/auth/login', { method: 'POST', body: { username, password } });
   // Two mutually exclusive paths, so re-running can never build twice:
@@ -146,6 +200,8 @@ async function run() {
     console.log(added
       ? `\nAdded ${added} Cell(s) — every Network Leader now has six Cell Leaders.`
       : 'Pastoral hierarchy already complete: six Cell Leaders per Network — nothing to do.');
+    if (NEW_LEADER_NAMES) await giveLeadersTheirOwnSurnames(existingNets);
+    await request('/api/auth/logout', { method: 'POST', body: {} });
     return;
   }
 
@@ -161,7 +217,7 @@ async function run() {
     console.log(`${group.role}: ${first} ${last} (network ${pastorNet.id})`);
 
     for (const name of group.leaders) {
-      const netLeader = await person(name, 'Borromeo', group.gender === 'boys' ? 'male' : 'female');
+      const netLeader = await person(name, nextName(group.gender === 'boys' ? 'male' : 'female').lastName, group.gender === 'boys' ? 'male' : 'female');
       const net = await call('createNetwork', {
         name: `${name} Network`, gender: group.gender,
         leader_person_id: Number(netLeader.id), parent_network_id: Number(pastorNet.id),
@@ -175,7 +231,7 @@ async function run() {
       const leaderCell = await call('ensureNetworkLeaderGroup', Number(net.id));
       const sex = group.gender === 'boys' ? 'male' : 'female';
       for (const cellName of CELL_LEADERS[name] || []) {
-        const cellLeader = await person(cellName, 'Borromeo', group.gender === 'boys' ? 'male' : 'female');
+        const cellLeader = await person(cellName, nextName(sex).lastName, sex);
         const cell = await call('createLifegroup', {
           name: `${cellName} Cell`, gender: group.gender, network_id: Number(net.id),
           network_manual: true, leader_person_id: Number(cellLeader.id), capacity: 12, is_demo: true,

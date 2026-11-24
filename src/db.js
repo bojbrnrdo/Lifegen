@@ -85,7 +85,12 @@ export function applicationDatabaseUrl(url,{serverless=Boolean(process.env.VERCE
 }
 export function getPool() {
  if(!pool) {
-  const instance=new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions()});
+  const instance=new Pool({...connectionOptions(applicationDatabaseUrl(process.env.DATABASE_URL)),...applicationPoolOptions(),keepAlive:true});
+  // Postgres sends each result as several small packets. With Nagle enabled the
+  // client socket can wait on a delayed ACK, adding ~40ms to every query — and the
+  // Tracker issues over a hundred per page load. There is no benefit to batching
+  // here: these are request/response round-trips, not bulk streams.
+  instance.on('connect',(client)=>{try{client.connection?.stream?.setNoDelay(true);}catch{}});
   // pg emits errors from idle clients on the Pool itself. Without a listener, Node
   // treats them as uncaught exceptions and can terminate the running API process.
   // Never include connection strings or credentials in the error output.
