@@ -16,6 +16,7 @@
     "db:backup": "node scripts/backup.mjs",
     "demo:seed": "node scripts/seed-demo.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "perf:audit": "node scripts/perf-audit.mjs",
     "test:lifegroup-integration": "node tests/lifegroup-integration.mjs",
     "package:vercel": "node scripts/package-vercel.mjs",
     "test:vip-design-integration": "node tests/vip-design-integration.mjs",

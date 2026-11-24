@@ -264,7 +264,8 @@ async function getGroup(id) {
   const [members, former] = await Promise.all([activeMembers(group.id), formerMembers(group.id)]);
   let led_groups = [];
   if (group.leads_network && group.network_id) {
-    const children = await listGroups({ status: 'all', network_id: group.network_id });
+    // Reuse the list already loaded: only another Network's Cells are missing from it.
+    const children = groups.filter((g) => Number(g.network_id) === Number(group.network_id));
     const memberIds = new Set(members.map((m) => m.id));
     led_groups = children.filter((g) => g.id !== group.id && memberIds.has(g.leader_person_id));
   }
@@ -952,19 +953,26 @@ async function meetingRows(groupId, limit = 30) {
   const { rows } = await query(`SELECT mt.*,mt.meeting_date::text AS meeting_date, u.display_name AS submitted_by_user_name
     FROM lifegroup_meetings mt LEFT JOIN staff_users u ON u.id=mt.submitted_by_user
     WHERE mt.lifegroup_id=$1 ORDER BY mt.meeting_date DESC,mt.id DESC LIMIT $2`, [groupId,limit]);
-  const out = [];
-  for (const row of rows) {
-    const marks = (await query(`SELECT a.person_id AS id,p.first_name,p.last_name,p.full_name,p.person_code,a.present,a.devotion,a.absent
-      FROM lifegroup_meeting_attendance a JOIN people p ON p.id=a.person_id WHERE a.meeting_id=$1
-      ORDER BY lower(p.last_name),lower(p.first_name),p.id`, [row.id])).rows;
-    const personName = (p) => p.full_name || `${p.first_name} ${p.last_name}`.trim();
-    out.push({ ...row, id: Number(row.id), lifegroup_id: Number(row.lifegroup_id), held: Boolean(row.held), present_count: Number(row.present_count),
-      present: marks.filter((m) => m.present).map((m) => ({ id: Number(m.id), name: personName(m), person_code: m.person_code })),
-      absent: marks.filter((m) => m.absent).map((m) => ({ id: Number(m.id), name: personName(m) })),
-      devotion: marks.filter((m) => m.devotion).map((m) => ({ id: Number(m.id), name: personName(m) })),
-    });
+  if (!rows.length) return [];
+  // One marks query for every meeting on the page. This used to run once per
+  // meeting, so opening a Cell with 30 reports cost 31 round-trips.
+  const marksByMeeting = new Map();
+  const { rows: marks } = await query(`SELECT a.meeting_id,a.person_id AS id,p.first_name,p.last_name,p.full_name,p.person_code,a.present,a.devotion,a.absent
+    FROM lifegroup_meeting_attendance a JOIN people p ON p.id=a.person_id WHERE a.meeting_id=ANY($1::bigint[])
+    ORDER BY lower(p.last_name),lower(p.first_name),p.id`, [rows.map((r) => r.id)]);
+  for (const m of marks) {
+    if (!marksByMeeting.has(String(m.meeting_id))) marksByMeeting.set(String(m.meeting_id), []);
+    marksByMeeting.get(String(m.meeting_id)).push(m);
   }
-  return out;
+  const personName = (p) => p.full_name || `${p.first_name} ${p.last_name}`.trim();
+  return rows.map((row) => {
+    const meetingMarks = marksByMeeting.get(String(row.id)) || [];
+    return { ...row, id: Number(row.id), lifegroup_id: Number(row.lifegroup_id), held: Boolean(row.held), present_count: Number(row.present_count),
+      present: meetingMarks.filter((m) => m.present).map((m) => ({ id: Number(m.id), name: personName(m), person_code: m.person_code })),
+      absent: meetingMarks.filter((m) => m.absent).map((m) => ({ id: Number(m.id), name: personName(m) })),
+      devotion: meetingMarks.filter((m) => m.devotion).map((m) => ({ id: Number(m.id), name: personName(m) })),
+    };
+  });
 }
 
 async function saveMeeting(groupId, body = {}, actor) {
@@ -1048,20 +1056,25 @@ async function groupWeeks(groupId, count) {
   return weeks.map((week_start) => ({ week_start, meeting: byWeek.get(week_start) || null }));
 }
 
-async function membersWithLast4(groupId) {
+// `marks` is optional: the overview loads every attendance row for the period
+// once and passes it down, so one Cell does not cost its own round-trip.
+async function membersWithLast4(groupId, marks, calendarArg) {
   const members = await activeMembers(groupId);
   const weeks = recentWeeks(4);
-  const calendar = await groupWeeks(groupId,4);
+  // The caller usually already fetched this Cell's weeks; reuse the latest four.
+  const calendar = (calendarArg && calendarArg.length >= 4)
+    ? calendarArg.slice(-4)
+    : await groupWeeks(groupId,4);
   const meetingIds = calendar.map((w) => w.meeting?.id).filter(Boolean);
-  const marks = new Map();
-  if (meetingIds.length) {
+  const marksByMeeting = marks || new Map();
+  if (!marks && meetingIds.length) {
     const { rows } = await query(`SELECT meeting_id,person_id,present,devotion,absent FROM lifegroup_meeting_attendance WHERE meeting_id=ANY($1::bigint[])`, [meetingIds]);
-    for (const row of rows) marks.set(`${row.meeting_id}:${row.person_id}`, row);
+    for (const row of rows) marksByMeeting.set(`${row.meeting_id}:${row.person_id}`, row);
   }
   return members.map((member) => {
     const last4 = calendar.map((w) => {
       const meeting = w.meeting;
-      const mark = meeting && marks.get(`${meeting.id}:${member.id}`);
+      const mark = meeting && marksByMeeting.get(`${meeting.id}:${member.id}`);
       return { week_start: w.week_start, held: Boolean(meeting?.held), present: Boolean(mark?.present), devotion: Boolean(mark?.devotion), absent: Boolean(mark?.absent) };
     });
     const reported = last4.filter((w) => w.held);
@@ -1069,11 +1082,16 @@ async function membersWithLast4(groupId) {
   });
 }
 
-async function progress(groupId, weeks = 12) {
-  const group = (await listGroups({ status: 'all' })).find((g) => g.id === Number(groupId));
+// `knownGroup` lets callers that already loaded the Cell list skip re-reading
+// every Cell just to find one: the overview used to do that once per Cell.
+async function progress(groupId, weeks = 12, knownGroup = null, marks = null) {
+  const group = knownGroup || (await listGroups({ status: 'all' })).find((g) => g.id === Number(groupId));
   if (!group) throw httpError(404, 'That Cell was not found. Refresh the page and try again.');
   const count = Math.max(4, Math.min(Number(weeks) || 12, 26));
-  const [members, calendar, meetings] = await Promise.all([membersWithLast4(groupId),groupWeeks(groupId,count),meetingRows(groupId,30)]);
+  const [calendar, meetings] = await Promise.all([groupWeeks(groupId,count),meetingRows(groupId,30)]);
+  // Fetch the calendar once and let the member view reuse its last four weeks
+  // instead of re-reading the same rows.
+  const members = await membersWithLast4(groupId, marks, calendar);
   const solid = members.filter((m) => m.tier === 'solid').length;
   const newMembers = members.filter((m) => m.tier !== 'solid').length;
   const currentWeek = mondayOf(today());
@@ -1098,12 +1116,36 @@ async function progress(groupId, weeks = 12) {
 async function overviewProgress(weeks = 8) {
   const [groups, nets] = await Promise.all([listGroups(),listNetworks()]);
   const count = Math.max(4,Math.min(Number(weeks)||8,26));
-  const progressRows = [];
-  for (const group of groups) {
-    const p = await progress(group.id, count);
-    progressRows.push({ ...group, solid: p.solid, new_members: p.new_members, total: p.total, is_solid: p.is_solid,
-      held_last_4: p.held_last_4, streak: p.streak, met_this_week: p.met_this_week, calendar: p.calendar });
+  // Load every attendance mark for the 4-week window once, instead of letting
+  // each Cell fetch its own. On a 44-Cell church that was 44 extra round-trips.
+  const marks = new Map();
+  {
+    const weeksInWindow = recentWeeks(4);
+    const { rows } = await query(
+      `SELECT a.meeting_id,a.person_id,a.present,a.devotion,a.absent
+         FROM lifegroup_meeting_attendance a
+         JOIN lifegroup_meetings mt ON mt.id=a.meeting_id
+        WHERE mt.meeting_date BETWEEN $1 AND $2`,
+      [weeksInWindow[0], addDays(weeksInWindow.at(-1), 6)]);
+    for (const row of rows) marks.set(`${row.meeting_id}:${row.person_id}`, row);
   }
+  // Bounded concurrency. The database gateway serializes statements anyway, so
+  // this does not multiply load; it keeps the pipeline full instead of paying a
+  // full round-trip of dead time between every Cell.
+  const progressRows = new Array(groups.length);
+  let next = 0;
+  const CONCURRENCY = 8;
+  const worker = async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= groups.length) return;
+      const group = groups[index];
+      const p = await progress(group.id, count, group, marks);
+      progressRows[index] = { ...group, solid: p.solid, new_members: p.new_members, total: p.total, is_solid: p.is_solid,
+        held_last_4: p.held_last_4, streak: p.streak, met_this_week: p.met_this_week, calendar: p.calendar };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, groups.length) }, worker));
   const held = progressRows.reduce((sum,g) => sum + g.held_last_4,0);
   const totalLast4 = progressRows.length * 4;
   const summary = {
