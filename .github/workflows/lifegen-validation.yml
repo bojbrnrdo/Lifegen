@@ -31,7 +31,6 @@ jobs:
           node --check public/admin/js/views/unifiedAddNew.js
           node --check public/admin/js/views/registrations.js
           node --check public/admin/js/views/lifegroups.js
-          node --check public/admin/js/views/attendance.js
           node --check public/admin/js/api.js
       - name: Run deterministic matching tests
         run: node --test tests/lifegroup-match.test.mjs
