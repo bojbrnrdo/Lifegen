@@ -51,6 +51,14 @@ test('existing Networks and their Cell Leaders are selectable',()=>{
  assert.match(modal,/g\.leader_person_id&&!g\.leads_network/);
 });
 
+test('new people can still be saved unassigned when Networks or Cells are unavailable',()=>{
+ assert.match(modal,/No active Networks with registered leaders are available/);
+ assert.match(modal,/Could not load Networks\. You can still save this person without assigning a Cell/);
+ assert.match(modal,/No active Cells are available in this Network/);
+ assert.match(modal,/if\(!cellId\).*setDiscipleshipClassification/);
+ assert.match(modal,/Not in a Cell yet/);
+});
+
 test('Cell Leaders and Members are directly added as People records, never user accounts',()=>{
  assert.match(modal,/api\.createPerson\(person\)/);
  assert.match(modal,/api\.createNetworkStructure\(/);

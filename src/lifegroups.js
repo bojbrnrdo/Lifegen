@@ -199,13 +199,13 @@ async function listNetworks(filters = {}) {
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND g.leader_person_id=n.leader_person_id) AS cell_leaders,
       (SELECT max(mt.meeting_date)::text FROM lifegroup_meetings mt JOIN lifegroups g ON g.id=mt.lifegroup_id
         WHERE g.network_id=n.id AND mt.held) AS last_held,
-      n.parent_network_id,
+      (to_jsonb(n)->>'parent_network_id')::bigint AS parent_network_id,
       coalesce(nullif(concat_ws(' ', plp.first_name, plp.last_name), ''), pn.name, pn.leader_name) AS parent_name,
-      (SELECT count(*)::int FROM networks c WHERE c.parent_network_id=n.id AND c.is_active) AS child_count,
+      (SELECT count(*)::int FROM networks c WHERE to_jsonb(c)->>'parent_network_id'=n.id::text AND c.is_active) AS child_count,
       (SELECT count(DISTINCT m.person_id)::int FROM lifegroup_memberships m JOIN lifegroups g ON g.id=m.lifegroup_id JOIN people p ON p.id=m.person_id
         WHERE g.network_id=n.id AND g.is_active AND m.left_at IS NULL AND p.archived_at IS NULL AND m.role<>'member') AS leaders_here
     FROM networks n LEFT JOIN people lp ON lp.id=n.leader_person_id
-    LEFT JOIN networks pn ON pn.id=n.parent_network_id
+    LEFT JOIN networks pn ON pn.id=(to_jsonb(n)->>'parent_network_id')::bigint
     LEFT JOIN people plp ON plp.id=pn.leader_person_id
     WHERE ($1::text='all' OR ($1::text='active' AND n.is_active) OR ($1::text='inactive' AND NOT n.is_active))
       AND ($2::text IS NULL OR n.gender=$2)
