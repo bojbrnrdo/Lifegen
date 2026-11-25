@@ -8,7 +8,8 @@ test('Admin shell uses one navigation and no duplicate page titles',()=>{
  assert.doesNotMatch(shell,/id="workspacePageTitle"/);
  assert.doesNotMatch(shell,/workspace-quicklink|peopleMenuToggle/);
  assert.match(shell,/aria-current/);
- assert.match(shell,/People & Lifegroups/);
+ assert.match(shell,/navLink\('#\/people', 'people', 'People'/);
+ assert.match(shell,/navLink\('#\/lifegroups', 'lifegroups', 'Lifegroups'/);
  assert.match(shell,/class="nav__group">Workspace/);
  assert.match(shell,/nav__group--system/);
  assert.match(shell,/can\('registrations:manage'\)\s*&&\s*!state\.standalone/);
@@ -45,4 +46,19 @@ test('retired Developer environment and Dev tools are not Admin routes',()=>{
 test('Vercel redirects retired LifeIDE and Dev JS asset paths away from public static files',()=>{
  const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
  for(const url of ['/lifeide','/lifeide/','/lifeide/:path*','/admin/js/views/devWorkspace.js','/admin/js/views/developer.js']) assert.ok(config.redirects.some(r=>r.source===url&&r.destination==='/admin'),url);
+});
+
+test('People and LifeGroups remain separate functional Admin modules',()=>{
+ const groups=readFileSync(new URL('../public/admin/js/views/lifegroups.js',import.meta.url),'utf8');
+ const people=readFileSync(new URL('../public/admin/js/views/people.js',import.meta.url),'utf8');
+ assert.match(shell,/path: \/\^\\\/people\$\/, view: renderPeople, nav: 'people', perm: 'people:view'/);
+ assert.doesNotMatch(shell,/location\.replace\('#\/lifegroups\?tab=people'\)/);
+ assert.match(shell,/path: \/\^\\\/lifegroups\$\/, view: renderLifegroups, nav: 'lifegroups'/);
+ assert.match(people,/id="peopleResultCount"/);
+ assert.match(people,/id="peopleSort"/);
+ assert.match(people,/id="exportPeople"/);
+ assert.match(groups,/id="lifegroupsDirectory"/);
+ assert.match(groups,/id="lgPanel-needs"/);
+ assert.match(groups,/id="lgPanel-find"/);
+ assert.match(groups,/#\/people/);
 });

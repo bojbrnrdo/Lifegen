@@ -48,9 +48,9 @@ const youthWelfareUrl = preview => {
 // ---------------------------------------------------------------------------
 const routes = [
   { path: /^\/dashboard$/, view: renderDashboard, nav: 'dashboard', perm: 'dashboard:view' },
-  { path: /^\/people$/, view: () => { location.replace('#/lifegroups?tab=people'); }, nav: 'lifegroups', perm: 'people:view' },
-  { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'lifegroups', perm: 'people:write' },
-  { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'lifegroups', perm: 'people:view' },
+  { path: /^\/people$/, view: renderPeople, nav: 'people', perm: 'people:view' },
+  { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'people', perm: 'people:write' },
+  { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
   { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/lifegroups\/(\d+)$/, view: (c, m) => renderLifegroup(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
@@ -169,7 +169,8 @@ function renderShell() {
       <nav class="nav" id="nav">
         <div class="nav__group">Workspace</div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'People & Lifegroups', 'people') : ''}
+        ${can('people:view') ? navLink('#/people', 'people', 'People', 'people') : ''}
+        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group') : ''}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}

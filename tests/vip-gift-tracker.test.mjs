@@ -82,7 +82,7 @@ test('migration 009 is additive and only adds the one table', async () => {
 test('the card lives inside the existing VIP registrations screen', async () => {
   const view = await read('public/admin/js/views/registrations.js');
   assert.match(view, /VIP Gift Tracker/);
-  assert.match(view, /Track Sunday attendance and gift eligibility/);
+  assert.match(view, /<h2>VIP gifts<\/h2>/);
   assert.match(view, /api\.giftTracker\(\)/);
   assert.match(view, /api\.markGiftGiven\(/);
   assert.match(view, /api\.undoGiftGiven\(/);

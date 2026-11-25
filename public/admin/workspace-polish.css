@@ -86,3 +86,37 @@ h1{color:#183b29}
 @media(max-width:1023px){:root{--topbar-h:56px}.app>.topbar{display:flex;height:56px}.app>.connection-bar{top:56px}}
 @media(max-width:640px){.app .card__body,.app .card__header{padding:14px}.registration-actions .btn{flex:1 1 135px}.registration-policy{padding:14px}}
 @media print{.registration-actions,.registration-policy,.app>.topbar,.app>.connection-bar{display:none!important}}
+
+
+/* Restore People as an independent directory while preserving LifeGroups' hierarchy. */
+.route-host:has(>.people-directory){max-width:1320px;margin-inline:auto}
+.route-host>.page-header:has(+.people-directory){max-width:1320px;margin:0 auto 20px}
+.route-host>.people-directory{margin:0 auto 18px;max-width:1320px;border-radius:15px;box-shadow:0 3px 15px rgba(21,59,33,.04)}
+.route-host>.people-directory+.card{max-width:1320px;margin-inline:auto;overflow:hidden}
+.route-host>.people-directory .people-directory__intro{padding:23px 25px 17px}
+.route-host>.people-directory .people-directory__controls{padding-inline:25px}
+.route-host>.people-directory .people-directory__summary{padding-inline:25px}
+.route-host>.people-directory .people-directory__search{box-shadow:0 1px 3px rgba(22,65,35,.025)}
+.route-host>.people-directory .people-directory__search:focus-within{outline:2px solid #72a989;outline-offset:1px}
+.route-host>.people-directory .people-directory__tab{min-height:43px;transition:background .15s ease,color .15s ease}
+.route-host>.people-directory .people-directory__tab.is-active{color:#195a3a}
+.route-host>.people-directory+.card .people-directory__table th{background:#f7faf8;color:#536d5b}
+.route-host>.people-directory+.card .person-cell .name{color:#1c3e2b;font-weight:740}
+.route-host>.people-directory+.card .people-directory__view{color:#1e6140;border-color:#d4e5d8;background:#f7fbf8}
+.route-host>.people-directory+.card .people-directory__view:hover{background:#e7f4ea}
+.lg-module-note{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 15px;padding:11px 14px;background:#f6faf7;border:1px solid #e2eee6;border-radius:10px;color:#536d5b;font-size:.82rem;line-height:1.45}
+.lg-module-note a{display:inline-flex;align-items:center;gap:5px;font-weight:700;text-decoration:none}
+.lg-module-note a:hover{text-decoration:underline}
+.lifegroups-page--focused .lg-head__text h1{color:#1a3c2b}
+.lifegroups-page--focused .lg-panel{min-width:0}
+.lifegroups-page--focused .lifegroups-page__directory{min-width:0}
+@media(max-width:740px){
+ .route-host>.people-directory .people-directory__intro{padding:18px}
+ .route-host>.people-directory .people-directory__controls{padding-inline:18px}
+ .route-host>.people-directory .people-directory__summary{padding-inline:18px}
+ .route-host>.people-directory+.card .people-directory__table{overflow-x:auto}
+ .lg-module-note{padding:10px 12px}
+}
+@media(prefers-reduced-motion:reduce){
+ .route-host>.people-directory .people-directory__tab{transition:none}
+}
