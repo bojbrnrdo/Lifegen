@@ -35,10 +35,15 @@ const saveReview=(branch,paths)=>{
 const field=branch=>`<label for="devBranch">Working branch</label><input id="devBranch" class="input" value="${esc(safeBranch(branch))}" autocomplete="off" spellcheck="false"/><span class="help">Use develop, feature/* or fix/* branches. Main is protected.</span>`;
 
 export async function renderDevGit({main,query={}}){
+ // Responses from a previous Git visit must not mutate a later Admin route.
+ const visit=Symbol('dev-git');main.__devGitVisit=visit;
+ const gitRoute=()=>main.__devGitVisit===visit&&location.hash.replace(/^#/,'').split('?')[0]==='/dev/git';
+ const active=()=>gitRoute()&&Boolean(main.querySelector('#gitBranchSelect'));
  const repoUrl='https://github.com/bojbrnrdo/Lifegen';
  main.innerHTML=heading('Git Version Control','LIFEGEN repository management')+'<div class="card"><div class="card__body">Loading GitHub connection…</div></div>';
  let info;
- try{info=await api('status');}catch(e){main.innerHTML='<div class="alert alert--info">'+esc(e.message)+'</div>';return;}
+ try{info=await api('status');}catch(e){if(gitRoute())main.innerHTML='<div class="alert alert--info">'+esc(e.message)+'</div>';return;}
+ if(!gitRoute())return;
  const connected=Boolean(info.connected),writable=Boolean(info.writesEnabled);
  main.innerHTML=heading('Git Version Control','Manage source control and development branches')+devTabs('git',safeBranch(query.branch))+
  `<div class="devgit">
@@ -115,7 +120,7 @@ export async function renderDevGit({main,query={}}){
   el('gitDiffMessage').textContent='Loading changes from '+selected+' against develop…';
   try{
    const result=await api('file-diff?branch='+encodeURIComponent(selected)+'&path='+encodeURIComponent(file));
-   if(request!==diffRequest||seq!==revision||selected!==branch)return;
+   if(!active()||request!==diffRequest||seq!==revision||selected!==branch)return;
    el('gitDiffMessage').textContent=result.status+' · +'+result.additions+' / -'+result.deletions+
     (result.truncated?' · patch truncated':'');
    el('gitDiffContent').textContent=result.unavailable?'Inline patch unavailable for this file. Open the file in LifeIDE or review it on GitHub.':result.patch;
@@ -130,7 +135,7 @@ export async function renderDevGit({main,query={}}){
   const host=el('gitStatus');host.textContent='Comparing '+which+' with develop…';
   try{
    const result=await api('branch-status?branch='+encodeURIComponent(which));
-   if(seq!==revision||request!==statusRequest)return false;
+   if(!active()||seq!==revision||request!==statusRequest)return false;
    selectedFiles.clear();updateReview();host.replaceChildren();
    const text=document.createElement('p');text.textContent=result.branch+' vs develop — '+result.ahead+' ahead, '+result.behind+' behind';host.append(text);
    const status=document.createElement('p');status.className='small muted';status.textContent=result.files.length+' changed files'+(result.truncated?' (first 100 shown)':'');host.append(status);
@@ -165,7 +170,7 @@ export async function renderDevGit({main,query={}}){
    }
    el('gitSync').textContent=result.behind?'Behind develop':result.ahead?'Ahead of develop':'Up to date with develop';
    return true;
-  }catch(e){if(seq===revision&&request===statusRequest){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
+  }catch(e){if(active()&&seq===revision&&request===statusRequest){host.textContent=e.message;el('gitSync').textContent='Status unavailable';}return false;}
  };
  const inspectCommit=async(selected,sha)=>{
   const request=++commitDetailRequest,seq=revision;
@@ -175,7 +180,7 @@ export async function renderDevGit({main,query={}}){
   el('gitCommitDetailStatus').textContent='Loading commit changes…';
   try{
    const result=await api('commit-detail?branch='+encodeURIComponent(selected)+'&sha='+encodeURIComponent(sha));
-   if(request!==commitDetailRequest||seq!==revision||selected!==branch)return;
+   if(!active()||request!==commitDetailRequest||seq!==revision||selected!==branch)return;
    el('gitCommitDetailTitle').textContent=result.subject||'Commit '+sha.slice(0,12);
    el('gitCommitDetailStatus').textContent=result.files.length+' reviewable files'+(result.truncated?' · additional files not shown':'');
    for(const file of result.files){
@@ -191,7 +196,7 @@ export async function renderDevGit({main,query={}}){
     patch.textContent=file.unavailable?'Inline patch unavailable for this file. Review it on GitHub.':file.patch+(file.truncated?'\n… patch truncated':'');
     details.append(patch);el('gitCommitFiles').append(details);
    }
-  }catch(error){if(request===commitDetailRequest&&seq===revision&&selected===branch)el('gitCommitDetailStatus').textContent='Unable to inspect commit: '+error.message;}
+  }catch(error){if(active()&&request===commitDetailRequest&&seq===revision&&selected===branch)el('gitCommitDetailStatus').textContent='Unable to inspect commit: '+error.message;}
  };
  el('gitCloseCommitDetail').onclick=()=>{++commitDetailRequest;el('gitCommitDetail').hidden=true;};
  const loadHistory=async()=>{
@@ -199,7 +204,7 @@ export async function renderDevGit({main,query={}}){
   el('gitHistoryMessage').textContent='Loading '+which+' history…';el('gitHistory').replaceChildren();
   try{
    const result=await api('history?branch='+encodeURIComponent(which));
-   if(seq!==revision||request!==historyRequest)return false;
+   if(!active()||seq!==revision||request!==historyRequest)return false;
    el('gitHistoryMessage').textContent=result.commits.length+' recent commits on '+which;
    for(const c of result.commits){
     const row=document.createElement('div');row.className='devgit__commit';
@@ -217,7 +222,7 @@ export async function renderDevGit({main,query={}}){
     buttons.append(inspect,diff,revert);row.append(desc,buttons);el('gitHistory').append(row);
    }
    return true;
-  }catch(e){if(seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
+  }catch(e){if(active()&&seq===revision&&request===historyRequest)el('gitHistoryMessage').textContent=e.message;return false;}
  };
  const choose=async(value)=>{
   selectedFiles.clear();updateReview();branch=value;el('gitPackageBranch').href=devLink('packaging',value);revision++;diffRequest++;commitDetailRequest++;el('gitCommitDetail').hidden=true;el('gitDiffPanel').hidden=true;el('gitBranchLabel').textContent=value;
@@ -267,14 +272,14 @@ export async function renderDevGit({main,query={}}){
  };
  if(!connected){el('gitHistoryMessage').textContent='GitHub App connection unavailable. Verify server-side configuration.';return;}
  try{
-  const result=await api('branches');el('gitBranchSelect').replaceChildren();
+  const result=await api('branches');if(!active())return;el('gitBranchSelect').replaceChildren();
   if(!result.branches.some(b=>b.name==='develop'))result.branches.unshift({name:'develop'});
   for(const item of result.branches){
    const option=document.createElement('option');option.value=item.name;option.textContent=item.name;el('gitBranchSelect').append(option);
   }
   const initial=result.branches.some(b=>b.name===safeBranch(query.branch))?safeBranch(query.branch):'develop';
   el('gitBranchSelect').value=initial;await choose(initial);
- }catch(e){note('Cannot load GitHub branches: '+e.message);}
+ }catch(e){if(active())note('Cannot load GitHub branches: '+e.message);}
 }
 
 // Show the full IDE inside the existing Admin navigation. The legacy GitHub

@@ -30,3 +30,18 @@ test('Dev tabs use accessible labels and visibly indicate current page',()=>{
  assert.match(css,/\.dev-tabs__link\.is-active/);
  assert.match(css,/\.dev-tabs__link:focus-visible/);
 });
+
+const app=readFileSync(new URL('../public/admin/js/app.js',import.meta.url),'utf8');
+test('Git responses are ignored after navigating to LifeIDE or Packaging',()=>{
+ assert.match(dev,/const visit=Symbol\('dev-git'\);main\.__devGitVisit=visit;/);
+ assert.match(dev,/const gitRoute=\(\)=>main\.__devGitVisit===visit/);
+ assert.match(dev,/const active=\(\)=>gitRoute\(\)/);
+ assert.match(dev,/const result=await api\('branches'\);if\(!active\(\)\)return;/);
+ assert.match(dev,/if\(!active\(\)\|\|seq!==revision\|\|request!==historyRequest\)return false;/);
+ assert.match(dev,/if\(!active\(\)\|\|seq!==revision\|\|request!==statusRequest\)return false;/);
+});
+test('Stale Admin route completions cannot replace newer views',()=>{
+ assert.match(app,/let routeSequence = 0;/);
+ assert.match(app,/const routeTicket = \+\+routeSequence;/);
+ assert.match(app,/if \(routeTicket !== routeSequence\) return;/);
+});
