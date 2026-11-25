@@ -40,7 +40,7 @@ export async function renderPerson({ main }, id) {
 
     <div class="grid grid--2">
       <div class="card" id="personDetails">
-        <div class="card__header"><h2>Details</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
+        <div class="card__header"><h2>Personal information</h2>${locked ? raw(`<span class="hint">${icon('lock', 13).value} Contact details hidden for your role</span>`) : ''}</div>
         <div class="card__body"><dl class="dl">
           ${row('Contact number', p.contact_number, (v) => html`<a href="tel:${String(v).replace(/[^+0-9]/g, '')}">${v}</a>`, true)}
           ${row('Email', p.email, (v) => html`<a href="mailto:${v}">${v}</a>`, true)}
@@ -53,11 +53,20 @@ export async function renderPerson({ main }, id) {
           ${row('Ministry', p.ministry)}
           ${row('Registered', p.date_registered, (v) => fmtDate(v) + (p.registration_source === 'qr' ? ' · via QR registration' : ''))}
           <div><dt>Privacy consent</dt><dd>${locked ? html`<span class="locked">${icon('lock', 13)} Restricted</span>` : p.privacy_consent_at ? html`Given · ${fmtDate(p.privacy_consent_at)}` : raw('<span class="muted">Not yet recorded</span>')}</dd></div>
-          <div style="grid-column:1/-1">${row('Address', p.address, (v) => v, true)}</div>
-          ${!locked && p.notes ? html`<div style="grid-column:1/-1"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
         </dl></div>
       </div>
+    </div>
 
+    <div class="card profile-address-card mt-2">
+      <div class="card__header"><h2>Address & notes</h2>
+        ${can('people:write') && !archived ? html`<a class="btn btn--sm" href="#/people/${p.id}/edit">${icon('edit',14)} Edit</a>` : ''}
+      </div>
+      <div class="card__body">
+        <dl class="dl">
+          ${row('Address', p.address, (v) => v, true)}
+          ${!locked && p.notes ? html`<div><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
+        </dl>
+      </div>
     </div>
 
     ${archived ? html`<div class="alert alert--info mt-3">This person is archived — hidden from People and search. Their records are kept.${can('people:write') ? html` <button class="btn btn--sm" id="restoreBtn" style="margin-left:8px">Restore</button>` : ''}</div>` : ''}

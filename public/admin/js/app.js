@@ -158,7 +158,15 @@ function renderShell() {
     <header class="topbar">
       <button class="icon-btn" id="menuToggle" aria-label="Open menu">${icon('menu', 22).value}</button>
       <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
-      <span class="mobile-workspace-label">LIFEGEN Admin</span>
+      <form class="header-search" id="headerPeopleSearch" role="search" aria-label="Search People">
+        <input id="headerSearchInput" name="q" type="search" placeholder="Search People" autocomplete="off" aria-label="Search People records" />
+        <button type="submit" aria-label="Find People" title="Find People">${icon('search',19).value}</button>
+      </form>
+      <div class="header-tools">
+        <span class="header-date" aria-label="Today's date">${new Intl.DateTimeFormat('en-PH',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Manila'}).format(new Date())}</span>
+        <a class="header-icon" href="/" title="Open public website" aria-label="Open public website">${icon('link',19).value}</a>
+        <a class="header-profile" href="#/settings" title="Account settings" aria-label="Account settings">${esc(u.display_name.split(' ').map(x=>x[0]||'').join('').slice(0,2).toUpperCase())}</a>
+      </div>
     </header>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
@@ -189,6 +197,15 @@ function renderShell() {
     </aside>
     <div class="backdrop" id="backdrop"></div>
     <main class="main" id="main" tabindex="-1"><div class="loading">Loading…</div></main>`;
+
+  const headerSearch = document.getElementById('headerPeopleSearch');
+  headerSearch?.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!can('people:view')) return;
+    const term = headerSearch.querySelector('input')?.value.trim() || '';
+    location.hash = '#/people' + (term ? '?q=' + encodeURIComponent(term) : '');
+  });
+  if (!can('people:view')) headerSearch?.setAttribute('hidden', '');
 
   document.getElementById('menuToggle').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
