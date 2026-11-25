@@ -26,3 +26,11 @@ test('Dashboard retains data-driven People and VIP metrics and accessible action
  assert.match(dashboard,/can\('registrations:manage'\)/);
  assert.match(dashboard,/#\/calendar/);
 });
+
+test('each routed page renders into an isolated host, guarding async navigation',()=>{
+ assert.match(shell,/const routeHost = document\.createElement\('div'\);/);
+ assert.match(shell,/main\.replaceChildren\(routeHost\)/);
+ assert.match(shell,/r\.view\(\{ main: routeHost, query, params: m \}/);
+ assert.match(shell,/main\.__liveReload = routeHost\.__liveReload \|\| null/);
+ assert.match(css,/\.route-host\{width:100%;min-width:0\}/);
+});

@@ -118,17 +118,23 @@ async function route(options = {}) {
   const currentPage=document.getElementById('workspacePageTitle');
   if(currentPage) currentPage.textContent=({dashboard:'Overview',lifegroups:'People & Lifegroups',registrations:'Registration',calendar:'Calendar',community:'Community board',designs:'VIP Designs',settings:'Settings',deploy:'Publish website',people:'People',privacy:'Privacy & Terms'}[r.nav] || 'Workspace');
   closeSidebar();
-  main.innerHTML = '<div class="loading">Loading…</div>';
+  // A route gets its own DOM surface. Slow responses from a departed page
+  // can update only their detached surface, never the newly selected page.
+  const routeHost = document.createElement('div');
+  routeHost.className = 'route-host';
+  routeHost.innerHTML = '<div class="loading">Loading…</div>';
+  main.replaceChildren(routeHost);
   if (!live) window.scrollTo({ top: 0 });
   try {
-    const cleanup = await r.view({ main, query, params: m }, m);
+    const cleanup = await r.view({ main: routeHost, query, params: m }, m);
     if (routeTicket !== routeSequence) { if (typeof cleanup === 'function') cleanup(); return; }
+    main.__liveReload = routeHost.__liveReload || null;
     if (typeof cleanup === 'function') currentCleanup = cleanup;
     if (live) window.scrollTo({top: oldY});
   } catch (err) {
     if (routeTicket !== routeSequence) return;
     console.error(err);
-    main.innerHTML = errorState(err);
+    routeHost.innerHTML = errorState(err);
   }
 }
 
