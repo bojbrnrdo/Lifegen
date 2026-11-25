@@ -1,7 +1,8 @@
 import {createAddNewModal} from './unifiedAddNew.js';
 import { api } from '../api.js';
 import { state, can } from '../app.js';
-import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce, statusBadge, confirmDialog, esc, toISODate, lastSunday } from '../ui.js';
+import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce, statusBadge, confirmDialog, esc } from '../ui.js';
+import { sundayOptions } from '../serviceQrDates.js';
 /** Prize progress: 4 consecutive Sundays (weeks) earns the prize. The counter is a
  *  streak — it never shows above 4/4, missing a Sunday resets it, and once a VIP
  *  completes 4/4 they graduate to Regular attendee and leave the prize pool. */
@@ -113,10 +114,49 @@ async function openVip(id,reload){
  *  which staff then verify on this screen. It used to be printed from the
  *  Attendance page; that page is gone, so it lives with the VIPs it serves. */
 export async function renderServiceQr({main}){
- const sunday=toISODate(lastSunday());
- const qr=await api.serviceQr(sunday);
- main.innerHTML=html`<div class="page-header no-print"><div><h1>Sunday check-in QR</h1><p class="sub">VIPs scan this at the service to check in. Verify their check-ins on this screen.</p></div><div class="row"><a class="btn" href="#/registrations">${icon('back')} Registration</a><button class="btn btn--primary" data-action="print">${icon('print')} Print</button></div></div><div class="qr-poster"><p class="qr-poster__kicker">LIFEGEN</p><h1>Welcome home.</h1><h2>Check in for today&rsquo;s service</h2><div class="qr-poster__code">${raw(qr.svg)}</div><p>${fmtDate(qr.service_date,{weekday:true})}</p><p class="qr-poster__url">${qr.url}</p><p class="qr-poster__foot">Sundays · 1:00–3:00 PM · Lifegiver Church of Faith — Central</p></div>`;
- main.querySelector('[data-action="print"]').onclick=()=>window.print();
+ const options=sundayOptions();
+ const selected=options[0];
+ main.innerHTML=html`<div class="page-header no-print"><div><h1>Sunday check-in QR</h1><p class="sub">Prepare a QR for an upcoming Sunday. A VIP can submit attendance only on that Sunday, and staff verify the request in Registration.</p></div><div class="page-actions"><a class="btn" href="#/registrations">${icon('back')} Registration</a><button class="btn btn--primary" id="printServiceQr" disabled>${icon('print')} Print QR</button></div></div>
+ <section class="card service-qr-controls no-print" aria-label="Sunday QR preparation"><div class="card__body"><div class="service-qr-toolbar"><label for="serviceQrDate">Sunday service date<select id="serviceQrDate" aria-label="Choose Sunday service date">${options.map(date=>html`<option value="${date}">${fmtDate(date,{weekday:true})}</option>`)}</select></label><button class="btn" type="button" id="refreshServiceQr">${icon('refresh')} Refresh QR</button><button class="btn" type="button" id="copyServiceQr" disabled>Copy check-in link</button></div><p class="small muted">Use the QR for the selected Sunday only. Printed codes cannot be used on another day. VIPs must sign into or recover their registration first.</p><p id="serviceQrNotice" class="small" role="status" aria-live="polite">Preparing a signed QR…</p></div></section>
+ <div class="qr-poster service-qr-poster" id="serviceQrPoster" hidden><p class="qr-poster__kicker">LIFEGEN</p><h1>Welcome home.</h1><h2>Sunday service check-in</h2><div class="qr-poster__code" id="serviceQrCode"></div><p id="serviceQrDateLabel"></p><p class="qr-poster__url" id="serviceQrLink"></p><p class="qr-poster__foot">Sundays · 1:00–3:00 PM · Lifegiver Church of Faith — Central</p></div>`;
+ const dateSelect=main.querySelector('#serviceQrDate'),notice=main.querySelector('#serviceQrNotice');
+ const poster=main.querySelector('#serviceQrPoster'),print=main.querySelector('#printServiceQr'),copy=main.querySelector('#copyServiceQr');
+ let currentUrl='',request=0;
+ const load=async()=>{
+  const seq=++request,date=dateSelect.value;
+  notice.textContent='Preparing QR for '+fmtDate(date,{weekday:true})+'…';
+  poster.hidden=true;currentUrl='';print.disabled=true;copy.disabled=true;
+  try{
+   const qr=await api.serviceQr(date);
+   if(seq!==request||!main.isConnected)return;
+   if(qr.service_date!==date||!qr.svg||!qr.url)throw new Error('The QR service returned incomplete information. Please try again.');
+   const parsed=new URL(qr.url);
+   if(parsed.protocol!=='https:'&&parsed.hostname!=='localhost')throw new Error('The QR check-in link must use HTTPS.');
+   main.querySelector('#serviceQrCode').innerHTML=raw(qr.svg).value;
+   main.querySelector('#serviceQrDateLabel').textContent=fmtDate(qr.service_date,{weekday:true});
+   main.querySelector('#serviceQrLink').textContent=qr.url;
+   currentUrl=qr.url;poster.hidden=false;print.disabled=false;copy.disabled=false;
+   notice.textContent='QR ready for '+fmtDate(qr.service_date,{weekday:true})+'. Print or share it for that service.';
+  }catch(error){
+   if(seq!==request||!main.isConnected)return;
+   notice.textContent=error.message||'Unable to generate the QR. Try again.';
+   notice.classList.add('service-qr-notice--error');
+  }
+ };
+ dateSelect.addEventListener('change',()=>{notice.classList.remove('service-qr-notice--error');load();});
+ main.querySelector('#refreshServiceQr').addEventListener('click',()=>{notice.classList.remove('service-qr-notice--error');load();});
+ print.addEventListener('click',()=>{
+  if(!currentUrl)return;
+  document.body.classList.add('printing-poster');
+  window.addEventListener('afterprint',()=>document.body.classList.remove('printing-poster'),{once:true});
+  window.print();
+ });
+ copy.addEventListener('click',async()=>{
+  if(!currentUrl)return;
+  try{await navigator.clipboard.writeText(currentUrl);toast('Sunday check-in link copied.');}
+  catch{toast('Could not copy. Use the link shown on the poster.','error');}
+ });
+ await load();
 }
 export async function renderQrPoster({main}){
  const qr=await api.qrRegistration();main.innerHTML=html`<div class="page-header no-print"><div><h1>VIP registration QR</h1><p class="sub">Visitors register on LIFEGEN; new records appear here immediately.</p></div><button class="btn" data-action="print">${icon('print')} Print</button></div><div class="qr-poster"><p class="qr-poster__kicker">LIFEGEN</p><h1>Welcome home.</h1><h2>Register as our VIP</h2><div class="qr-poster__code">${raw(qr.svg)}</div><p>Scan, register, and connect with the LIFEGEN family.</p><p class="qr-poster__url">${qr.url}</p><p class="qr-poster__foot">Sundays · 1:00–3:00 PM · Lifegiver Church of Faith — Central</p></div>`;
