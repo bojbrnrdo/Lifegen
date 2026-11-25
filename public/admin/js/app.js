@@ -115,6 +115,8 @@ async function route(options = {}) {
     return;
   }
   setActiveNav(r.nav);
+  const currentPage=document.getElementById('workspacePageTitle');
+  if(currentPage) currentPage.textContent=({dashboard:'Overview',lifegroups:'People & Lifegroups',registrations:'Registration',calendar:'Calendar',community:'Community board',designs:'VIP Designs',settings:'Settings',deploy:'Publish website',people:'People',privacy:'Privacy & Terms'}[r.nav] || 'Workspace');
   closeSidebar();
   main.innerHTML = '<div class="loading">Loading…</div>';
   if (!live) window.scrollTo({ top: 0 });
@@ -155,7 +157,10 @@ function renderShell() {
     <header class="topbar">
       <button class="icon-btn" id="menuToggle" aria-label="Open menu">${icon('menu', 22).value}</button>
       <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
+      <div class="workspace-context" aria-label="Current section"><span class="workspace-context__eyebrow">ADMIN WORKSPACE</span><strong id="workspacePageTitle">Overview</strong></div>
       <span class="topbar__spacer"></span>
+      <a class="workspace-quicklink" href="#/dashboard" aria-label="Open dashboard">${icon('chart', 16)}<span>Overview</span></a>
+      ${can('registrations:manage')&&!state.standalone?'<a class="workspace-quicklink workspace-quicklink--primary" href="#/registrations">Registration</a>':''}
       <a class="btn btn--sm portal-home-link" href="/">Website</a>
     </header>
 
@@ -165,6 +170,7 @@ function renderShell() {
         <span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span>
       </a>
       <nav class="nav" id="nav">
+        <div class="nav__group">Workspace</div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
         ${(can('lifegroups:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
           <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
@@ -178,6 +184,7 @@ function renderShell() {
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
+        <div class="nav__group nav__group--system">System</div>
         ${navLink('#/settings', 'settings', 'Settings', 'settings')}
         ${state.deployHelper&&can('settings:manage')?navLink('#/deploy','deploy','Publish website','upload'):''}
         <a class="nav__foot portal-public-link" href="/">← Public website</a>
