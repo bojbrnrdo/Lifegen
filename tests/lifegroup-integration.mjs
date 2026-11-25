@@ -237,7 +237,6 @@ try {
       await cleanupClient.query('DELETE FROM vip_registrations WHERE id=$1', [registrationId]);
     }
     if (personId) {
-      await cleanupClient.query('DELETE FROM audit WHERE person_id=$1', [personId]);
       await cleanupClient.query("DELETE FROM audit_log WHERE (entity='people' AND entity_id=$1) OR (entity='vip_registrations' AND entity_id=$2)", [String(personId), String(registrationId)]);
       await cleanupClient.query('DELETE FROM people WHERE id=$1', [personId]);
     }

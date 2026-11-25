@@ -108,9 +108,6 @@ try{
    await client.query('DELETE FROM vip_checkins WHERE registration_id=$1',[id]);
    await client.query('DELETE FROM vip_registrations WHERE id=$1',[id]);
   }
-  for(const id of fixtures.people){
-   await client.query('DELETE FROM audit WHERE person_id=$1',[id]);
-  }
   // Test-generated audit logs should not reference removed fixtures.
   await client.query("DELETE FROM audit_log WHERE (entity='people' AND entity_id=ANY($1::text[])) OR (entity='vip_registrations' AND entity_id=ANY($2::text[])) OR (entity='networks' AND entity_id=$3) OR (entity='lifegroups' AND entity_id=$4) OR (entity='lifegroup_meetings' AND entity_id=$5)",
    [fixtures.people.map(String),fixtures.registrations.map(String),String(fixtures.network),String(fixtures.cell),String(fixtures.meeting)]);
