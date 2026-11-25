@@ -320,3 +320,15 @@ body{background:#f5f7f9;color:var(--text);font-size:14px;line-height:1.5}
   .app .sidebar .brand.sidebar-brand{min-height:98px;}
   .app .sidebar .sidebar-brand__logo{width:min(100%,188px);}
 }
+
+/* Sunday check-in QR preparation. Keep poster uncluttered for printing. */
+.app .service-qr-controls{max-width:720px;margin:0 auto 18px}
+.app .service-qr-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+.app .service-qr-toolbar>label{flex:1;min-width:220px;color:#294c36;font-size:.85rem;font-weight:650}
+.app .service-qr-toolbar select{display:block;width:100%;margin-top:7px;min-height:42px}
+.app .service-qr-toolbar>.btn{white-space:nowrap}
+.app #serviceQrNotice{margin-top:12px;color:#376747;font-weight:620}
+.app #serviceQrNotice.service-qr-notice--error{color:#9e3131}
+.app .service-qr-poster{box-shadow:0 5px 19px rgba(30,48,46,.045);border-radius:18px}
+@media(max-width:640px){.app .service-qr-toolbar>label{min-width:100%;}.app .service-qr-toolbar>.btn{flex:1}}
+@media print{.service-qr-controls,.page-header.no-print{display:none!important}.service-qr-poster[hidden]{display:none!important}}
