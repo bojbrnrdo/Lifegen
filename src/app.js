@@ -20,8 +20,6 @@ import { exportBackup } from './migration.js';
 import { streamEvents, revision } from './events.js';
 import { storedEvents, publicShape, insertEvent, updateEvent, validateEventInput, mergeWithWeeklySundays, CATEGORY_LABELS } from './calendar.js';
 import {createDeploymentRouter,deploymentHelperEnabled} from './deployment.js';
-import lifeideRouter from './lifeide.js';
-import {registerDevWorkspace} from './dev-workspace.js';
 import { handleLifegroupMethod } from './lifegroups.js';
 import {authorizeLinkedLeaderTrackerMethod} from './leader-tracker-policy.js';
 import {resolveLeaderScope} from './leader-scope.js';
@@ -51,7 +49,8 @@ app.use((req,res,next)=>{res.locals.nonce=crypto.randomBytes(16).toString('base6
 app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'",(req,res)=>`'nonce-${res.locals.nonce}'`],styleSrc:["'self'","'unsafe-inline'",'https://fonts.googleapis.com'],fontSrc:["'self'",'data:','https://fonts.gstatic.com'],imgSrc:["'self'",'data:','blob:'],connectSrc:["'self'"],frameSrc:["'self'",'https://www.youtube-nocookie.com','https://www.youtube.com','https://player.vimeo.com','https://www.facebook.com','https://drive.google.com'],mediaSrc:["'self'",'https:'],objectSrc:["'none'"],baseUri:["'self'"],formAction:["'self'"],frameAncestors:production?["'self'"]:null,upgradeInsecureRequests:production?[]:null}},xFrameOptions:production?{action:'sameorigin'}:false,crossOriginEmbedderPolicy:false}));
 app.use(cookieParser());
 app.use(express.json({limit:'512kb'}));
-registerDevWorkspace(app);
+// The Admin Dev tools have been retired. Deny their legacy URLs, APIs and static assets.
+app.use(['/api/admin/dev','/api/lifeide','/lifeide'],(req,res)=>res.sendStatus(404));
 // Gzip/deflate responses (HTML, CSS, JS, JSON, ICS) whenever the client accepts it.
 // The SSE live-update stream is excluded so events are never delayed by buffering.
 app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content-Type')||'');if(type.includes('text/event-stream')||type.includes('application/zip'))return false;return compression.filter(req,res);}}));
@@ -60,7 +59,6 @@ app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
-app.use('/api/lifeide',lifeideRouter);
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 // Read-only environment metadata. Never expose environment variables or secret values.
 app.get('/api/admin/developer-info', requireStaff, (req,res)=>{
@@ -488,7 +486,6 @@ app.get('/',(req,res)=>{
 });
 app.get(['/admin','/admin/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(['youth_welfare_admin','youth_welfare_staff','youth_welfare_viewer'].includes(actor?.role_id))return res.redirect(303,'/youth-welfare');return page(res,'admin');});
 app.get(['/youth-welfare','/youth-welfare/'],async(req,res)=>{let actor=null;try{actor=await readStaff(req);}catch{}if(actor&&!actor.permissions.includes('youth_welfare:view'))return res.redirect(303,'/admin');return page(res,'youth-welfare');});
-app.get(['/lifeide','/lifeide/','/lifeide/index.html'],(req,res)=>page(res,'lifeide'));
 // Fullscreen VIP announcement projector. Deliberately public and read-only: it
 // exposes only the VIP full name and inviter that are already projected in the
 // room, and pulls them live from /api/public/vip-announcement. No contact
