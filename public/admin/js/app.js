@@ -50,7 +50,7 @@ const routes = [
   { path: /^\/dashboard$/, view: renderDashboard, nav: 'dashboard', perm: 'dashboard:view' },
   { path: /^\/people$/, view: () => { location.replace('#/lifegroups?tab=people'); }, nav: 'lifegroups', perm: 'people:view' },
   { path: /^\/people\/new$/, view: (c) => renderPersonForm(c, null), nav: 'lifegroups', perm: 'people:write' },
-  { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'people', perm: 'people:view' },
+  { path: /^\/people\/(\d+)$/, view: (c, m) => renderPerson(c, m[1]), nav: 'lifegroups', perm: 'people:view' },
   { path: /^\/people\/(\d+)\/edit$/, view: (c, m) => renderPersonForm(c, m[1]), nav: 'people', perm: 'people:write' },
   { path: /^\/lifegroups$/, view: renderLifegroups, nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/lifegroups\/(\d+)$/, view: (c, m) => renderLifegroup(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
@@ -113,8 +113,6 @@ async function route(options = {}) {
     return;
   }
   setActiveNav(r.nav);
-  const currentPage=document.getElementById('workspacePageTitle');
-  if(currentPage) currentPage.textContent=({dashboard:'Overview',lifegroups:'People & Lifegroups',registrations:'Registration',calendar:'Calendar',community:'Community board',designs:'VIP Designs',settings:'Settings',deploy:'Publish website',people:'People',privacy:'Privacy & Terms'}[r.nav] || 'Workspace');
   closeSidebar();
   // A route gets its own DOM surface. Slow responses from a departed page
   // can update only their detached surface, never the newly selected page.
@@ -138,11 +136,10 @@ async function route(options = {}) {
 
 function setActiveNav(key) {
   document.querySelectorAll('#nav a[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === key));
-  const peopleMenu = document.getElementById('peopleMenu');
-  if (peopleMenu && ['lifegroups', 'registrations'].includes(key)) {
-    peopleMenu.hidden = false;
-    document.getElementById('peopleMenuToggle')?.setAttribute('aria-expanded', 'true');
-  }
+  document.querySelectorAll('#nav a[data-nav]').forEach(a => {
+    if (a.dataset.nav === key) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +158,7 @@ function renderShell() {
     <header class="topbar">
       <button class="icon-btn" id="menuToggle" aria-label="Open menu">${icon('menu', 22).value}</button>
       <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
-      <div class="workspace-context" aria-label="Current section"><span class="workspace-context__eyebrow">ADMIN WORKSPACE</span><strong id="workspacePageTitle">Overview</strong></div>
-      <span class="topbar__spacer"></span>
-      <a class="workspace-quicklink" href="#/dashboard" aria-label="Open dashboard">${icon('chart', 16)}<span>Overview</span></a>
-      ${can('registrations:manage')&&!state.standalone?'<a class="workspace-quicklink workspace-quicklink--primary" href="#/registrations">Registration</a>':''}
-      <a class="btn btn--sm portal-home-link" href="/">Website</a>
+      <span class="mobile-workspace-label">LIFEGEN Admin</span>
     </header>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
@@ -176,15 +169,8 @@ function renderShell() {
       <nav class="nav" id="nav">
         <div class="nav__group">Workspace</div>
         ${navLink('#/dashboard', 'dashboard', 'Dashboard', 'chart')}
-        ${(can('lifegroups:view')||(can('registrations:manage')&&!state.standalone))?`        <div class="nav__people">
-          <button type="button" class="nav__parent" id="peopleMenuToggle" aria-expanded="false" aria-controls="peopleMenu">
-            ${icon('people',19).value}<span>People</span><span class="nav__chevron" aria-hidden="true">▾</span>
-          </button>
-          <div class="nav__children" id="peopleMenu" hidden>
-             ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group', true) : ''}
-            ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr', true) : ''}
-          </div>
-        </div>`:''}
+        ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'People & Lifegroups', 'people') : ''}
+        ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}
@@ -215,13 +201,6 @@ function renderShell() {
     location.hash = '#/dashboard';
     boot();
   };
-  const peopleToggle = document.getElementById('peopleMenuToggle');
-  peopleToggle?.addEventListener('click', () => {
-    const menu = document.getElementById('peopleMenu');
-    const expanded = peopleToggle.getAttribute('aria-expanded') === 'true';
-    menu.hidden = expanded;
-    peopleToggle.setAttribute('aria-expanded', String(!expanded));
-  });
   refreshPendingBadge();
   const bar=document.createElement('div');bar.className='connection-bar';bar.id='connectionBar';bar.innerHTML=`<span class="connection-dot"></span><span id="connectionText">Connecting live updates…</span>${state.preview?'<span class="preview-tag">Demo · temporary local PostgreSQL, not Supabase</span>':state.hostedPreview?'<span class="preview-tag">Connected preview · Supabase PostgreSQL</span>':''}<a href="#" id="applyLiveUpdate" hidden>New updates — refresh view</a>`;
   document.getElementById('main').before(bar); startLiveUpdates();
