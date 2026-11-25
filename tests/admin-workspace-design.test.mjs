@@ -34,3 +34,13 @@ test('each routed page renders into an isolated host, guarding async navigation'
  assert.match(shell,/main\.__liveReload = routeHost\.__liveReload \|\| null/);
  assert.match(css,/\.route-host\{width:100%;min-width:0\}/);
 });
+
+test('retired Developer environment and Dev tools are not Admin routes',()=>{
+ assert.doesNotMatch(shell,/renderDeveloper|path: \/\^\\\/developer/);
+ assert.doesNotMatch(shell,/#\/dev\/(?:ide|git|packaging)/);
+});
+
+test('Vercel redirects retired LifeIDE and Dev JS asset paths away from public static files',()=>{
+ const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+ for(const url of ['/lifeide','/lifeide/:path*','/admin/js/views/devWorkspace.js','/admin/js/views/developer.js']) assert.ok(config.redirects.some(r=>r.source===url&&r.destination==='/admin'),url);
+});

@@ -29,5 +29,27 @@
   ],
   "framework": "express",
   "outputDirectory": null,
-  "installCommand": "npm ci"
+  "installCommand": "npm ci",
+  "redirects": [
+    {
+      "source": "/lifeide",
+      "destination": "/admin",
+      "permanent": false
+    },
+    {
+      "source": "/lifeide/:path*",
+      "destination": "/admin",
+      "permanent": false
+    },
+    {
+      "source": "/admin/js/views/devWorkspace.js",
+      "destination": "/admin",
+      "permanent": false
+    },
+    {
+      "source": "/admin/js/views/developer.js",
+      "destination": "/admin",
+      "permanent": false
+    }
+  ]
 }

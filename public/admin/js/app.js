@@ -13,7 +13,6 @@ import { renderPerson } from './views/person.js';
 import { renderLifegroups, renderLifegroup, renderNetwork } from './views/lifegroups.js';
 import { renderSettings } from './views/settings.js';
 import {renderDeployment} from './views/deployment.js';
-import {renderDeveloper} from './views/developer.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, renderServiceQr, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
@@ -64,7 +63,6 @@ const routes = [
   { path: /^\/community$/, view: renderCommunity, nav: 'community', perm: 'settings:manage' },
   { path: /^\/settings$/, view: renderSettings, nav: 'settings' },
   { path: /^\/deploy$/, view: renderDeployment, nav: 'deploy', perm: 'settings:manage' },
-  { path: /^\/developer$/, view: renderDeveloper, nav: 'developer', perm: 'settings:manage' },
   { path: /^\/privacy$/, view: renderPrivacy, nav: 'settings' },
 ];
 
