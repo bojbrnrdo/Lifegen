@@ -305,3 +305,18 @@ body{background:#f5f7f9;color:var(--text);font-size:14px;line-height:1.5}
 /* The global search was retired; give the header a quiet, uncluttered title. */
 .app .header-context{color:#f1f8f3;font-size:.91rem;font-weight:680;letter-spacing:-.012em;white-space:nowrap}
 @media(max-width:640px){.app .header-context{font-size:.8rem;max-width:calc(100vw - 160px);overflow:hidden;text-overflow:ellipsis}}
+
+/* Original LIFEGEN wordmark: sidebar-only, full width without clipping. */
+.app .sidebar .brand.sidebar-brand{
+  min-height:105px;margin:0 12px 12px;padding:17px 12px 20px;
+  display:flex;align-items:center;justify-content:center;
+  border-bottom:1px solid #e9eded;text-decoration:none;
+}
+.app .sidebar .sidebar-brand__logo{
+  display:block;width:min(100%,196px);height:auto;max-height:74px;
+  object-fit:contain;object-position:center;background:transparent;
+}
+@media(max-width:1023px){
+  .app .sidebar .brand.sidebar-brand{min-height:98px;}
+  .app .sidebar .sidebar-brand__logo{width:min(100%,188px);}
+}
