@@ -23,6 +23,7 @@ function panel(mode,initial){
  const network=mode==='pastor'||mode==='network'||mode==='vip'?'':'<label class="unified-add__field">Which Network?<select data-field="network" required><option value="">Choose the Network first</option></select><small>Only Networks of the gender you picked are listed.</small></label>'+
  (mode==='network'?'<label class="unified-add__field">Under which pastor? <select data-field="parent"><option value="">On its own (no pastor above it)</option></select><small>Choose the Bishop or Pastora whose cell this Network Leader will join.</small></label>':'');
  const cell=mode==='member'?'<label class="unified-add__field">Which Cell?<select data-field="cell" required disabled><option value="">Choose the Cell first</option></select><small>Choose a Network above and its Cells appear here.</small></label>':'';
+ const memberNetworkStatus=mode==='member'?'<div class="alert alert--info unified-add__network-status" data-network-status role="status" hidden></div>':'';
  const membershipTier=mode==='member'?'<fieldset class="unified-add__tier" aria-label="How well do we know this person?"><legend>How well do we know them?</legend><label><input type="radio" name="member_tier" value="new" checked/><span><b>New</b> — just joined, still getting to know the group</span></label><label><input type="radio" name="member_tier" value="solid"/><span><b>Settled</b> — attends regularly and is committed</span></label><small>Most new people start as New. You can switch to Settled at any time from the Cell page.</small></fieldset>':'';
  const pastorNote=mode==='pastor'?'<p class="unified-add__hint">A pastor Network sits at the top. Network Leaders are added under it afterwards, and they become members of this pastor’s cell.</p>':'';
  const existingPerson='<details class="unified-add__optional" data-existing-wrap><summary>'+svg('user',15)+' They are already registered</summary><div class="unified-add__socials"><label class="unified-add__field">Their Person ID<input name="existing_person_id" type="number" min="1" placeholder="e.g. 0042"/><small>Look it up under “Everyone registered” on the Lifegroups page. Leave this closed to register a brand-new person.</small></label></div></details>';
@@ -30,7 +31,7 @@ function panel(mode,initial){
  const social=['facebook_url','instagram_url','tiktok_url','x_url','youtube_url'].map(k=>'<label>'+k.replace('_url','').replace('_',' ')+'<input type="url" name="'+k+'" placeholder="HTTPS profile link"/></label>').join('');
  return '<section role="tabpanel" id="unified-'+mode+'" aria-labelledby="tab-'+mode+'" '+(mode===initial?'':'hidden')+'><form data-form="'+mode+'" novalidate>'+
  '<p class="unified-add__purpose">'+purposeOf[mode]+'</p>'+
- '<div class="alert alert--error" data-error role="alert" hidden></div>'+pastorNote+gender+network+cell+membershipTier+
+ '<div class="alert alert--error" data-error role="alert" hidden></div>'+pastorNote+gender+network+cell+memberNetworkStatus+membershipTier+
  existingPerson+
  '<div class="unified-add__identity"><label class="unified-add__photo"><span data-photo-preview class="unified-add__photo-preview">'+svg('user',28)+'</span><span class="unified-add__photo-action">'+svg('camera',15)+' Upload photo</span><input type="file" data-photo accept="image/jpeg,image/png,image/webp" aria-label="Photo of the new '+tabLabel[mode]+'"/></label>'+
  '<div class="unified-add__names"><label class="unified-add__field">First name<input name="first_name" required maxlength="120" placeholder="First name"/></label><label class="unified-add__field">Last name<input name="last_name" required maxlength="120" placeholder="Last name"/></label></div></div>'+
@@ -69,6 +70,7 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
 
  const error=(mode,message)=>{const target=getForm(mode).querySelector('[data-error]');target.textContent=message;target.hidden=false;};
  const clear=mode=>{getForm(mode).querySelector('[data-error]').hidden=true;};
+ const networkStatus=message=>{const target=getForm('member').querySelector('[data-network-status]');target.textContent=message||'';target.hidden=!message;};
  const setTab=mode=>{
   if(state.busy||!modes.includes(mode))return;
   modes.forEach(m=>{const active=m===mode;modal.querySelector('#unified-'+m).hidden=!active;const tab=modal.querySelector('#tab-'+m);tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;});
@@ -87,14 +89,21 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
    const response=await api.lifegroups({network_id:netId,status:'active'});
    const groups=Array.isArray(response)?response:response?.groups||response?.lifegroups||[];
    const network=findNetwork(netId);
-   groups.filter(g=>g.leader_person_id&&!g.leads_network&&Number(g.leader_person_id)!==Number(network?.leader_person_id)).forEach(g=>select.add(new Option(g.leader_name||g.name,String(g.id))));
+   const eligible=groups.filter(g=>g.leader_person_id&&!g.leads_network&&Number(g.leader_person_id)!==Number(network?.leader_person_id));
+   eligible.forEach(g=>select.add(new Option(g.leader_name||g.name,String(g.id))));
    select.disabled=select.options.length<2;
    if([...select.options].some(o=>o.value===previous))select.value=previous;
-  }catch(e){error('member',e.message||'Could not load the Cells for this Network.');}
+   networkStatus(eligible.length?'':'No active Cells are available in this Network. You can still save this person without assigning a Cell; they will appear under “Not in a Cell yet.”');
+  }catch(e){
+   networkStatus('Could not load Cells. You can still save this person without assigning a Cell; they will appear under “Not in a Cell yet.” Refresh and try again to place them in a Cell.');
+   error('cell',e.message||'Could not load the Cells for this Network.');
+  }
  }
  async function loadNetworks(){
   const response=await api.networks({status:'active'});
   state.networks=Array.isArray(response)?response:response?.networks||[];
+  const eligibleNetworks=state.networks.filter(n=>n.leader_person_id);
+  networkStatus(eligibleNetworks.length?'':'No active Networks with registered leaders are available. You can still save this person without assigning a Cell; they will appear under “Not in a Cell yet.” Ask an administrator to set up a Network and Cell if they should be placed in one.');
   {
    const parentSelect=getForm('network').querySelector('[data-field=parent]');
    if(parentSelect){
@@ -252,6 +261,9 @@ export function createAddNewModal({initialTab='network',networkId=null,personId=
   }catch(e){error(mode,(state.pending[mode]?'The person was saved, but adding them to the Cell did not finish: ':'')+(e.message||'That did not save. Please try again.'));}
   finally{state.busy=false;}
  }
- loadNetworks().catch(e=>{error('cell',e.message||'Could not load the Networks. Refresh the page and try again.');error('member',e.message||'Could not load the Networks. Refresh the page and try again.');});
+ loadNetworks().catch(e=>{
+  networkStatus('Could not load Networks. You can still save this person without assigning a Cell; they will appear under “Not in a Cell yet.” Refresh and try again to place them in a Cell, or ask an administrator for help.');
+  error('cell',e.message||'Could not load the Networks. Refresh the page and try again.');
+ });
  return modal;
 }

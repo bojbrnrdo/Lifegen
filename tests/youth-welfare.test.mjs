@@ -174,8 +174,8 @@ test('dashboard and API pages use the existing authentication with server-side p
   assert.match(settings, /youth_welfare_viewer/);
   assert.match(settings, /Youth Welfare Viewer \(portal-only\)/);
   assert.match(read('../public/admin/js/ui.js'), /youth_welfare_viewer: 'Youth Welfare Viewer \(portal-only\)'/);
-  assert.match(adminClient, /isYouthWelfareRole\(signedInUser\.role_id\)/);
-  assert.match(adminClient, /isYouthWelfareRole\(status\.user\.role_id\)/);
+  assert.match(adminClient, /shouldOpenYouthWelfare\(signedInUser\)/);
+  assert.match(adminClient, /shouldOpenYouthWelfare\(status\.user\)/);
   assert.match(app, /includes\(actor\?\.role_id\)/);
   assert.match(dashboard, /can\('youth_welfare:classify'\)/);
   assert.match(dashboard, /can\('youth_welfare:manage'\)/);
