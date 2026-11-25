@@ -2082,3 +2082,12 @@ input:focus,select:focus,textarea:focus{border-color:#559c6d;box-shadow:0 0 0 3p
  .workspace-context strong{font-size:.87rem}
  .topbar .portal-home-link{padding:7px 8px;font-size:.75rem;min-height:32px}
 }
+
+
+/* Route isolation: old async views never paint over the active workspace. */
+.route-host{width:100%;min-width:0}
+@media(prefers-reduced-motion:no-preference){
+ .route-host> :is(.page-header,.dashboard-welcome,.card,.lifegroups-page--focused){animation:workspaceEnter .32s cubic-bezier(.2,.75,.28,1) both}
+ .route-host>.card:nth-child(2){animation-delay:45ms}
+ .route-host>.card:nth-child(3){animation-delay:85ms}
+}
