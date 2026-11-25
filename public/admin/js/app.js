@@ -74,6 +74,7 @@ const routes = [
 
 let currentCleanup = null;
 let activeRouteHash = '';
+let routeSequence = 0;
 
 async function route(options = {}) {
   const live = options?.live === true; const oldY = window.scrollY;
@@ -103,6 +104,7 @@ async function route(options = {}) {
     return;
   }
   activeRouteHash = location.hash;
+  const routeTicket = ++routeSequence;
   if (typeof currentCleanup === 'function') { try { currentCleanup(); } catch {} }
   currentCleanup = null;
   main.__liveReload = null;
@@ -122,9 +124,11 @@ async function route(options = {}) {
   if (!live) window.scrollTo({ top: 0 });
   try {
     const cleanup = await r.view({ main, query, params: m }, m);
+    if (routeTicket !== routeSequence) { if (typeof cleanup === 'function') cleanup(); return; }
     if (typeof cleanup === 'function') currentCleanup = cleanup;
     if (live) window.scrollTo({top: oldY});
   } catch (err) {
+    if (routeTicket !== routeSequence) return;
     console.error(err);
     main.innerHTML = errorState(err);
   }
