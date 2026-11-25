@@ -182,7 +182,7 @@ function renderShell() {
       </nav>
       <div class="sidebar__user">
         <span class="avatar avatar--sm">${esc(u.display_name.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase())}</span>
-        <div style="min-width:0"><strong class="truncate">${esc(u.display_name)}</strong><small>${esc(ROLE_LABELS[u.role_id] || u.role_id)} · shared database</small></div>
+        <div style="min-width:0"><strong class="truncate">${esc(u.display_name)}</strong><small>${esc(ROLE_LABELS[u.role_id] || u.role_id)}</small></div>
         ${state.authDisabled ? '' : `<button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">${icon('logout', 19).value}</button>`}
       </div>
     </aside>
@@ -281,7 +281,7 @@ window.addEventListener('auth:expired', () => {
 boot();
 
 window.addEventListener('api:message',e=>toast(e.detail.message,e.detail.type));
-window.addEventListener('sync:state',e=>{const bar=document.getElementById('connectionBar'),label=document.getElementById('connectionText');if(!bar||!label)return;bar.dataset.state=e.detail.state==='offline'?'offline':'live';label.textContent=e.detail.state==='live'?'Live updates · shared database':e.detail.state==='refresh'?'Automatic refresh · shared database':'Connection interrupted — reconnecting';});
+window.addEventListener('sync:state',e=>{const bar=document.getElementById('connectionBar'),label=document.getElementById('connectionText');if(!bar||!label)return;bar.dataset.state=e.detail.state==='offline'?'offline':'live';label.textContent=e.detail.state==='live'?'Live updates':e.detail.state==='refresh'?'Automatic refresh':'Connection interrupted — reconnecting';});
 let liveRefreshTimer;
 window.addEventListener('db:change',()=>{clearTimeout(liveRefreshTimer);liveRefreshTimer=setTimeout(()=>{
  if(!state.user)return;refreshPendingBadge();const path=location.hash.split('?')[0],main=document.getElementById('main');
