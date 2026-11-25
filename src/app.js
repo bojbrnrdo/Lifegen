@@ -50,7 +50,7 @@ app.use(helmet({contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptS
 app.use(cookieParser());
 app.use(express.json({limit:'512kb'}));
 // The Admin Dev tools have been retired. Deny their legacy URLs, APIs and static assets.
-app.use(['/api/admin/dev','/api/lifeide','/lifeide'],(req,res)=>res.sendStatus(404));
+app.use(['/api/admin/dev','/api/lifeide','/lifeide','/api/admin/developer-info'],(req,res)=>res.sendStatus(404));
 // Gzip/deflate responses (HTML, CSS, JS, JSON, ICS) whenever the client accepts it.
 // The SSE live-update stream is excluded so events are never delayed by buffering.
 app.use(compression({filter:(req,res)=>{const type=String(res.getHeader('Content-Type')||'');if(type.includes('text/event-stream')||type.includes('application/zip'))return false;return compression.filter(req,res);}}));
@@ -61,18 +61,7 @@ app.use('/api/public',publicRouter);
 app.use('/api/deploy',createDeploymentRouter());
 app.get('/api/health',async(req,res)=>{try{const r=await query('SELECT to_regclass(\'public.people\') IS NOT NULL AS schema_ready');res.status(r.rows[0].schema_ready?200:503).json({ok:r.rows[0].schema_ready,database:process.env.LOCAL_DEMO==='true'?'local-postgresql-demo':'supabase-postgresql'});}catch(e){const hint=connectionHint(e);console.error('[LIFEGEN health]',e.code||e.name,hint||'Database connection unavailable. Details withheld from the public response.');res.status(503).json({ok:false,message:'Set the private Supabase PostgreSQL connection and apply the SQL migrations.'});}});
 // Read-only environment metadata. Never expose environment variables or secret values.
-app.get('/api/admin/developer-info', requireStaff, (req,res)=>{
- try{
-  if(req.actor?.role_id!=='admin')return res.status(403).json({error:'Administrator access required'});
-  const clean=value=>String(value||'').slice(0,120).replace(/[^a-zA-Z0-9._\/-]/g,'');
-  res.set('Cache-Control','no-store').json({
-   environment:clean(process.env.VERCEL_ENV||(process.env.NODE_ENV==='production'?'production':'local')),
-   branch:clean(process.env.VERCEL_GIT_COMMIT_REF),
-   commit:clean(process.env.VERCEL_GIT_COMMIT_SHA).slice(0,12),
-   deployment:clean(process.env.VERCEL_URL)
-  });
- }catch(nextError){res.status(500).json({error:'Deployment metadata unavailable'});}
-});
+
 app.get('/api/auth/status',async(req,res)=>{
  const user=await readStaff(req);const settings=Object.fromEntries((await query('SELECT key,value FROM settings WHERE key=ANY($1::text[])',[Object.keys(DEFAULT_SETTINGS)])).rows.map(r=>[r.key,r.value]));
  const count=Number((await query('SELECT count(*) FROM staff_users')).rows[0].count);

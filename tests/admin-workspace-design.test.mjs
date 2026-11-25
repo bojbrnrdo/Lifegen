@@ -34,3 +34,8 @@ test('each routed page renders into an isolated host, guarding async navigation'
  assert.match(shell,/main\.__liveReload = routeHost\.__liveReload \|\| null/);
  assert.match(css,/\.route-host\{width:100%;min-width:0\}/);
 });
+
+test('retired Developer environment and Dev tools are not Admin routes',()=>{
+ assert.doesNotMatch(shell,/renderDeveloper|path: \/\^\\\/developer/);
+ assert.doesNotMatch(shell,/#\/dev\/(?:ide|git|packaging)/);
+});

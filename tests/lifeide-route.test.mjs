@@ -10,7 +10,7 @@ test('retired Dev tools, APIs and static assets cannot be opened directly',async
   const paths=[
    '/lifeide','/lifeide/','/lifeide/index.html','/lifeide/app.js',
    '/lifeide/styles.css','/api/lifeide/tree','/api/lifeide/remote/index',
-   '/api/admin/dev/status','/api/admin/dev/branches','/api/admin/dev/package-runs'
+   '/api/admin/dev/status','/api/admin/dev/branches','/api/admin/dev/package-runs','/api/admin/developer-info'
   ];
   for(const route of paths)assert.equal((await fetch(base+route)).status,404,route);
   for(const route of ['/api/lifeide/entry','/api/admin/dev/branch','/api/admin/dev/package']){

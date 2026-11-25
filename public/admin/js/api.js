@@ -63,4 +63,3 @@ export function startLiveUpdates(){
 
 
 // Developer workspace requests share the existing session and CSRF handling.
-export const devRequest=(path,{method='GET',body}={})=>request('/api/admin/dev/'+path,{method,body});
