@@ -15,6 +15,8 @@ test('Sunday QR uses Manila-local date when client is in another timezone',()=>{
 });
 test('QR UI has Sunday selection, disabled-before-loaded print/copy and clear error',()=>{
  for(const feature of ['id="serviceQrDate"','id="refreshServiceQr"','id="printServiceQr" disabled','id="copyServiceQr" disabled','role="status"','aria-live="polite"','navigator.clipboard.writeText(currentUrl)','poster.hidden=true','if(seq!==request||!main.isConnected)return'])assert.ok(view.includes(feature),feature);
+ assert.match(view,/document\.body\.classList\.add\('printing-poster'\)/);
+ assert.match(view,/window\.addEventListener\('afterprint'/);
  assert.doesNotMatch(view,/toISODate\(lastSunday\(\)\)/);
  assert.match(view,/api\.serviceQr\(date\)/);
 });

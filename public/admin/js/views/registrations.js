@@ -145,7 +145,12 @@ export async function renderServiceQr({main}){
  };
  dateSelect.addEventListener('change',()=>{notice.classList.remove('service-qr-notice--error');load();});
  main.querySelector('#refreshServiceQr').addEventListener('click',()=>{notice.classList.remove('service-qr-notice--error');load();});
- print.addEventListener('click',()=>{if(currentUrl)window.print();});
+ print.addEventListener('click',()=>{
+  if(!currentUrl)return;
+  document.body.classList.add('printing-poster');
+  window.addEventListener('afterprint',()=>document.body.classList.remove('printing-poster'),{once:true});
+  window.print();
+ });
  copy.addEventListener('click',async()=>{
   if(!currentUrl)return;
   try{await navigator.clipboard.writeText(currentUrl);toast('Sunday check-in link copied.');}
