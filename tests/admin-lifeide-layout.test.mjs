@@ -7,17 +7,15 @@ const routes=await readFile(new URL('../public/admin/js/app.js',import.meta.url)
 const css=await readFile(new URL('../public/admin/styles.css',import.meta.url),'utf8');
 const standalone=await readFile(new URL('../public/lifeide/index.html',import.meta.url),'utf8');
 
-test('Admin LifeIDE route embeds the full Explorer and editor workspace',()=>{
- assert.ok(routes.includes('view: renderDevIDE'), 'Admin router must use the embedded LifeIDE view');
+test('Dev tabs and legacy Admin routes are absent from the active Admin UI',()=>{
+ assert.doesNotMatch(routes,/from '.\/views\/devWorkspace\.js'/);
+ assert.doesNotMatch(routes,/#\/dev\/(?:ide|git|packaging)/);
+ assert.doesNotMatch(routes,/view: renderDev(?:IDE|Git|Packaging)/);
+ assert.doesNotMatch(routes,/devMenuToggle|devMenu/);
+ // Retired source is retained for future recovery; the application no longer mounts it.
  assert.match(view,/export async function renderDevIDE\(/);
- assert.match(view,/iframe class="admin-lifeide__frame"[^>]+src="\/lifeide\/\?\$\{esc\(params\.toString\(\)\)\}"/);
  assert.match(standalone,/id="tree"/);
- assert.match(standalone,/id="editor"/);
  assert.match(css,/\.admin-lifeide__frame\s*\{/);
- assert.match(view,/main\.classList\.add\('main--lifeide'\)/);
- assert.match(view,/main\.classList\.remove\('main--lifeide'\)/);
- assert.match(css,/\.main\.main--lifeide\s*\{/);
- assert.match(css,/\.main\.main--lifeide \.admin-lifeide__frame\s*\{/);
 });
 
 test('Git branch file links open in the same CodeMirror LifeIDE iframe',()=>{
