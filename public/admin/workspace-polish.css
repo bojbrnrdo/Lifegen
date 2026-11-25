@@ -1,0 +1,59 @@
+/* LIFEGEN Admin workspace improvements. Styling only: no data or behavior changes. */
+:root{--bg:#f5f7f5;--text:#1b3025;--muted:#586e60;--border:#dce6de;--accent:#216947;--sidebar-w:258px;--topbar-h:72px}
+body{background:var(--bg);color:var(--text);line-height:1.55}
+.sidebar{background:#fff!important;color:#263e2f!important;border-right:1px solid #dce7de}
+.sidebar .brand{color:#233e2c!important}
+.sidebar .brand__text strong{color:#1b3f2a!important}
+.sidebar .brand__text small{color:#627869!important}
+.sidebar .nav__group{color:#6e8476!important;font-weight:800}
+.sidebar .nav a,.sidebar .nav a.sub,.sidebar .nav__parent,.sidebar .nav__foot{color:#334d3c!important;opacity:1!important}
+.sidebar .nav a svg,.sidebar .nav__parent svg{color:#4e705b!important;opacity:1!important}
+.sidebar .nav a:hover,.sidebar .nav__parent:hover{background:#edf5ef!important;color:#145b37!important}
+.sidebar .nav a.active,.sidebar .nav a.sub.active{background:#e2f0e7!important;color:#155e37!important}
+.sidebar .nav a.active svg{color:#16663d!important}
+.sidebar .nav a.active::after{background:#23764b}
+.sidebar__user strong{color:#234232!important}
+.sidebar__user small{color:#61796a!important}
+.sidebar__user .icon-btn{color:#42634e!important}
+.sidebar__user .icon-btn:hover{background:#eaf3ed!important}
+.sidebar__user{background:#fcfdfc}
+.topbar{background:rgba(255,255,255,.97);border-bottom-color:#e0e8e2}
+.workspace-context strong{font-weight:760;font-size:1.02rem}
+.workspace-context__eyebrow{color:#71877a}
+.workspace-quicklink{color:#355744}
+.workspace-quicklink--primary{background:#e5f2e9;border-color:#c8e3d1;color:#1b603d}
+.connection-bar{background:#f0faf3!important;color:#3b614a!important;border-bottom:1px solid #dbeddf!important}
+.main{min-width:0}.main>*{max-width:1500px}.route-host{min-width:0}
+.page-header{margin-bottom:22px}.page-header .sub{color:#607567}
+h1{color:#183b29}
+.card{border:1px solid #dde7df;box-shadow:0 2px 9px rgba(21,59,33,.035);border-radius:14px}
+.card:hover{border-color:#d3e1d6}
+.btn--primary{background:#206841;border-color:#206841;color:#fff}
+.btn--primary:hover{background:#185333;border-color:#185333}
+.input,.select,.textarea,input[type="text"],input[type="search"],input[type="email"],input[type="tel"],select,textarea{border-color:#d0ded4}
+.table th{color:#536d5b;background:#f5f9f6}.table td{color:#2b4232}
+.lifegroups-page--focused{max-width:1280px;width:100%;margin:0 auto}
+.lg-head{margin-bottom:17px;gap:20px}
+.lg-head__text h1{font-size:clamp(1.7rem,2.25vw,2.15rem);font-weight:780;letter-spacing:-.045em}
+.lg-head__text .sub{color:#647769;font-size:.9rem}
+.lg-head__add{border-radius:11px;padding-inline:18px}
+.lg-tabs{background:#eaf1eb;border:1px solid #dee9e0;padding:5px;gap:5px;margin-bottom:17px;border-radius:13px}
+.lg-tabs__tab{color:#3e5b48;font-weight:680;min-height:44px}
+.lg-tabs__tab[aria-selected="true"]{color:#185a37;background:#fff;box-shadow:0 2px 6px rgba(30,67,39,.09)}
+.lg-tabs__tab:hover{color:#174d31}
+.lg-filterbar{gap:11px;margin-bottom:15px}
+.lg-search input{border-radius:11px;min-height:46px}
+.lg-seg{border:1px solid #dfebe2;background:#edf3ee}
+.lg-seg button{color:#4a6351}.lg-seg button[aria-pressed="true"]{color:#195a37}
+.lg-more>summary{min-height:45px}
+.lifegroups-page--focused .lifegroups-page__numbers{border-radius:13px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,50,29,.025)}
+.lifegroups-page--focused .lifegroups-page__number{padding:15px 18px;min-width:100px}
+.lifegroups-page--focused .lifegroups-page__number-value{font-size:1.55rem;font-weight:780}
+.lifegroups-page--focused .lifegroups-page__number-label{font-size:.76rem;color:#5c7162;line-height:1.4}
+.lg-panel>.card{border-radius:14px}.lg-about{margin-top:20px}
+.badge{font-weight:690}.modal{border-radius:17px}
+@media(min-width:1024px){.main{padding:32px clamp(25px,3vw,52px) 68px}.main>*{max-width:1500px}}
+@media(min-width:1500px){.main{padding-left:56px;padding-right:56px}}
+@media(max-width:1023px){.sidebar{box-shadow:12px 0 42px rgba(14,54,27,.14)}.topbar{height:64px}.main{padding:23px 17px 50px}}
+@media(max-width:640px){.main{padding:17px 12px 42px}.lg-head__text h1{font-size:1.52rem}.lg-tabs{margin-left:-2px;margin-right:-2px}.lg-filterbar{gap:9px}.lifegroups-page--focused .lifegroups-page__number{padding:13px;min-width:0}.lifegroups-page--focused .lifegroups-page__number-value{font-size:1.38rem}.card__body{padding:16px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
