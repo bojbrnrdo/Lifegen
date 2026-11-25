@@ -16,11 +16,12 @@ test('Reference visual system is loaded last without replacing existing Admin ro
  assert.match(css,/@media\(max-width:640px\)/);
  assert.match(css,/prefers-reduced-motion:reduce/);
 });
-test('Header provides permission-aware workspace command search',()=>{
- assert.match(shell,/id="workspaceCommandSearch"/);
- assert.match(shell,/mountWorkspaceCommandSearch/);
- assert.match(shell,/Jump to a section or action/);
- assert.doesNotMatch(shell,/id="headerPeopleSearch"/);
+test('Header has no global search and retains shortcuts and account access',()=>{
+ assert.match(shell,/class="header-context">Church administration/);
+ assert.doesNotMatch(shell,/workspaceCommandSearch|workspaceCommandInput|mountWorkspaceCommandSearch|headerPeopleSearch/);
+ assert.match(shell,/class="header-tools"/);
+ assert.match(shell,/href="#\/settings" title="Account settings"/);
+ assert.match(css,/\.app \.header-context\{/);
 });
 test('Person profile preserves privacy and actions in reference-like grouped cards',()=>{
  assert.match(profile,/Personal information/);
