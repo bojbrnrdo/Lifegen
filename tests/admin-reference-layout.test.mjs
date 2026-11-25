@@ -33,3 +33,12 @@ test('Person profile preserves privacy and actions in reference-like grouped car
  assert.match(profile,/id="archiveBtn"/);
  assert.match(profile,/can\('people:write'\) && !archived/);
 });
+
+test('Sidebar uses the uploaded LIFEGEN wordmark without duplicating its text',()=>{
+ assert.match(shell,/<a class="brand sidebar-brand"/);
+ assert.match(shell,/class="sidebar-brand__logo" src="\/admin\/assets\/lifegen-sidebar-logo\.webp"/);
+ assert.match(shell,/alt="LIFEGEN"/);
+ assert.match(shell,/class="brand brand--compact"/);
+ assert.match(css,/\.sidebar \.sidebar-brand__logo/);
+ assert.match(css,/object-fit:contain/);
+});

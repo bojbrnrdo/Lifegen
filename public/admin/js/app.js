@@ -167,9 +167,8 @@ function renderShell() {
     </header>
 
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-      <a class="brand" href="#/dashboard">
-        <span class="brand__mark">${brandMark}</span>
-        <span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span>
+      <a class="brand sidebar-brand" href="#/dashboard" aria-label="LIFEGEN Admin dashboard">
+        <img class="sidebar-brand__logo" src="/admin/assets/lifegen-sidebar-logo.webp" width="196" height="65" alt="LIFEGEN" decoding="async" />
       </a>
       <nav class="nav" id="nav">
         <div class="nav__group">Workspace</div>
