@@ -57,3 +57,32 @@ h1{color:#183b29}
 @media(max-width:1023px){.sidebar{box-shadow:12px 0 42px rgba(14,54,27,.14)}.topbar{height:64px}.main{padding:23px 17px 50px}}
 @media(max-width:640px){.main{padding:17px 12px 42px}.lg-head__text h1{font-size:1.52rem}.lg-tabs{margin-left:-2px;margin-right:-2px}.lg-filterbar{gap:9px}.lifegroups-page--focused .lifegroups-page__number{padding:13px;min-width:0}.lifegroups-page--focused .lifegroups-page__number-value{font-size:1.38rem}.card__body{padding:16px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Single navigation shell: desktop uses the sidebar; mobile uses a compact menu. */
+:root{--topbar-h:0px;--sidebar-w:248px}
+.app .sidebar .nav a{min-height:44px;padding:10px 12px}
+.app .sidebar .nav a.active{box-shadow:none}
+.app .sidebar .brand{margin-bottom:6px;padding:22px 14px}
+.app .sidebar .nav__group{font-size:.68rem;letter-spacing:.09em}
+.app .connection-bar{font-size:.76rem;min-height:30px;padding-top:5px;padding-bottom:5px}
+.mobile-workspace-label{font-size:.95rem;font-weight:750;color:#183b29}
+.app .page-header{margin-bottom:20px}
+.app .page-header h1,.app .lg-head h1{font-size:clamp(1.55rem,2.2vw,2rem);letter-spacing:-.035em}
+.app .dashboard-welcome h1{color:#fff}
+.app .page-header .sub{font-size:.85rem}
+.app .card__header{min-height:0;padding:15px 20px}
+.app .card__body{padding:18px 20px}
+.app .card__header h2{letter-spacing:-.015em}
+.registration-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:20px}
+.registration-actions .btn--primary{margin-right:4px}
+.registration-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.registration-tools summary{cursor:pointer;font-weight:650;color:var(--accent);padding:8px 0}
+.registration-tools details{width:100%}
+.registration-policy{margin-top:10px;padding:16px 20px;border:1px solid var(--border);border-radius:12px;background:#fff}
+.registration-policy summary{cursor:pointer;font-weight:650;color:var(--accent)}
+.registration-policy[open] summary{margin-bottom:15px}
+.registration-list-title{margin:0 0 12px;font-size:1.1rem}
+@media(min-width:1024px){.app>.topbar{display:none}.app>.connection-bar{top:0}.app>.main{padding-top:28px}}
+@media(max-width:1023px){:root{--topbar-h:56px}.app>.topbar{display:flex;height:56px}.app>.connection-bar{top:56px}}
+@media(max-width:640px){.app .card__body,.app .card__header{padding:14px}.registration-actions .btn{flex:1 1 135px}.registration-policy{padding:14px}}
+@media print{.registration-actions,.registration-policy,.app>.topbar,.app>.connection-bar{display:none!important}}
