@@ -332,3 +332,9 @@ body{background:#f5f7f9;color:var(--text);font-size:14px;line-height:1.5}
 .app .service-qr-poster{box-shadow:0 5px 19px rgba(30,48,46,.045);border-radius:18px}
 @media(max-width:640px){.app .service-qr-toolbar>label{min-width:100%;}.app .service-qr-toolbar>.btn{flex:1}}
 @media print{.service-qr-controls,.page-header.no-print{display:none!important}.service-qr-poster[hidden]{display:none!important}}
+@media print{
+ body.printing-poster .app>.connection-bar{display:none!important}
+ body.printing-poster .app>.main{margin:0!important;padding:0!important;width:100%!important;max-width:none!important}
+ body.printing-poster .route-host{max-width:none!important}
+ body.printing-poster .qr-poster{box-shadow:none!important}
+}
