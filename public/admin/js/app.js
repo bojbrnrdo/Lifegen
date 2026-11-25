@@ -3,7 +3,6 @@
  */
 import { api, startLiveUpdates } from './api.js';
 import { brandMark } from './brand.js';
-import { mountWorkspaceCommandSearch } from './workspaceCommands.js';
 import { esc, html, icon, toast, errorState, ROLE_LABELS, closeModal } from './ui.js';
 import { renderLogin, renderSetup } from './views/auth.js';
 import { renderPrivacy, renderPublicPrivacy } from './views/privacy.js';
@@ -151,10 +150,7 @@ function navLink(href, key, label, ic, sub = false) {
   return `<a href="${href}" data-nav="${key}" class="${sub ? 'sub' : ''}">${ic ? icon(ic, 19).value : ''}${esc(label)}${badge}</a>`;
 }
 
-let cleanupCommandSearch = null;
 function renderShell() {
-  cleanupCommandSearch?.();
-  cleanupCommandSearch = null;
   const u = state.user;
   const app = document.getElementById('app');
   app.className = 'app';
@@ -162,11 +158,7 @@ function renderShell() {
     <header class="topbar">
       <button class="icon-btn" id="menuToggle" aria-label="Open menu">${icon('menu', 22).value}</button>
       <a class="brand brand--compact" href="#/dashboard"><span class="brand__mark">${brandMark}</span><span class="brand__text"><strong>LIFEGEN</strong><small>Admin portal</small></span></a>
-      <form class="header-search" id="workspaceCommandSearch" role="search" aria-label="Jump to LIFEGEN section or action">
-        <input id="workspaceCommandInput" type="search" placeholder="Jump to a section or action…" autocomplete="off" aria-label="Jump to LIFEGEN sections and actions" />
-        <kbd class="workspace-command-shortcut" aria-hidden="true">⌘ K</kbd>
-        <button type="submit" aria-label="Go to selected section" title="Go to selected section">${icon('search',19).value}</button>
-      </form>
+      <span class="header-context">Church administration</span>
       <div class="header-tools">
         <span class="header-date" aria-label="Today's date">${new Intl.DateTimeFormat('en-PH',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Manila'}).format(new Date())}</span>
         <a class="header-icon" href="/" title="Open public website" aria-label="Open public website">${icon('link',19).value}</a>
@@ -202,13 +194,6 @@ function renderShell() {
     </aside>
     <div class="backdrop" id="backdrop"></div>
     <main class="main" id="main" tabindex="-1"><div class="loading">Loading…</div></main>`;
-
-  // Global workspace command search navigates only to permission-allowed modules.
-  cleanupCommandSearch = mountWorkspaceCommandSearch({
-    form:document.getElementById('workspaceCommandSearch'), can,
-    standalone:state.standalone, deployHelper:state.deployHelper,
-    navigate:destination=>{location.hash=destination;},
-  });
 
   document.getElementById('menuToggle').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');

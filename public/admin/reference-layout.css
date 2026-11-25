@@ -301,3 +301,7 @@ body{background:#f5f7f9;color:var(--text);font-size:14px;line-height:1.5}
 .app .workspace-command-empty{padding:19px 15px;text-align:center;color:#708579;font-size:.83rem}
 @media(max-width:640px){.app .workspace-command-shortcut{display:none}.app .workspace-command-results{width:min(370px,calc(100vw - 24px))}}
 @media(prefers-reduced-motion:reduce){.app .workspace-command-option{transition:none}}
+
+/* The global search was retired; give the header a quiet, uncluttered title. */
+.app .header-context{color:#f1f8f3;font-size:.91rem;font-weight:680;letter-spacing:-.012em;white-space:nowrap}
+@media(max-width:640px){.app .header-context{font-size:.8rem;max-width:calc(100vw - 160px);overflow:hidden;text-overflow:ellipsis}}
