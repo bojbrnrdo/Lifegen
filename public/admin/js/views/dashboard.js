@@ -17,9 +17,8 @@ export async function renderDashboard({ main }) {
   main.innerHTML = html`
     <div class="page-header dashboard-welcome">
       <div>
-        <span class="dashboard-welcome__label">LIFEGEN OVERVIEW</span>
-        <h1>Church overview</h1>
-        <p class="sub">Your church at a glance · ${fmtDate(d.today, { weekday: true })}</p>
+        <h1>Dashboard</h1>
+        <p class="sub">${fmtDate(d.today, { weekday: true })}</p>
       </div>
       <div class="page-actions">
         ${can('registrations:manage') && !state.standalone ? html`<a class="btn btn--primary" href="#/registrations">${icon('qr')} VIP registrations</a>` : ''}
@@ -33,7 +32,7 @@ export async function renderDashboard({ main }) {
 
 
     <div class="card mb-2 dashboard-panel">
-      <div class="card__header"><div><span class="dashboard-panel__eyebrow">COMMUNITY</span><h2>People</h2></div>${can('people:view') ? html`<a class="small" href="#/people">Open People ${icon('chevR', 13)}</a>` : ''}</div>
+      <div class="card__header"><div><h2>People</h2></div>${can('people:view') ? html`<a class="small" href="#/people">Open People ${icon('chevR', 13)}</a>` : ''}</div>
       <div class="card__body">
         <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
           <div class="kpi"><b>${fmtNum(d.people.total)}</b><span>Registered people</span></div>
@@ -46,7 +45,7 @@ export async function renderDashboard({ main }) {
     </div>
 
     <div class="card mb-2 dashboard-panel">
-      <div class="card__header"><div><span class="dashboard-panel__eyebrow">FOLLOW-UP</span><h2>VIP pipeline</h2></div>${can('registrations:manage') && !state.standalone ? html`<a class="small" href="#/registrations">Open Registration ${icon('chevR', 13)}</a>` : ''}</div>
+      <div class="card__header"><div><h2>VIP pipeline</h2></div>${can('registrations:manage') && !state.standalone ? html`<a class="small" href="#/registrations">Open Registration ${icon('chevR', 13)}</a>` : ''}</div>
       <div class="card__body">
         <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
           <div class="kpi"><b>${fmtNum(d.vip?.total)}</b><span>VIP registrations</span></div>

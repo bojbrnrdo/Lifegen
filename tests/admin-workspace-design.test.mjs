@@ -4,12 +4,14 @@ import {readFileSync} from 'node:fs';
 const shell=readFileSync(new URL('../public/admin/js/app.js',import.meta.url),'utf8');
 const dashboard=readFileSync(new URL('../public/admin/js/views/dashboard.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/admin/styles.css',import.meta.url),'utf8');
-test('Admin shell has contextual header, grouped navigation and permission-gated quick actions',()=>{
- assert.match(shell,/id="workspacePageTitle"/);
- assert.match(shell,/currentPage\.textContent=/);
+test('Admin shell uses one navigation and no duplicate page titles',()=>{
+ assert.doesNotMatch(shell,/id="workspacePageTitle"/);
+ assert.doesNotMatch(shell,/workspace-quicklink|peopleMenuToggle/);
+ assert.match(shell,/aria-current/);
+ assert.match(shell,/People & Lifegroups/);
  assert.match(shell,/class="nav__group">Workspace/);
  assert.match(shell,/nav__group--system/);
- assert.match(shell,/can\('registrations:manage'\)&&!state\.standalone/);
+ assert.match(shell,/can\('registrations:manage'\)\s*&&\s*!state\.standalone/);
  assert.doesNotMatch(shell,/#\/dev\/(?:git|ide|packaging)/);
 });
 test('Shared design system covers components, mobile layouts and reduced motion',()=>{
@@ -20,7 +22,7 @@ test('Shared design system covers components, mobile layouts and reduced motion'
  assert.match(css,/\.connection-bar\{top:var\(--topbar-h\)\}/);
 });
 test('Dashboard retains data-driven People and VIP metrics and accessible actions',()=>{
- assert.match(dashboard,/<h1>Church overview<\/h1>/);
+ assert.match(dashboard,/<h1>Dashboard<\/h1>/);
  assert.match(dashboard,/d\.people\.total/);
  assert.match(dashboard,/d\.vip\?\.pending/);
  assert.match(dashboard,/can\('registrations:manage'\)/);
