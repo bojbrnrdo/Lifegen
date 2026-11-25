@@ -42,5 +42,5 @@ test('retired Developer environment and Dev tools are not Admin routes',()=>{
 
 test('Vercel redirects retired LifeIDE and Dev JS asset paths away from public static files',()=>{
  const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
- for(const url of ['/lifeide','/lifeide/:path*','/admin/js/views/devWorkspace.js','/admin/js/views/developer.js']) assert.ok(config.redirects.some(r=>r.source===url&&r.destination==='/admin'),url);
+ for(const url of ['/lifeide','/lifeide/','/lifeide/:path*','/admin/js/views/devWorkspace.js','/admin/js/views/developer.js']) assert.ok(config.redirects.some(r=>r.source===url&&r.destination==='/admin'),url);
 });

@@ -37,6 +37,11 @@
       "permanent": false
     },
     {
+      "source": "/lifeide/",
+      "destination": "/admin",
+      "permanent": false
+    },
+    {
       "source": "/lifeide/:path*",
       "destination": "/admin",
       "permanent": false
