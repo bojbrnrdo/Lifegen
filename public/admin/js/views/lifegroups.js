@@ -332,6 +332,8 @@ export async function renderLifegroups({main, query}) {
    ${can('lifegroups:manage')?html`<button class="btn btn--primary lg-head__add" id="addNew">${icon('plus')} <span>Add New</span></button>`:''}
   </div>
 
+  ${can('people:view')?html`<p class="lg-module-note">Manage the group hierarchy here. For full profiles, records, and search, open <a href="#/people">People directory ${icon('arrow-right',14)}</a>.</p>`:''}
+
   <nav class="lg-tabs" role="tablist" aria-label="Lifegroups sections">
    ${TABS.map(t=>html`<button type="button" role="tab" class="lg-tabs__tab" id="lgTab-${t.id}" data-tab="${t.id}"
      aria-selected="${t.id===startTab?'true':'false'}" aria-controls="lgPanel-${t.id}">
