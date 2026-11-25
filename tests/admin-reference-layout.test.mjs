@@ -16,11 +16,11 @@ test('Reference visual system is loaded last without replacing existing Admin ro
  assert.match(css,/@media\(max-width:640px\)/);
  assert.match(css,/prefers-reduced-motion:reduce/);
 });
-test('Header People search navigates to the existing People directory without writes',()=>{
- assert.match(shell,/id="headerPeopleSearch"/);
- assert.match(shell,/headerSearch\?\.addEventListener\('submit'/);
- assert.match(shell,/#\/people.*encodeURIComponent\(term\)/);
- assert.match(shell,/if \(!can\('people:view'\)\) return;/);
+test('Header provides permission-aware workspace command search',()=>{
+ assert.match(shell,/id="workspaceCommandSearch"/);
+ assert.match(shell,/mountWorkspaceCommandSearch/);
+ assert.match(shell,/Jump to a section or action/);
+ assert.doesNotMatch(shell,/id="headerPeopleSearch"/);
 });
 test('Person profile preserves privacy and actions in reference-like grouped cards',()=>{
  assert.match(profile,/Personal information/);
