@@ -286,3 +286,18 @@ body{background:#f5f7f9;color:var(--text);font-size:14px;line-height:1.5}
 .app .profile-address-card .dl dt{color:#75857b;font-size:.79rem;margin-bottom:8px}
 .app .profile-address-card .dl dd{font-size:.94rem;color:#203d30;overflow-wrap:anywhere}
 @media(max-width:640px){.app .profile-address-card .dl{grid-template-columns:1fr}}
+
+/* A useful workspace command launcher, not a duplicate People search. */
+.app .header-search{position:relative;isolation:isolate;overflow:visible}
+.app .workspace-command-shortcut{flex:none;white-space:nowrap;font-family:inherit;font-size:.7rem;line-height:1;color:#71857b;border:1px solid #dce6df;border-radius:6px;background:#f3f6f4;padding:5px 6px;letter-spacing:.015em}
+.app .workspace-command-results{position:absolute;left:0;top:calc(100% + 13px);width:min(510px,max(300px,100%));max-width:calc(100vw - 28px);max-height:min(440px,65vh);overflow-y:auto;overscroll-behavior:contain;z-index:100;background:#fff;border:1px solid #e1ebe5;border-radius:15px;box-shadow:0 18px 45px rgba(17,50,35,.16);padding:7px;color:#183d2d;scrollbar-width:thin}
+.app .workspace-command-results[hidden]{display:none!important}
+.app .workspace-command-option{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:11px 13px;text-align:left;border:0;background:transparent;border-radius:9px;color:#243d2e;cursor:pointer}
+.app .workspace-command-option:hover,.app .workspace-command-option[aria-selected="true"]{background:#eaf4ed}
+.app .workspace-command-option__labels{display:flex;flex-direction:column;gap:3px;min-width:0}
+.app .workspace-command-option__labels strong{font-size:.85rem;font-weight:720;line-height:1.3;color:#174a32}
+.app .workspace-command-option__labels small{font-size:.74rem;color:#6d8174;line-height:1.3}
+.app .workspace-command-option>span:last-child{color:#779180;font-size:.94rem;flex:none}
+.app .workspace-command-empty{padding:19px 15px;text-align:center;color:#708579;font-size:.83rem}
+@media(max-width:640px){.app .workspace-command-shortcut{display:none}.app .workspace-command-results{width:min(370px,calc(100vw - 24px))}}
+@media(prefers-reduced-motion:reduce){.app .workspace-command-option{transition:none}}
