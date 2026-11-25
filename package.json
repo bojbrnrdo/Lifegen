@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "dev": "node scripts/serve.mjs",
-    "build": "npm run build:carousel && npm run build:lifeide && node scripts/check.mjs && node scripts/retire-dev-assets.mjs",
+    "build": "npm run build:carousel && node scripts/check.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "supabase:bundle": "node scripts/bundle-supabase.mjs",
     "db:backup": "node scripts/backup.mjs",
