@@ -35,7 +35,7 @@ const PEOPLE = [
   // id, name, category, present, extra
   [1, 'Maria Santos', 'member', false, { lifegroup_name: 'Girls · Central', status: 'member' }],
   [2, 'Jose Bautista', 'member', true, { lifegroup_name: 'Boys · North', status: 'member', present_source: 'roster', marked_by_name: 'Demo Admin' }],
-  [3, 'Ana Reyes', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 1, first_timer: false, inviter: 'Maria' }],
+  [3, 'Ana Reyes', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 1, first_timer: true, inviter: 'Maria' }],
   [4, 'Mark Dela Cruz', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 4, first_timer: false, inviter: 'Zxai' }],
   [5, 'Grace Lim', 'vip', false, { vip_sundays: 0, first_timer: true, inviter: 'Joy' }],
 ];

@@ -64,6 +64,10 @@ test('the register reads every source of Sunday presence', () => {
   assert.match(module_, /FROM service_headcounts/);
   // A past Sunday must not grow when someone registers later on.
   assert.match(module_, /p\.date_registered <= \$1::date/);
+  // A VIP with no earlier Sunday is a first timer even after they check in
+  // today, so the roll call says FIRST TIMER the moment they arrive.
+  assert.match(module_, /vip_sundays_before/);
+  assert.match(module_, /const firstTimer = category === 'vip' && Number\(p\.vip_sundays_before \|\| 0\) === 0/);
   assert.match(module_, /p\.archived_at IS NULL/);
   // The token chip is a read-only count of gifts already recorded, never a
   // second place where a gift is written.

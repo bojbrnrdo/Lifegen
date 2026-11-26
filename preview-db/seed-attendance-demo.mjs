@@ -41,6 +41,34 @@ for (let i = 0; i < vips.length; i++) {
 }
 console.log('inviters set on', invited, 'VIPs');
 
+// A few first timers: a VIP registration and a check-in on this Sunday only, so
+// the roll call shows the FIRST TIMER chip and 1/4 the way the draft did.
+const FIRST_TIMERS = [
+  ['Chaddy', 'Enriquez', 'Zxai'],
+  ['Mark', 'Castillo', 'Zxai'],
+  ['Liza', 'Ocampo', 'Maria'],
+];
+for (const [i, [first, last, inviter]] of FIRST_TIMERS.entries()) {
+  const code = `2026-F${String(i + 1).padStart(3, '0')}`;
+  let person = (await q('SELECT id FROM people WHERE person_code=$1', [code])).rows[0];
+  if (!person) {
+    person = (await q(`INSERT INTO people(id, person_code, first_name, last_name, full_name, status,
+        inviter, date_registered, registration_source, is_demo)
+      VALUES ((SELECT coalesce(max(id),0)+1 FROM people), $1, $2, $3, $4, 'first_timer', $5, $6::date, 'staff', true)
+      RETURNING id`, [code, first, last, `${first} ${last}`, inviter, S])).rows[0];
+  }
+  let reg = (await q('SELECT id FROM vip_registrations WHERE person_id=$1', [person.id])).rows[0];
+  if (!reg) {
+    reg = (await q(`INSERT INTO vip_registrations(id, person_id, full_name, inviter, review_status, service_date)
+      VALUES ((SELECT coalesce(max(id),0)+1 FROM vip_registrations), $1, $2, $3, 'reviewed', $4::date) RETURNING id`,
+    [person.id, `${first} ${last}`, inviter, S])).rows[0];
+  }
+  await q(`INSERT INTO vip_checkins(id, registration_id, date_key, status, validated_at)
+    VALUES ((SELECT coalesce(max(id),0)+1 FROM vip_checkins), $1, $2::date, 'valid', now())
+    ON CONFLICT DO NOTHING`, [reg.id, S]).catch(() => {});
+}
+console.log('first timers on', S, ':', FIRST_TIMERS.length);
+
 // One token already handed over, so the chip is not always zero.
 const { rows: cells } = await q(`SELECT id FROM lifegroups WHERE is_active ORDER BY id LIMIT 1`).catch(() => ({ rows: [] }));
 if (cells.length) {

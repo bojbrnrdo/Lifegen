@@ -78,6 +78,9 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
             (SELECT count(DISTINCT c.date_key)::int
                FROM vip_checkins c JOIN vip_registrations vr ON vr.id = c.registration_id
               WHERE vr.person_id = p.id AND c.status = 'valid' AND c.date_key <= $1::date) AS vip_sundays_to_date,
+            (SELECT count(DISTINCT c.date_key)::int
+               FROM vip_checkins c JOIN vip_registrations vr ON vr.id = c.registration_id
+              WHERE vr.person_id = p.id AND c.status = 'valid' AND c.date_key < $1::date) AS vip_sundays_before,
             (SELECT min(c.date_key)::text
                FROM vip_checkins c JOIN vip_registrations vr ON vr.id = c.registration_id
               WHERE vr.person_id = p.id AND c.status = 'valid') AS vip_first_attended,
@@ -153,8 +156,9 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
     const storedCategory = p.is_vip_person ? 'vip' : 'member';
     const category = override || storedCategory;
     const present = vipCheckin || Boolean(p.override_id);
-    // "First timer" is only meaningful for a VIP's very first Sunday.
-    const firstTimer = category === 'vip' && Number(p.vip_sundays_to_date || 0) === 0 && !vipCheckin;
+    // "First timer" is a VIP with no earlier Sunday: this visit is their first,
+    // whether or not the door has marked them in yet — the row says so either way.
+    const firstTimer = category === 'vip' && Number(p.vip_sundays_before || 0) === 0;
     return {
       person_id: Number(p.id),
       person_code: p.person_code,
