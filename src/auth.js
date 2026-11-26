@@ -221,5 +221,10 @@ export function redactForViewer(value) {
  const personKeys=new Set(['id','person_id','person_code','first_name','last_name','full_name','status','date_registered','date_first_attended','sundays_attended','last_attended','archived_at','is_demo','att_status','classification','expected_classification','record_id','recorded_at','recorded_by','recorded_by_name','attended_before','services_since','attendance_rate','history']);
  const isPerson='first_name' in value && 'last_name' in value;
  const sensitive=new Set(['contact_number','contact','email','address','notes','birthdate','age','ministry','school','course_year','occupation','inviter','privacy_consent_at','preferred_area','preferred_day','preferred_time','preferred_category','leader_contact','photo','leader_photo','facebook_url','instagram_url','tiktok_url','x_url','youtube_url','leader_facebook_url','leader_instagram_url','leader_tiktok_url','leader_x_url','leader_youtube_url','sex','extras','password_hash','legacy_token_hash','recovery_hash','csrf_token']);
- return Object.fromEntries(Object.entries(value).filter(([k])=>!sensitive.has(k)&&(!isPerson||personKeys.has(k))).map(([k,v])=>[k,redactForViewer(v)]));
+ // A lookup keyed by Person id (the Service Attendance month map is
+// { '41': ['2026-11-01', ...] }) holds no private field by name, so the
+// person-only allow-list must not be applied to it: doing so silently emptied
+// the whole map for Viewer accounts. Its values are date lists, which are safe.
+const isPersonMap=Object.keys(value).length>0&&Object.values(value).every(v=>Array.isArray(v)&&v.every(x=>typeof x==='string'));
+return Object.fromEntries(Object.entries(value).filter(([k])=>!sensitive.has(k)&&(isPersonMap||!isPerson||personKeys.has(k))).map(([k,v])=>[k,redactForViewer(v)]));
 }

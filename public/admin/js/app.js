@@ -17,6 +17,7 @@ import { renderCalendar } from './views/calendar.js';
 import { renderRegistrations, renderQrPoster, renderServiceQr, refreshPendingBadge } from './views/registrations.js';
 import { renderDesigns } from './views/designs.js';
 import { renderCommunity } from './views/community.js';
+import { renderServiceAttendance } from './views/attendance.js';
 
 export const state = {
   user: null,
@@ -57,6 +58,7 @@ const routes = [
   { path: /^\/networks\/(\d+)$/, view: (c, m) => renderNetwork(c, m[1]), nav: 'lifegroups', perm: 'lifegroups:view' },
   { path: /^\/calendar$/, view: renderCalendar, nav: 'calendar', perm: 'dashboard:view' },
   { path: /^\/registrations$/, view: renderRegistrations, nav: 'registrations', perm: 'registrations:manage' },
+  { path: /^\/attendance$/, view: renderServiceAttendance, nav: 'attendance', perm: 'people:view' },
   { path: /^\/qr-poster$/, view: renderQrPoster, nav: 'settings', perm: 'registrations:manage' },
   { path: /^\/checkin-qr$/, view: renderServiceQr, nav: 'registrations', perm: 'registrations:manage' },
   { path: /^\/designs$/, view: renderDesigns, nav: 'designs', perm: 'settings:manage' },
@@ -176,6 +178,7 @@ function renderShell() {
         ${can('people:view') ? navLink('#/people', 'people', 'People', 'people') : ''}
         ${can('lifegroups:view') ? navLink('#/lifegroups', 'lifegroups', 'Lifegroups', 'group') : ''}
         ${can('registrations:manage') && !state.standalone ? navLink('#/registrations', 'registrations', 'Registration', 'qr') : ''}
+        ${can('people:view') && !state.standalone ? navLink('#/attendance', 'attendance', 'Attendance', 'check') : ''}
         ${navLink('#/calendar', 'calendar', 'Calendar', 'calendar')}
         ${can('settings:manage') ? navLink('#/community', 'community', 'Community board', 'inbox') : ''}
         ${can('settings:manage') ? navLink('#/designs', 'designs', 'VIP Designs', 'camera') : ''}

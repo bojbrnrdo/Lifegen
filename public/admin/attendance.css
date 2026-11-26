@@ -1,0 +1,203 @@
+/* ==========================================================================
+   Service Attendance — the Sunday register (public/admin/js/views/attendance.js)
+   --------------------------------------------------------------------------
+   Same vocabulary as the rest of the portal (cards, kpi, badges, table), with
+   the pieces the register needs: a Sunday date bar, the totals ring, the roll
+   call rows with their big tap target, VIP follow-up steps and the history
+   sheet. On a tablet at the door the check button is the important thing, so it
+   stays 46px and never shrinks.
+   ========================================================================== */
+
+/* ---- Sunday date bar ---------------------------------------------------- */
+.app .sa-datebar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 16px; padding: 8px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px;
+}
+.app .sa-datebar__step {
+  width: 42px; height: 42px; flex: none; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 11px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.app .sa-datebar__step:hover:not(:disabled) { background: var(--ink-50); }
+.app .sa-datebar__step:disabled { opacity: .35; cursor: default; }
+.app .sa-datebar__pick {
+  position: relative; flex: 1 1 240px; min-width: 0; display: flex; align-items: center;
+  gap: 9px; height: 42px; padding: 0 13px; margin: 0;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--surface);
+  color: var(--brand-900); font-weight: 700; font-size: .92rem; cursor: pointer;
+}
+.app .sa-datebar__pick svg { flex: none; color: var(--brand-600); }
+.app .sa-datebar__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The native input covers the pill: tapping anywhere opens the date picker, and
+   it stays a real date field for keyboards and screen readers. */
+.app .sa-datebar__pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; }
+.app .sa-datebar__pick:focus-within { outline: 2px solid var(--brand-500); outline-offset: 1px; }
+.app .sa-datebar__state { font-size: .82rem; color: var(--muted); font-weight: 600; }
+
+/* ---- Totals ------------------------------------------------------------- */
+.app .sa-top { align-items: stretch; }
+.app .sa-hero__body { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.app .sa-ring { position: relative; width: 146px; height: 146px; flex: none; display: grid; place-items: center; }
+.app .sa-ring__ring, .app .sa-ring__empty {
+  position: absolute; inset: 0; border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, transparent 55%, #000 56%);
+  mask: radial-gradient(circle, transparent 55%, #000 56%);
+}
+.app .sa-ring__empty { background: var(--ink-100); }
+.app .sa-ring__center { position: relative; text-align: center; line-height: 1.1; }
+.app .sa-ring__center b { display: block; font-size: 2.3rem; font-weight: 760; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.app .sa-ring__center span { font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.app .sa-hero__info { flex: 1 1 260px; min-width: 0; }
+.app .sa-kpis { margin-bottom: 12px; }
+.app .sa-legend { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 4px 18px; }
+.app .sa-legend li { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--ink-600); }
+.app .sa-legend li i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.app .sa-legend li b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
+.app .sa-legend li span { width: 46px; text-align: right; color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+
+/* ---- Headcount ---------------------------------------------------------- */
+.app .sa-headcount { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.app .sa-headcount__step {
+  width: 42px; height: 42px; flex: none; border-radius: 11px;
+  border: 1px solid var(--border); background: var(--ink-50);
+  color: var(--text); font-size: 1.25rem; font-weight: 700; line-height: 1; cursor: pointer;
+}
+.app .sa-headcount__step:hover { background: var(--brand-50); border-color: var(--brand-500); }
+.app .sa-headcount input {
+  width: 92px; height: 42px; text-align: center; font-size: 1.1rem; font-weight: 750;
+  font-variant-numeric: tabular-nums; border-radius: 11px;
+}
+.app .sa-unrecorded { margin-top: 12px; }
+.app .sa-warn, .app .sa-ok {
+  display: flex; align-items: flex-start; gap: 7px; margin: 0;
+  padding: 9px 12px; border-radius: 10px; font-size: .82rem; line-height: 1.45; font-weight: 600;
+}
+.app .sa-warn { background: var(--amber-100); color: #92400e; }
+.app .sa-ok { background: var(--green-100); color: #166534; }
+.app .sa-warn svg, .app .sa-ok svg { flex: none; margin-top: 1px; }
+
+/* ---- Roll call ---------------------------------------------------------- */
+.app .sa-list-card { margin-top: 16px; }
+.app .sa-toolbar { margin-bottom: 12px; }
+.app .sa-rows { display: flex; flex-direction: column; gap: 6px; }
+.app .sa-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 8px 10px; border: 1px solid var(--border); border-left: 3px solid transparent;
+  border-radius: 12px; background: var(--surface);
+}
+.app .sa-row.is-present { border-left-color: var(--green-600); background: var(--brand-50); }
+.app .sa-row__avatar {
+  width: 38px; height: 38px; flex: none; display: grid; place-items: center;
+  border-radius: 11px; background: var(--brand-100); color: var(--brand-900);
+  font-weight: 700; font-size: .78rem; letter-spacing: .02em;
+}
+.app .sa-row__who {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  padding: 0; border: 0; background: none; text-align: left; color: inherit; cursor: pointer; font: inherit;
+}
+.app .sa-row__who strong { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .93rem; font-weight: 640; }
+.app .sa-row__who small { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; color: var(--muted); font-size: .77rem; }
+.app .sa-row__who:hover strong { text-decoration: underline; }
+.app .sa-row__who small svg { width: 13px; height: 13px; vertical-align: -2px; }
+.app .sa-nocell { color: var(--red-600); font-weight: 650; }
+.app .sa-row__cat { flex: none; max-width: 165px; min-height: 34px; padding: 4px 8px; font-size: .76rem; border-radius: 9px; }
+/* The tap target: one press marks present or not in. */
+.app .sa-check {
+  width: 46px; height: 46px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; border: 2px solid var(--ink-200); background: transparent;
+  color: transparent; cursor: pointer; transition: background .15s, border-color .15s, color .15s, transform .15s;
+}
+.app .sa-check:hover:not(:disabled) { border-color: var(--brand-500); background: var(--brand-50); color: var(--brand-500); }
+.app .sa-check.is-on { background: var(--green-600); border-color: var(--green-600); color: #fff; }
+.app .sa-check.is-on:hover:not(:disabled) { background: #15803d; border-color: #15803d; }
+.app .sa-check:disabled { cursor: default; opacity: .55; }
+.app .sa-check:disabled.is-on { opacity: 1; }
+.app .sa-check.is-loading { pointer-events: none; }
+.app .sa-dots { display: inline-flex; gap: 3px; }
+.app .sa-dots i { width: 13px; height: 4px; border-radius: 9px; background: var(--ink-200); }
+.app .sa-dots i.on { background: var(--purple-600); }
+
+/* ---- VIP follow-up ------------------------------------------------------ */
+.app .sa-followup { margin-top: 16px; }
+.app .sa-ready {
+  display: grid; gap: 10px; padding: 14px; margin-bottom: 14px;
+  border: 1px solid #bbf7d0; border-radius: 12px;
+  background: linear-gradient(135deg, var(--green-100), var(--surface));
+}
+.app .sa-ready__names { display: flex; flex-wrap: wrap; gap: 6px; }
+.app .sa-ready__names a {
+  padding: 4px 10px; border-radius: 99px; background: var(--surface);
+  border: 1px solid #bbf7d0; color: #166534; font-size: .8rem; font-weight: 650; text-decoration: none;
+}
+.app .sa-fu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 10px; }
+.app .sa-fu { display: grid; gap: 9px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.app .sa-fu.is-ready { border-color: var(--green-600); }
+.app .sa-fu__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.app .sa-fu__head a { color: inherit; text-decoration: none; }
+.app .sa-fu__head a:hover b { text-decoration: underline; }
+.app .sa-fu__head small { display: block; color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.app .sa-steps { display: flex; gap: 5px; }
+.app .sa-steps span { flex: 1; height: 6px; border-radius: 9px; background: var(--ink-200); }
+.app .sa-steps span.on { background: var(--green-600); }
+
+/* ---- Report ------------------------------------------------------------- */
+.app .sa-report { margin-top: 16px; }
+.app .sa-report .table tbody tr.is-today td { background: var(--brand-50); }
+.app .sa-report .kpi-row { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+
+/* ---- Attendance history sheet ------------------------------------------- */
+.app .sa-hist { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.app .sa-hist:last-child { border-bottom: 0; }
+.app .sa-hist__n {
+  width: 29px; height: 29px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; background: var(--ink-100); color: var(--muted);
+  font-weight: 700; font-size: .78rem;
+}
+.app .sa-hist.is-on .sa-hist__n { background: var(--green-600); color: #fff; }
+.app .sa-hist b { display: block; font-size: .9rem; font-weight: 640; }
+.app .sa-hist small { color: var(--muted); font-size: .78rem; }
+.app .sa-hist__s { margin-left: auto; font-size: .78rem; font-weight: 700; color: var(--muted); }
+.app .sa-hist.is-on .sa-hist__s { color: #166534; }
+
+/* ---- Check in someone sheet -------------------------------------------- */
+.app .sa-field { display: block; margin-bottom: 12px; font-size: .82rem; font-weight: 650; color: var(--ink-700); }
+.app .sa-field input, .app .sa-field select { display: block; width: 100%; margin-top: 5px; font-weight: 400; }
+.app .sa-field em { color: var(--muted); font-style: normal; font-weight: 400; }
+.app .sa-matches { display: flex; flex-direction: column; gap: 5px; margin: -6px 0 12px; }
+.app .sa-match {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: inherit; text-align: left; font: inherit; cursor: pointer;
+}
+.app .sa-match:hover { background: var(--ink-50); }
+.app .sa-match.is-picked { border-color: var(--brand-500); background: var(--brand-50); }
+.app .sa-match small { color: var(--muted); font-size: .76rem; }
+
+/* ---- Responsive --------------------------------------------------------- */
+@media (max-width: 900px) {
+  .app .sa-hero__body { gap: 16px; }
+  .app .sa-ring { width: 118px; height: 118px; }
+  .app .sa-ring__center b { font-size: 1.9rem; }
+}
+@media (max-width: 640px) {
+  .app .sa-datebar { padding: 7px; gap: 6px; }
+  .app .sa-datebar__pick { flex-basis: 100%; order: -1; }
+  .app .sa-hero__body { flex-direction: column; align-items: stretch; }
+  .app .sa-ring { margin: 0 auto; }
+  .app .sa-kpis { grid-template-columns: repeat(2, 1fr); }
+  .app .sa-row { flex-wrap: wrap; }
+  .app .sa-row__who { flex-basis: calc(100% - 100px); }
+  .app .sa-row__cat { order: 4; flex: 1 1 100%; max-width: none; }
+  .app .sa-check { margin-left: auto; }
+  .app .sa-report .table--stack { font-size: .85rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .sa-check { transition: none; }
+}
+@media print {
+  .app .sa-datebar, .app .sa-toolbar, .app .sa-list-card .card__header .segmented,
+  .app .sa-check, .app .sa-row__cat, .app .sa-report .actions, .app .page-actions { display: none !important; }
+  .app .sa-row { break-inside: avoid; }
+  .app .sa-hero, .app .sa-list-card, .app .sa-report { break-inside: avoid; }
+}

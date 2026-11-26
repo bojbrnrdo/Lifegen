@@ -1,4 +1,8 @@
 {
+  "/admin/attendance.css": {
+    "version": "1.0.0",
+    "sha256": "8a2e935b0ed7968352cfcd7d93306031605e8e4dfcad63f3024b111ebeabd8fa"
+  },
   "/lifegen/app.js": {
     "version": "2.4.8",
     "sha256": "d8c3a962c20f3f696e28860367a5a9499d20dd12b01fbf71c23269bd41a64ffb"

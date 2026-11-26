@@ -23,7 +23,10 @@ function lastSundays(n) {
   return out;
 }
 
+// The counter row for an entity is created by 001_init; create it on demand so a
+// later table (or a fresh counter) can never make the seeder die on `undefined`.
 async function nextId(entity) {
+  await db.query('INSERT INTO id_counters(entity,last_id) VALUES($1,0) ON CONFLICT (entity) DO NOTHING', [entity]);
   const { rows } = await db.query('UPDATE id_counters SET last_id=last_id+1 WHERE entity=$1 RETURNING last_id', [entity]);
   return rows[0].last_id;
 }
@@ -159,13 +162,66 @@ console.log('seeded Youth Welfare people:', demoYouthIds.length);
 // Re-point them (and any other demo task) at Youth Welfare people so the task
 // list the portal filters on is not empty. Safe to re-run.
 if (demoYouthIds.length >= 2) {
+  // Only $1 of each statement is used; setting person_id=$2 as well keeps every
+  // parameter referenced. PGlite refuses an unused parameter ("could not
+  // determine data type of parameter $2"), which used to stop the seeder here
+  // before the VIP check-ins and calendar demo rows were written.
   await db.query(
-    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$3 AND task_type='data_verification'`,
-    [demoYouthIds[0], demoYouthIds[1], personIds[0]]);
+    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$2 AND task_type='data_verification'`,
+    [demoYouthIds[0], personIds[0]]);
   await db.query(
-    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$3 AND task_type='registration_review'`,
-    [demoYouthIds[1], demoYouthIds[0], personIds[1]]);
+    `UPDATE youth_welfare_follow_up_tasks SET person_id=$1 WHERE person_id=$2 AND task_type='registration_review'`,
+    [demoYouthIds[1], personIds[1]]);
 }
+
+// ---- Service Attendance demo people ---------------------------------------
+// The roll call counts members and VIPs separately, so the preview needs members
+// who were never VIPs (plus one VIP with a month of straight Sundays to show the
+// token hand-out). They are created before the VIP block below so the VIP block
+// leaves them alone.
+const COLLATORS = [
+  // [first, last, category, current-month Sundays attended]
+  ['Jose', 'Bautista', 'member', 0],
+  ['Maria', 'Santos', 'member', 0],
+  ['Ruth', 'Aquino', 'member', 0],
+  ['Joshua', 'Reyes', 'member', 0],
+  ['Andrea', 'Lim', 'member', 0],
+  ['Mark', 'Dela Cruz', 'vip', 4],
+];
+const collatorIds = [];
+const thisMonthSundays = (() => {
+  const t = new Date(); t.setHours(12, 0, 0, 0);
+  const out = [];
+  for (let d = 1; d <= t.getDate(); d++) { const c = new Date(t.getFullYear(), t.getMonth(), d, 12); if (c.getDay() === 0) out.push(iso(c)); }
+  return out;
+})();
+for (let i = 0; i < COLLATORS.length; i++) {
+  const [first, last, category, monthSundays] = COLLATORS[i];
+  const code = `2026-C${String(i + 1).padStart(3, '0')}`;
+  let row = (await db.query('SELECT id FROM people WHERE person_code=$1', [code])).rows[0];
+  if (!row) {
+    row = (await db.query(
+      `INSERT INTO people(id,person_code,first_name,last_name,full_name,status,date_registered,registration_source,is_demo)
+       VALUES($1,$2,$3,$4,$5,$6,$7,'staff',true) RETURNING id`,
+      [await nextId('people'), code, first, last, `${first} ${last}`, category === 'vip' ? 'first_timer' : 'member',
+        iso(new Date(Date.now() - 70 * 86400000))])).rows[0];
+  }
+  collatorIds.push(row.id);
+  if (category !== 'vip') continue;
+  let reg = (await db.query('SELECT id FROM vip_registrations WHERE person_id=$1', [row.id])).rows[0];
+  if (!reg) {
+    reg = (await db.query('INSERT INTO vip_registrations(id,person_id,full_name,review_status) VALUES($1,$2,$3,$4) RETURNING id',
+      [await nextId('vip_registrations'), row.id, `${first} ${last}`, 'reviewed'])).rows[0];
+  }
+  for (const d of thisMonthSundays.slice(-monthSundays)) {
+    const exists = (await db.query('SELECT 1 FROM vip_checkins WHERE registration_id=$1 AND date_key=$2::date', [reg.id, d])).rows[0];
+    if (exists) continue;
+    await db.query(`INSERT INTO vip_checkins(id,registration_id,date_key,status,validated_at) VALUES($1,$2,$3::date,'valid',now())`,
+      [await nextId('vip_checkins'), reg.id, d]);
+  }
+}
+console.log('seeded Service Attendance demo people:', collatorIds.length);
+const collatorSet = new Set(collatorIds.map(String));
 
 // ---- VIP attendance: last 10 Sundays --------------------------------------
 // Attendance is tracked only for VIPs, so each demo person is given a VIP
@@ -173,7 +229,7 @@ if (demoYouthIds.length >= 2) {
 // general Sunday roster any more. People seeded for the Youth Welfare portal are
 // skipped: that portal excludes anyone with a VIP registration.
 const sundays = lastSundays(10);
-const youthOnly = new Set(demoYouthIds.map(String));
+const youthOnly = new Set([...demoYouthIds.map(String), ...collatorSet]);
 let recCount = 0;
 for (let i = 0; i < personIds.length; i++) {
   const pid = personIds[i];
@@ -182,8 +238,10 @@ for (let i = 0; i < personIds.length; i++) {
   let reg = (await db.query('SELECT id FROM vip_registrations WHERE person_id=$1 ORDER BY id LIMIT 1', [pid])).rows[0];
   if (!reg) {
     reg = (await db.query(
+      // $2 is cast explicitly: PGlite cannot infer a parameter type in a SELECT
+      // list, so the preview seeder failed here before it could add attendance.
       `INSERT INTO vip_registrations(id,person_id,full_name,review_status,service_date)
-       SELECT $1,p.id,coalesce(nullif(p.full_name,''),concat_ws(' ',p.first_name,p.last_name)),'reviewed',$2
+       SELECT $1,p.id,coalesce(nullif(p.full_name,''),concat_ws(' ',p.first_name,p.last_name)),'reviewed',$2::date
        FROM people p WHERE p.id=$3 RETURNING id`,
       [await nextId('vip_registrations'), sundays[0], pid])).rows[0];
   }
@@ -227,26 +285,6 @@ if (!evCount) {
 await db.query("INSERT INTO monthly_prizes(month,description) VALUES($1,$2) ON CONFLICT(month) DO NOTHING",
   [new Date().toISOString().slice(0, 7), 'Gift basket + lunch date with the pastors']);
 
-// ---- QA rows: Test VIP (person id=25, registration 901, checkins 801-802) ---
-const qaPerson = (await db.query("SELECT id FROM people WHERE id=25")).rows[0];
-if (!qaPerson) {
-  await db.query(
-    `INSERT INTO people(id,person_code,first_name,last_name,full_name,status,date_registered,registration_source,is_demo)
-     VALUES(25,'2026-0099','Test','VIP','Test VIP','first_timer',$1,'vip',true)`, [iso(new Date())]);
-}
-const qaReg = (await db.query('SELECT id FROM vip_registrations WHERE id=901')).rows[0];
-if (!qaReg) {
-  await db.query(
-    `INSERT INTO vip_registrations(id,person_id,full_name,age,school,inviter,contact,review_status)
-     VALUES(901,25,'Test VIP',25,'QA University','Walk-in','0917 000 0099','reviewed')`);
-}
-for (const [cid, d] of [[801, sundays[1]], [802, sundays[0]]]) {
-  const exists = (await db.query('SELECT 1 FROM vip_checkins WHERE id=$1', [cid])).rows[0];
-  if (exists) continue;
-  await db.query(
-    `INSERT INTO vip_checkins(id,registration_id,date_key,status) VALUES($1,901,$2,'valid')`, [cid, d]);
-}
-console.log('QA rows ready (person 25 / reg 901 / checkins 801-802)');
 
 // Keep ID generators ahead of the fixed QA IDs, so the VIP preview seed and
 // subsequent app writes do not collide with person 25 / registration 901.
