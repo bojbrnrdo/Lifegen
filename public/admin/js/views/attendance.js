@@ -4,12 +4,12 @@
 // portal's own design system and on the portal's own data:
 //
 //   Sunday picker      previous / next Sunday, date picker, Today
-//   roll call          Members · VIP first timers · VIP returning · headcount
-//   headcount          people in the room who were never checked in by name
-//   list               search, All / Members / VIPs / Not yet in, one tap to mark
-//   follow-up          every VIP still building towards 4 Sundays, and who is
-//                      ready to become a Member and receive a token
-//   attendance history the four Sundays of a VIP, per person
+//   hero               the totals ring · legend · headcount stepper
+//   chips              tokens given, ready to claim, headcount
+//   tabs               All / Members / VIPs / Not yet in
+//   roll call          one row per person, one tap to mark in
+//   follow-up          every VIP still building towards four Sundays
+//   attendance history the four Sundays of a person
 //   report             the month per Sunday, copyable, printable
 //   add / check in     walk-in by name: existing person, or a new VIP
 //
@@ -20,10 +20,10 @@
 
 import { api } from '../api.js';
 import { state, can } from '../app.js';
-import { html, raw, icon, fmtDate, fmtDateTime, toast, withLoading, openModal, closeModal, debounce, esc, emptyState } from '../ui.js';
+import { html, raw, icon, fmtDate, toast, withLoading, openModal, closeModal, debounce, esc, emptyState } from '../ui.js';
 
-const STATUS_ORDER = ['first', 'second', 'third', 'fourth'];
 const STAGE_LABELS = { first: '1st Sunday', second: '2nd Sunday', third: '3rd Sunday', fourth: '4th Sunday' };
+const STAGE_ORDER = ['first', 'second', 'third', 'fourth'];
 const GIFT_SUNDAYS = 4;
 
 /** Manila "today", so the page agrees with the server's service date. */
@@ -33,28 +33,32 @@ function manilaToday() {
   }).formatToParts(new Date()).map((p) => [p.type, p.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
+
 /** The Sunday of a date key, or the nearest previous one. */
 function sundayOf(dateKey) {
-  const d = new Date(`${dateKey}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = String(dateKey || manilaToday()).split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return date.toISOString().slice(0, 10);
 }
+
 function shiftSunday(dateKey, weeks) {
-  const d = new Date(`${dateKey}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + weeks * 7);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = String(dateKey).split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + weeks * 7);
+  return date.toISOString().slice(0, 10);
 }
+
 /**
- * What the numbers mean. Kept in one place because the hero, the list summary
- * and the copied report must never disagree: a person counted as a Member today
- * is not also counted as a VIP, and the headcount is always people who are not
- * in the list.
+ * What the numbers mean. Kept in one place because the ring, the legend and the
+ * copied report must never disagree: a person counted as a Member today is not
+ * also counted as a VIP, and the headcount is always people not in the list.
  */
 function stats(data) {
-  const marked = data.items.filter((i) => i.present);
-  const members = marked.filter((i) => i.category === 'member').length;
-  const vipFirst = marked.filter((i) => i.category === 'vip' && i.first_timer).length;
-  const vipReturning = marked.filter((i) => i.category === 'vip' && !i.first_timer).length;
+  const present = data.items.filter((i) => i.present);
+  const members = present.filter((i) => i.category === 'member').length;
+  const vipFirst = present.filter((i) => i.category === 'vip' && i.first_timer).length;
+  const vipReturning = present.filter((i) => i.category === 'vip' && !i.first_timer).length;
   const headcount = Number(data.headcount) || 0;
   return {
     members, vipFirst, vipReturning, headcount,
@@ -65,19 +69,31 @@ function stats(data) {
   };
 }
 
-/** One conic-gradient ring, in the same four colours as the legend. */
+/** The ring: one stroke per group, in the same four colours as the legend. */
 function ringSvg(s) {
-  const total = s.members + s.vipFirst + s.vipReturning + s.headcount;
-  const parts = [[s.members, 'var(--green-600)'], [s.vipFirst, 'var(--amber-600)'], [s.vipReturning, 'var(--blue-600)'], [s.headcount, 'var(--ink-300)']];
-  if (!total) return '<div class="sa-ring__empty" aria-hidden="true"></div>';
-  let at = 0;
-  const stops = parts.filter(([, ]) => true).map(([n, color]) => {
-    if (!n) return '';
-    const from = (at / total) * 100, to = ((at + n) / total) * 100;
-    at += n;
-    return `${color} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
-  }).filter(Boolean);
-  return `<div class="sa-ring__ring" style="background:conic-gradient(${stops.join(',')})" aria-hidden="true"></div>`;
+  const circumference = 2 * Math.PI * 40;
+  const parts = [
+    [s.members, '#6ee7b7'],
+    [s.vipFirst, '#fbbf24'],
+    [s.vipReturning, '#93c5fd'],
+    [s.headcount, '#d9e0dc'],
+  ];
+  const total = parts.reduce((n, [value]) => n + value, 0);
+  let offset = 0;
+  const arcs = parts.map(([value, colour]) => {
+    if (!value || !total) return '';
+    const length = (value / total) * circumference;
+    // A 2px gap between segments, like the original page.
+    const arc = `<circle cx="50" cy="50" r="40" fill="none" stroke="${colour}" stroke-width="10"
+      stroke-dasharray="${Math.max(length - 2, 0.5).toFixed(2)} ${(circumference - length + 2).toFixed(2)}"
+      stroke-dashoffset="${(-offset).toFixed(2)}" />`;
+    offset += length;
+    return arc;
+  }).join('');
+  return `<svg class="sa-ring__ring" viewBox="0 0 100 100" aria-hidden="true">
+    <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="10" />
+    ${arcs}
+  </svg>`;
 }
 
 /** "2026-11" -> "November 2026", without borrowing a timezone. */
@@ -85,6 +101,26 @@ function monthLabel(month) {
   const [y, m] = String(month || '').split('-').map(Number);
   if (!y || !m) return String(month || '');
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** A stable colour per name, so the same person keeps the same tile. */
+const AVATAR_COLOURS = ['#0b7a58', '#6d44b0', '#c27803', '#1d6fb8', '#b4407a', '#3d7d3a', '#a64b2a'];
+function avatarColour(name) {
+  let hash = 0;
+  for (const ch of String(name || '')) hash = (hash + ch.charCodeAt(0)) % 997;
+  return AVATAR_COLOURS[hash % AVATAR_COLOURS.length];
+}
+
+/**
+ * "Sun, Nov 22, 2026" — the short form the door sheet uses in the date bar,
+ * built from the date key so the timezone never shifts the day.
+ */
+function shortDate(dateKey) {
+  const [y, m, d] = String(dateKey).split('-').map(Number);
+  if (!y || !m || !d) return String(dateKey || '');
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  });
 }
 
 const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
@@ -136,84 +172,84 @@ export async function renderServiceAttendance({ main, query }) {
     report: null,
     unrecorded: [],
     progress: null,
-    loading: true,
-    savingHeadcount: false,
   };
   if (view.date > today) view.date = sundayOf(today);
 
   main.innerHTML = html`
-    <div class="page-header">
-      <div><h1>Service Attendance</h1><p class="sub">The Sunday roll call — members, VIPs and the headcount that never checked in.</p></div>
-      <div class="page-actions">
-        <button class="btn" id="saPrint" title="Print this Sunday">${icon('print')} Print</button>
-        <button class="btn" id="saRefresh" title="Reload">${icon('undo')} Refresh</button>
-        ${writable() ? html`<button class="btn btn--primary" id="saAdd">${icon('plus')} Check in someone</button>` : ''}
+    <div class="sa-page">
+      <div class="page-header sa-head">
+        <div><h1>Service Attendance</h1><p class="sub">The Sunday roll call at the door — members, VIPs and the headcount that never checked in.</p></div>
+        <div class="page-actions">
+          <button class="btn" id="saRefresh" title="Reload">${icon('undo')} Refresh</button>
+        </div>
       </div>
-    </div>
 
-    <section class="sa-datebar" aria-label="Choose the Sunday service">
-      <button class="sa-datebar__step" id="saPrev" type="button" aria-label="Previous Sunday">${icon('chevL', 18)}</button>
-      <label class="sa-datebar__pick">
-        ${icon('calendar', 17)}
-        <span class="sa-datebar__label" id="saDateLabel">Loading…</span>
-        <input type="date" id="saDateInput" max="${today}" aria-label="Sunday service date" />
-      </label>
-      <button class="sa-datebar__step" id="saNext" type="button" aria-label="Next Sunday">${icon('chevR', 18)}</button>
-      <button class="btn btn--sm" id="saToday" type="button">Today</button>
-      <span class="sa-datebar__state" id="saDateState" aria-live="polite"></span>
-    </section>
+      <div class="sa-datebar" aria-label="Choose the Sunday service">
+        <button class="sa-datebar__step" id="saPrev" type="button" aria-label="Previous Sunday">${icon('chevL', 20)}</button>
+        <label class="sa-datebar__pick">
+          ${icon('calendar', 18)}
+          <span class="sa-datebar__label" id="saDateLabel">Loading…</span>
+          <input type="date" id="saDateInput" max="${today}" aria-label="Sunday service date" />
+        </label>
+        <button class="sa-datebar__step" id="saNext" type="button" aria-label="Next Sunday">${icon('chevR', 20)}</button>
+        <button class="sa-datebar__today" id="saToday" type="button">Today</button>
+      </div>
 
-    <div class="grid grid--2 sa-top">
-      <section class="card sa-hero" id="saHero" aria-label="Sunday totals"><div class="card__body"><div class="loading">Loading the Sunday…</div></div></section>
-
-      <section class="card sa-side">
-        <div class="card__header"><div><h2>Headcount</h2><p class="hint">People in the room who were never checked in by name.</p></div></div>
-        <div class="card__body">
-          <div class="sa-headcount">
-            <button class="sa-headcount__step" id="saHcMinus" type="button" aria-label="Fewer by one">−</button>
+      <section class="sa-hero" id="saHero" aria-label="Sunday totals">
+        <div class="sa-ring" id="saRing"></div>
+        <div class="sa-hero__info">
+          <ul class="sa-legend" id="saLegend"></ul>
+          <div class="sa-hc">
+            <span>Headcount not checked in</span>
+            <button class="sa-hc__step" id="saHcMinus" type="button" aria-label="Fewer by one">−</button>
             <input id="saHcInput" type="number" min="0" max="100000" step="1" inputmode="numeric" value="0" aria-label="Headcount not checked in" />
-            <button class="sa-headcount__step" id="saHcPlus" type="button" aria-label="More by one">+</button>
-            ${writable() ? html`<button class="btn btn--sm" id="saHcSave" type="button">Save</button>` : ''}
+            <button class="sa-hc__step" id="saHcPlus" type="button" aria-label="More by one">+</button>
           </div>
-          <p class="small muted mt-1">Total = checked in + headcount. Saved for this Sunday, so the month report keeps its history.</p>
-          <div class="sa-unrecorded" id="saUnrecorded" aria-live="polite"></div>
         </div>
       </section>
-    </div>
 
-    <section class="card sa-list-card">
-      <div class="card__header">
-        <div><h2>Roll call</h2><p class="hint" id="saListHint">Loading…</p></div>
-        <div class="segmented" id="saTabs" role="group" aria-label="Filter the roll call">
-          <button data-sa-tab="all" class="${view.tab === 'all' ? 'active' : ''}">All</button>
-          <button data-sa-tab="member" class="${view.tab === 'member' ? 'active' : ''}">Members</button>
-          <button data-sa-tab="vip" class="${view.tab === 'vip' ? 'active' : ''}">VIPs</button>
-          <button data-sa-tab="absent" class="${view.tab === 'absent' ? 'active' : ''}">Not yet in</button>
-        </div>
-      </div>
-      <div class="card__body">
-        <div class="toolbar sa-toolbar">
-          <label class="gsearch grow" aria-label="Search the roll call">${icon('search', 17)}<input type="search" id="saSearch" placeholder="Search a name…" autocomplete="off" /></label>
-          ${writable() ? html`<button class="btn btn--sm" id="saMarkAll" type="button">Mark everyone listed in</button>` : html`<span class="small muted">Read-only: your role can see attendance but not record it.</span>`}
-        </div>
-        <div id="saList" class="sa-list"><div class="loading">Loading the roll call…</div></div>
-      </div>
-    </section>
+      <div class="sa-chips" id="saChips" aria-live="polite"></div>
 
-    <section class="card sa-followup" id="saFollowup" aria-label="VIP follow-up">
-      <div class="card__header"><div><h2>VIP follow-up</h2><p class="hint">First timers building towards their fourth Sunday, and who is ready for a token.</p></div></div>
-      <div class="card__body" id="saFollowupBody"><div class="loading">Loading…</div></div>
-    </section>
-
-    <section class="card sa-report" id="saReport" aria-label="Monthly attendance report">
-      <div class="card__header">
-        <div><h2>Month report</h2><p class="hint" id="saReportHint">Every Sunday of the month, with its totals.</p></div>
-        <div class="row">
-          <button class="btn btn--sm" id="saReportCopy" type="button">${icon('copy')} Copy report</button>
-        </div>
+      <div class="sa-seg" id="saTabs" role="group" aria-label="Filter the roll call">
+        <button type="button" data-sa-tab="all" class="${view.tab === 'all' ? 'is-on' : ''}">All</button>
+        <button type="button" data-sa-tab="member" class="${view.tab === 'member' ? 'is-on' : ''}">Members</button>
+        <button type="button" data-sa-tab="vip" class="${view.tab === 'vip' ? 'is-on' : ''}">VIPs</button>
+        <button type="button" data-sa-tab="absent" class="${view.tab === 'absent' ? 'is-on' : ''}">Not yet in</button>
       </div>
-      <div class="card__body" id="saReportBody"><div class="loading">Loading the month…</div></div>
-    </section>`;
+
+      <label class="sa-search" aria-label="Search the roll call">
+        ${icon('search', 18)}
+        <input type="search" id="saSearch" placeholder="Search name…" autocomplete="off" />
+      </label>
+
+      <div class="sa-listbar">
+        <span id="saListHint">Loading the roll call…</span>
+        ${writable() ? html`<button class="sa-link" id="saMarkAll" type="button">Mark everyone listed in</button>` : html`<span class="sa-readonly">Read-only: your role can see attendance but not record it.</span>`}
+      </div>
+
+      <div id="saList" class="sa-list"><div class="loading">Loading the roll call…</div></div>
+
+      <section id="saFollowup" aria-label="VIP follow-up">
+        <h2 class="sa-h2">Follow-up queue · 48 hrs</h2>
+        <div id="saFollowupBody"><div class="loading">Loading…</div></div>
+      </section>
+
+      <section id="saReport" aria-label="Monthly attendance report">
+        <h2 class="sa-h2">Report</h2>
+        <div class="sa-sum">
+          <div><span id="saReportSummary">–</span><small>Total = checked in + headcount</small></div>
+          <div class="row">
+            <button class="btn btn--sm" id="saReportCopy" type="button">${icon('copy')} Copy</button>
+            <button class="btn btn--sm" id="saPrint" type="button">${icon('print')} Print</button>
+          </div>
+        </div>
+        <p class="sa-hint" id="saReportHint">Every Sunday of the month, with its totals.</p>
+        <div id="saReportBody"><div class="loading">Loading the month…</div></div>
+        <div id="saUnrecorded" aria-live="polite"></div>
+      </section>
+
+      ${writable() ? html`<button class="sa-fab" id="saAdd" type="button">${icon('plus', 20)} Check in</button>` : ''}
+    </div>`;
 
   /** The context the gift counter needs, safe before the profiles have loaded. */
   const progressContext = (data) => view.progress
@@ -233,12 +269,10 @@ export async function renderServiceAttendance({ main, query }) {
     if (!keepHeadcount) hcInput.value = String(data.headcount ?? 0);
     dateInput.max = data.today || today;
     dateInput.value = data.date;
-    $('#saDateLabel').textContent = fmtDate(data.date, { weekday: true });
     const isToday = data.date === data.today;
+    $('#saDateLabel').textContent = `${shortDate(data.date)}${isToday ? ' · Today' : ''}`;
     $('#saToday').hidden = isToday;
     $('#saNext').disabled = data.date >= (data.today || today);
-    $('#saDateState').textContent = data.is_future ? 'This Sunday has not happened yet.'
-      : isToday ? 'Today’s service' : '';
     loadProgress();
     await Promise.all([loadReport(data.month), loadUnrecorded()]);
     render();
@@ -274,42 +308,40 @@ export async function renderServiceAttendance({ main, query }) {
     const data = view.register;
     if (!data) return;
     renderHero(data);
-    renderUnrecorded();
+    renderChips(data);
     renderList(data);
     renderFollowup(data);
     renderReport();
+    renderUnrecorded();
   }
 
   function renderHero(data) {
     const s = stats(data);
-    const pct = (n) => (s.total ? Math.round((n / s.total) * 1000) / 10 : 0);
-    const ring = ringSvg({ members: s.members, vipFirst: s.vipFirst, vipReturning: s.vipReturning, headcount: s.headcount });
-    $('#saHero').innerHTML = html`
-      <div class="card__body sa-hero__body">
-        <div class="sa-ring">
-          ${raw(ring)}
-          <div class="sa-ring__center"><b>${s.total}</b><span>Total</span></div>
-        </div>
-        <div class="sa-hero__info">
-          <div class="kpi-row sa-kpis">
-            <div class="kpi kpi--green"><b>${s.members}</b><span>Members</span></div>
-            <div class="kpi kpi--amber"><b>${s.vipFirst}</b><span>VIP first timers</span></div>
-            <div class="kpi kpi--blue"><b>${s.vipReturning}</b><span>VIP returning</span></div>
-            <div class="kpi"><b>${s.headcount}</b><span>Headcount</span></div>
-          </div>
-          <ul class="sa-legend">
-            <li><i style="background:var(--green-600)"></i>Members <b>${s.members}</b><span>${pct(s.members)}%</span></li>
-            <li><i style="background:var(--amber-600)"></i>VIPs · first timers <b>${s.vipFirst}</b><span>${pct(s.vipFirst)}%</span></li>
-            <li><i style="background:var(--blue-600)"></i>VIPs · returning <b>${s.vipReturning}</b><span>${pct(s.vipReturning)}%</span></li>
-            <li><i style="background:var(--ink-300)"></i>Headcount <b>${s.headcount}</b><span>${pct(s.headcount)}%</span></li>
-          </ul>
-          <p class="small muted">${s.notYetIn} of ${s.roster} people on the roll call are not marked in yet.</p>
-        </div>
-      </div>`;
+    $('#saRing').innerHTML = html`${raw(ringSvg(s))}
+      <div class="sa-ring__center"><b>${s.total}</b><span>Total</span></div>`;
+    $('#saLegend').innerHTML = html`
+      <li><i style="background:#6ee7b7"></i><b>${s.members}</b>Members</li>
+      <li><i style="background:#fbbf24"></i><b>${s.vipFirst}</b>VIPs · first timers</li>
+      <li><i style="background:#93c5fd"></i><b>${s.vipReturning}</b>VIPs · returning</li>
+      <li><i style="background:#d9e0dc"></i><b>${s.headcount}</b>Headcount</li>`;
+  }
+
+  /** The chips under the hero: what the door team needs to know at a glance. */
+  function renderChips(data) {
+    const s = stats(data);
+    const ctx = progressContext(data);
+    const ready = data.items.filter((i) => i.category === 'vip' && giftProgress(i, ctx).ready).length;
+    const tokens = Number(data.tokens_given) || 0;
+    const chips = [];
+    if (ready) chips.push(html`<span class="sa-chip">Ready to claim <b>${ready}</b></span>`);
+    if (tokens) chips.push(html`<span class="sa-chip">Tokens given <b>${tokens}</b></span>`);
+    if (s.headcount) chips.push(html`<span class="sa-chip">Headcount <b>+${s.headcount}</b></span>`);
+    $('#saChips').innerHTML = chips;
   }
 
   function renderUnrecorded() {
     const box = $('#saUnrecorded');
+    if (!box) return;
     if (!view.unrecorded.length) { box.innerHTML = ''; return; }
     const missed = view.unrecorded.filter((d) => !d.recorded && !d.future && !d.today);
     box.innerHTML = missed.length
@@ -332,9 +364,9 @@ export async function renderServiceAttendance({ main, query }) {
     const rows = filtered(data);
     const list = $('#saList');
     const s = stats(data);
-    $('#saListHint').textContent = `${s.total} present (${s.members} members, ${s.vips} VIPs) + ${s.headcount} headcount · ${rows.length} shown`;
+    $('#saListHint').textContent = `${rows.length} of ${s.roster} ${s.roster === 1 ? 'person' : 'people'} · ${s.notYetIn} not marked in yet`;
     if (!rows.length) {
-      list.innerHTML = html`<div class="empty"><h3>Nobody matches</h3><p>Try another name, or switch the filter.</p></div>`;
+      list.innerHTML = html`<div class="sa-empty"><h3>Nobody matches</h3><p>Try another name, or switch the filter.</p></div>`;
       return;
     }
     list.innerHTML = html`<div class="sa-rows">${rows.map((i) => row(i, data)).reduce((a, b) => html`${a}${b}`, '')}</div>`;
@@ -344,38 +376,35 @@ export async function renderServiceAttendance({ main, query }) {
     list.querySelectorAll('[data-sa-history]').forEach((el) => {
       el.onclick = () => openHistory(Number(el.dataset.saHistory));
     });
-    list.querySelectorAll('[data-sa-cat]').forEach((sel) => {
-      sel.onchange = (event) => setCategory(Number(sel.dataset.saCat), event.target.value, event.target);
-    });
   }
 
   function row(item, data) {
     const progress = item.category === 'vip' ? giftProgress(item, progressContext(data)) : null;
     const tag = item.category === 'vip'
-      ? (item.first_timer ? html`<span class="badge badge--first_timer">First timer</span>` : html`<span class="badge badge--returning">VIP</span>`)
-      : html`<span class="badge badge--member">Member</span>`;
+      ? (item.first_timer ? html`<span class="sa-tag sa-tag--first">First timer</span>` : html`<span class="sa-tag sa-tag--vip">VIP</span>`)
+      : '';
     const dots = progress ? html`<span class="sa-dots" title="${progress.thisMonth} of ${progress.target} Sundays this month" aria-label="${progress.thisMonth} of ${progress.target} Sundays this month">${Array.from({ length: progress.target }, (_, n) => html`<i class="${n < Math.min(progress.thisMonth, progress.target) ? 'on' : ''}"></i>`)}</span>` : '';
     const meta = [
-      item.lifegroup_name ? html`<span>${item.lifegroup_name}</span>` : (item.category === 'vip' ? html`<span class="sa-nocell">No cell yet</span>` : ''),
-      item.status === 'member' || item.status === 'leader' || item.status === 'volunteer' ? html`<span>${item.status.charAt(0).toUpperCase() + item.status.slice(1)}</span>` : '',
-      progress ? html`<span>${progress.thisMonth}/${progress.target} this month</span>` : '',
-      item.present_source === 'vip_checkin' ? html`<span title="Validated VIP check-in">${icon('check', 13)} VIP check-in</span>` : '',
+      // The line under the name, the way the door team reads people: who brought
+      // them (VIPs), or simply that they are a Member, plus their cell if known.
+      item.category === 'member'
+        ? html`<span>Member${item.lifegroup_name ? html` · ${item.lifegroup_name}` : ''}</span>`
+        : item.inviter ? html`<span>Invited by ${item.inviter}</span>`
+          : item.lifegroup_name ? html`<span>${item.lifegroup_name}</span>` : '',
+      progress ? html`<span class="sa-meta__run">${dots}<span>${Math.min(progress.thisMonth, progress.target)}/${progress.target}</span></span>` : '',
+      item.category === 'vip' && !item.lifegroup_name ? html`<span class="sa-nocell">No cell yet</span>` : '',
+      item.present_source === 'vip_checkin' ? html`<span title="Validated VIP check-in">${icon('check', 12)} VIP check-in</span>` : '',
       item.marked_by_name && item.present_source === 'roster' ? html`<span>by ${item.marked_by_name}</span>` : '',
       data.is_future ? html`<span>Kept to plan the service</span>` : '',
     ].filter(Boolean);
     const disabled = !writable() || data.is_future;
     return html`
       <div class="sa-row ${item.present ? 'is-present' : ''}">
-        <span class="sa-row__avatar" aria-hidden="true">${initials(item.full_name)}</span>
+        <span class="sa-row__avatar" style="background:${avatarColour(item.full_name)}" aria-hidden="true">${initials(item.full_name)}</span>
         <button class="sa-row__who" type="button" data-sa-history="${item.person_id}" title="Attendance history">
           <strong>${item.full_name}${tag}</strong>
-          <small>${meta.length ? meta.map((m, n) => (n ? html` · ${m}` : m)) : html`<span class="muted">No lifegroup</span>`}</small>
+          <small>${meta.length ? meta.map((m, n) => (n ? html` <i class="sa-sep">·</i> ${m}` : m)) : html`<span class="muted">No lifegroup</span>`}</small>
         </button>
-        ${writable() && item.category === 'vip' && item.present ? html`<select class="sa-row__cat" data-sa-cat="${item.person_id}" aria-label="Roll-call category for ${item.full_name}">
-          <option value="record" selected>${`As recorded (${item.stored_category === 'vip' ? 'VIP' : 'Member'})`}</option>
-          <option value="member">Count as Member</option>
-          <option value="vip">Count as VIP</option>
-        </select>` : ''}
         <button class="sa-check ${item.present ? 'is-on' : ''}" type="button" data-sa-toggle="${item.person_id}"
           ${disabled ? 'disabled' : ''} aria-pressed="${item.present ? 'true' : 'false'}"
           aria-label="${item.present ? 'Mark absent' : 'Mark present'}: ${item.full_name}">
@@ -388,36 +417,37 @@ export async function renderServiceAttendance({ main, query }) {
     const box = $('#saFollowupBody');
     const vips = data.items.filter((i) => i.category === 'vip');
     if (!vips.length) {
-      box.innerHTML = html`<p class="small muted">No VIPs on this Sunday’s roll call yet.</p>`;
+      box.innerHTML = html`<div class="sa-empty"><h3>No follow-ups needed</h3><p>No VIPs on this Sunday’s roll call yet.</p></div>`;
       return;
     }
     const ctx = progressContext(data);
     const rows = vips.map((i) => ({ item: i, p: giftProgress(i, ctx) }))
       .sort((a, b) => (Number(b.p.ready) - Number(a.p.ready)) || (b.p.best - a.p.best) || a.item.full_name.localeCompare(b.item.full_name));
-    const ready = rows.filter((r) => r.p.ready);
-    box.innerHTML = html`
-      ${ready.length ? html`<div class="sa-ready">
-        <div class="row row--between"><div><b>${ready.length} ready for a token</b><div class="small muted">Four Sundays in a row this month. Make them a Member in People, then record the gift in Registration.</div></div>
-        ${can('registrations:manage') ? html`<a class="btn btn--sm" href="#/registrations">Open Registration</a>` : ''}</div>
-        <div class="sa-ready__names">${ready.map((r) => html`<a href="#/people/${r.item.person_id}">${r.item.full_name}</a>`)}</div>
-      </div>` : ''}
-      <div class="sa-fu-grid">
-        ${rows.map(({ item, p }) => html`
-          <div class="sa-fu ${p.ready ? 'is-ready' : ''}">
-            <div class="sa-fu__head">
-              <div><a href="#/people/${item.person_id}"><b>${item.full_name}</b></a>
-                <small>${item.lifegroup_name ? esc(item.lifegroup_name) : 'No cell yet'}${item.present ? ' · in today' : ' · not in yet'}</small></div>
-              ${p.ready ? html`<span class="badge badge--present">Completed ${p.target}/${p.target}</span>` : html`<span class="badge">${p.run}/${p.target}</span>`}
+    box.innerHTML = html`<div class="sa-fu-list">
+      ${rows.map(({ item, p }) => html`
+        <article class="sa-fu ${p.ready ? 'is-ready' : ''}">
+          <div class="sa-fu__head">
+            <div>
+              <a href="#/people/${item.person_id}"><b>${item.full_name}</b></a>
+              <small>${item.inviter ? `Assigned to ${esc(item.inviter)}` : 'Unassigned'}${item.lifegroup_name ? '' : ' · needs a cell'}${p.ready ? ` · completed ${p.target}/${p.target} Sundays` : ''}</small>
             </div>
-            <div class="sa-steps" aria-label="${p.run} of ${p.target} Sundays in a row">
-              ${STATUS_ORDER.slice(0, p.target).map((s, n) => html`<span class="${n < p.run ? 'on' : ''}" title="${STAGE_LABELS[s]}"></span>`)}
-            </div>
-            <div class="row row--between">
-              <span class="small muted">${p.ready ? 'Ready to become a Member and receive a token.' : `${p.remaining} more in a row for the token`}</span>
-              <button class="btn btn--sm" type="button" data-sa-history="${item.person_id}">History</button>
-            </div>
-          </div>`)}
-      </div>`;
+            ${p.ready ? html`<span class="sa-tag sa-tag--done">Completed</span>` : ''}
+          </div>
+          <div class="sa-steps" aria-label="${p.run} of ${p.target} Sundays in a row">
+            ${STAGE_ORDER.slice(0, p.target).map((stage, n) => html`
+              <div class="sa-step ${n < p.run ? 'on' : ''}">
+                <i></i><span>${STAGE_LABELS[stage]}</span>
+              </div>`)}
+          </div>
+          ${p.ready
+            ? html`<p class="sa-fu__note">Ready to become a <b>Member</b> and receive a <b>token</b>.</p>`
+            : html`<p class="sa-fu__note">${p.remaining} more in a row for the token</p>`}
+          <div class="sa-fu__actions">
+            <button class="btn btn--sm" type="button" data-sa-history="${item.person_id}">View attendance</button>
+            ${p.ready && writable() ? html`<a class="sa-link" href="#/registrations">Open Registration</a>` : ''}
+          </div>
+        </article>`)}
+    </div>`;
     box.querySelectorAll('[data-sa-history]').forEach((b) => { b.onclick = () => openHistory(Number(b.dataset.saHistory)); });
   }
 
@@ -426,15 +456,11 @@ export async function renderServiceAttendance({ main, query }) {
     const body = $('#saReportBody');
     if (!report) return;
     const t = report.totals;
+    const data = view.register;
+    const s = stats(data);
     $('#saReportHint').textContent = `${monthLabel(report.month)} · ${t.services} recorded ${t.services === 1 ? 'Sunday' : 'Sundays'}`;
+    $('#saReportSummary').textContent = `${fmtDate(data.date, { weekday: true })} · Total ${s.total} · Members ${s.members} · VIPs ${s.vips} (first timers ${s.vipFirst}, returning ${s.vipReturning})`;
     body.innerHTML = html`
-      <div class="kpi-row mb-2">
-        <div class="kpi kpi--green"><b>${t.total}</b><span>Total attendance</span></div>
-        <div class="kpi"><b>${t.members}</b><span>Members</span></div>
-        <div class="kpi kpi--blue"><b>${t.vips}</b><span>VIPs</span></div>
-        <div class="kpi"><b>${t.headcount}</b><span>Headcount</span></div>
-        <div class="kpi"><b>${t.average}</b><span>Average per Sunday</span></div>
-      </div>
       <div class="table-wrap"><table class="table">
         <thead><tr><th>Sunday</th><th class="num">Members</th><th class="num">VIPs</th><th class="num">Headcount</th><th class="num">Total</th><th></th></tr></thead>
         <tbody>${report.sundays.map((d) => html`<tr class="${d.today ? 'is-today' : ''}">
@@ -446,9 +472,10 @@ export async function renderServiceAttendance({ main, query }) {
           <td class="actions">${d.held ? html`<button class="btn btn--sm" type="button" data-sa-open="${d.date}">Open</button>` : html`<span class="small muted">${d.future ? 'upcoming' : 'not recorded'}</span>`}</td>
         </tr>`)}</tbody>
         <tfoot><tr><td>Month total</td><td class="num">${t.members}</td><td class="num">${t.vips}</td><td class="num">${t.headcount}</td><td class="num">${t.total}</td><td></td></tr></tfoot>
-      </table></div>
-      <p class="small muted mt-1">Totals count only Sundays that have happened. A Sunday with no attendance at all reads 0 — see the warning under Headcount.</p>`;
-    body.querySelectorAll('[data-sa-open]').forEach((b) => { b.onclick = () => { view.date = b.dataset.saOpen; searchInput.value = ''; view.q = ''; refresh(); }; });
+      </table></div>`;
+    body.querySelectorAll('[data-sa-open]').forEach((b) => {
+      b.onclick = () => { view.date = b.dataset.saOpen; searchInput.value = ''; view.q = ''; refresh(); };
+    });
   }
 
   // ---- actions -----------------------------------------------------------
@@ -479,6 +506,7 @@ export async function renderServiceAttendance({ main, query }) {
       view.register = result.register;
       hcInput.value = String(result.register.headcount ?? 0);
       toast(category === 'record' ? 'Counting them as recorded.' : `Counting them as ${category === 'vip' ? 'VIP' : 'Member'} this Sunday.`);
+      loadProgress();
       await loadReport(result.register.month);
       render();
     } catch (err) {
@@ -518,13 +546,26 @@ export async function renderServiceAttendance({ main, query }) {
         <div class="mt-2">${view.register.sundays.map((d, n) => html`
           <div class="sa-hist ${attended.has(d) ? 'is-on' : ''}">
             <span class="sa-hist__n">${n + 1}</span>
-            <div><b>${STAGE_LABELS[STATUS_ORDER[n]] || `Sunday ${n + 1}`}</b><small>${fmtDate(d, { weekday: true })}</small></div>
+            <div><b>${STAGE_LABELS[STAGE_ORDER[n]] || `Sunday ${n + 1}`}</b><small>${fmtDate(d, { weekday: true })}</small></div>
             <span class="sa-hist__s">${attended.has(d) ? 'Present' : d > view.register.today ? 'Upcoming' : 'Not recorded'}</span>
           </div>`)}</div>
+        ${writable() && item ? html`<label class="sa-field mt-2">How this Sunday counts
+          <select data-sa-cat="${item.person_id}" aria-label="Roll-call category for ${item.full_name}">
+            <option value="record" selected>${`As recorded (${item.stored_category === 'vip' ? 'VIP' : 'Member'})`}</option>
+            <option value="member">Count as Member</option>
+            <option value="vip">Count as VIP</option>
+          </select>
+        </label>` : ''}
         <p class="small muted mt-2">${isVip ? 'A VIP’s presence is the validated VIP check-in that the VIP portal, the prize streak and the Gift Tracker read.' : 'A member is marked present on the roll call. Members do not have a VIP streak or a prize counter.'}</p>`,
       footer: html`<a class="btn" href="#/people/${personId}">Open profile</a><button class="btn btn--primary" data-sa-close>Close</button>`.value,
     });
     modal.querySelector('[data-sa-close]')?.addEventListener('click', () => closeModal());
+    // The same Sunday can count either way for one person (a VIP's first visit as
+    // a Member, say). Kept in the sheet so the rows stay one name and one tap.
+    modal.querySelector('[data-sa-cat]')?.addEventListener('change', (event) => {
+      closeModal();
+      setCategory(Number(event.target.dataset.saCat), event.target.value, event.target);
+    });
   }
 
   /** Walk-in: an existing person checked in, or a brand new VIP recorded properly. */
@@ -688,18 +729,18 @@ export async function renderServiceAttendance({ main, query }) {
     const btn = event.target.closest('[data-sa-tab]');
     if (!btn) return;
     view.tab = btn.dataset.saTab;
-    main.querySelectorAll('[data-sa-tab]').forEach((b) => b.classList.toggle('active', b === btn));
+    main.querySelectorAll('[data-sa-tab]').forEach((b) => b.classList.toggle('is-on', b === btn));
     renderList(view.register);
   };
   const stepHeadcount = (delta) => {
     const next = Math.max(0, (Math.floor(Number(hcInput.value) || 0)) + delta);
     hcInput.value = String(next);
     if (writable()) saveHeadcount();
+    else renderHero(view.register);
   };
   $('#saHcMinus').onclick = () => stepHeadcount(-1);
   $('#saHcPlus').onclick = () => stepHeadcount(1);
-  $('#saHcSave')?.addEventListener('click', () => saveHeadcount());
-  hcInput.onchange = () => { if (writable()) saveHeadcount(); };
+  hcInput.onchange = () => { if (writable()) saveHeadcount(); else renderHero(view.register); };
   $('#saReportCopy').onclick = async () => {
     const text = reportText();
     if (!text) return;

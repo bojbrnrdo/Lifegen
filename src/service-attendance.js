@@ -81,6 +81,7 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
             (SELECT min(c.date_key)::text
                FROM vip_checkins c JOIN vip_registrations vr ON vr.id = c.registration_id
               WHERE vr.person_id = p.id AND c.status = 'valid') AS vip_first_attended,
+            (SELECT v.inviter FROM vip_registrations v WHERE v.person_id = p.id ORDER BY v.id LIMIT 1) AS inviter,
             ck.id AS checkin_id,
             sa.id AS override_id, sa.category AS override_category,
             sa.marked_by_name AS marked_by_name, sa.marked_at
@@ -102,6 +103,11 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
 
   const { rows: headRows } = await query('SELECT headcount FROM service_headcounts WHERE date_key=$1::date', [date]);
   const headcount = Number(headRows[0]?.headcount) || 0;
+
+  // Tokens (the gift for four Sundays) already handed over. The Attendance page
+  // only reports the number; the gift itself is recorded in the Gift Tracker.
+  const { rows: giftRows } = await query('SELECT count(*)::int AS n FROM vip_gift_handouts');
+  const tokensGiven = Number(giftRows[0]?.n) || 0;
 
   // Every Sunday of the month, per person, in one query: the VIP check-ins plus
   // the member roster. The gift counter and the history sheet need it, and one
@@ -166,6 +172,8 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
       gift_ready: category === 'vip' && Number(p.vip_sundays_to_date || 0) >= 4,
       lifegroup_id: p.lifegroup_id ? Number(p.lifegroup_id) : null,
       lifegroup_name: p.lifegroup_name || null,
+      // Who invited them — the roll call shows it the way the door team knows people.
+      inviter: p.inviter || null,
       last_seen: lastSeen.get(Number(p.id)) || null,
       marked_by_name: p.marked_by_name || null,
       marked_at: iso(p.marked_at),
@@ -182,6 +190,8 @@ export async function serviceAttendanceRegister({ dateKey } = {}) {
     // The totals themselves are derived from `items` + `headcount` on the client
     // (see stats() in views/attendance.js) so there is one definition of them.
     headcount,
+    // Tokens handed over so far, for the chip under the totals.
+    tokens_given: tokensGiven,
     items,
     month_attendance: monthAttendance,
   };

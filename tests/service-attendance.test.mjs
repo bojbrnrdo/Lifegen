@@ -65,6 +65,10 @@ test('the register reads every source of Sunday presence', () => {
   // A past Sunday must not grow when someone registers later on.
   assert.match(module_, /p\.date_registered <= \$1::date/);
   assert.match(module_, /p\.archived_at IS NULL/);
+  // The token chip is a read-only count of gifts already recorded, never a
+  // second place where a gift is written.
+  assert.match(module_, /FROM vip_gift_handouts/);
+  assert.match(module_, /tokens_given: tokensGiven/);
   // Logged like every other write, so the audit trail stays complete.
   assert.match(module_, /logAction\(client, actor, 'service_attendance'/);
   assert.match(module_, /logAction\(client, actor, 'service_headcounts'/);
@@ -72,7 +76,9 @@ test('the register reads every source of Sunday presence', () => {
 
 test('the register payload carries no private profile or contact fields', () => {
   const select = module_.slice(module_.indexOf('export async function serviceAttendanceRegister'), module_.indexOf('export async function serviceAttendanceReport'));
-  for (const field of ['contact_number', 'email', 'address', 'birthdate', 'school', 'inviter', 'notes']) {
+  // `inviter` is deliberately present: the roll call shows who brought a VIP,
+  // the same name the VIP portal already shows. No contact detail is selected.
+  for (const field of ['contact_number', 'email', 'address', 'birthdate', 'school', 'notes']) {
     assert.doesNotMatch(select, new RegExp(`\\b${field}\\b`), `${field} must not be selected into the roll call`);
   }
 });
@@ -105,7 +111,7 @@ test('the page is an Admin route with its own navigation entry', () => {
 test('the page keeps every part of the Service Attendance design', () => {
   // A roll call with one tap per person, a Sunday picker, the headcount, the
   // follow-up queue, the month report, the history sheet and walk-in check-in.
-  for (const id of ['saPrev', 'saNext', 'saToday', 'saDateInput', 'saHcInput', 'saHcMinus', 'saHcPlus', 'saHcSave', 'saSearch', 'saTabs', 'saList', 'saFollowup', 'saReport', 'saReportCopy', 'saAdd', 'saMarkAll', 'saPrint']) {
+  for (const id of ['saPrev', 'saNext', 'saToday', 'saDateInput', 'saHcInput', 'saHcMinus', 'saHcPlus', 'saSearch', 'saTabs', 'saList', 'saFollowup', 'saReport', 'saReportCopy', 'saAdd', 'saMarkAll', 'saPrint']) {
     assert.match(view, new RegExp(`id="${id}"`), `${id} is missing`);
   }
   assert.match(view, /function stats\(data\)/);
@@ -118,7 +124,7 @@ test('the page keeps every part of the Service Attendance design', () => {
 
 test('the register is styled by a versioned stylesheet', () => {
   assert.match(read('public/admin/index.html'), /\/admin\/attendance\.css\?v=\d+\.\d+\.\d+/);
-  for (const part of ['.sa-datebar', '.sa-ring', '.sa-check', '.sa-fu', '.sa-hist', '.sa-match', '@media print', 'prefers-reduced-motion']) {
+  for (const part of ['.sa-datebar', '.sa-ring', '.sa-check', '.sa-fu', '.sa-hist', '.sa-match', '.sa-hero', '.sa-seg', '.sa-fab', '.sa-step', '@media print', 'prefers-reduced-motion']) {
     assert.ok(css.includes(part), `${part} is missing from attendance.css`);
   }
   // The tap target at the door must not shrink.

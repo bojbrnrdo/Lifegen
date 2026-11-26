@@ -35,9 +35,9 @@ const PEOPLE = [
   // id, name, category, present, extra
   [1, 'Maria Santos', 'member', false, { lifegroup_name: 'Girls · Central', status: 'member' }],
   [2, 'Jose Bautista', 'member', true, { lifegroup_name: 'Boys · North', status: 'member', present_source: 'roster', marked_by_name: 'Demo Admin' }],
-  [3, 'Ana Reyes', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 1, first_timer: false }],
-  [4, 'Mark Dela Cruz', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 4, first_timer: false }],
-  [5, 'Grace Lim', 'vip', false, { vip_sundays: 0, first_timer: true }],
+  [3, 'Ana Reyes', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 1, first_timer: false, inviter: 'Maria' }],
+  [4, 'Mark Dela Cruz', 'vip', true, { present_source: 'vip_checkin', vip_sundays: 4, first_timer: false, inviter: 'Zxai' }],
+  [5, 'Grace Lim', 'vip', false, { vip_sundays: 0, first_timer: true, inviter: 'Joy' }],
 ];
 const history = { 3: ['2026-11-15', '2026-11-22'], 4: ['2026-11-01', '2026-11-08', '2026-11-15', '2026-11-22'], 5: [] };
 
@@ -54,6 +54,7 @@ const register = () => ({
   today: '2026-11-25',
   is_future: false,
   headcount,
+  tokens_given: 1,
   // Every Sunday of the month per person — the register carries it so the page
   // never asks for a profile per VIP.
   month_attendance: Object.fromEntries(Object.entries(history).filter(([, v]) => v.length).map(([k, v]) => [k, [...v]])),
@@ -66,6 +67,7 @@ const register = () => ({
     first_timer: Boolean(extra.first_timer), vip_sundays: extra.vip_sundays || 0, gift_ready: false,
     lifegroup_id: extra.lifegroup_name ? 7 : null, lifegroup_name: extra.lifegroup_name || null,
     last_seen: null, marked_by_name: extra.marked_by_name || null, marked_at: null,
+    inviter: extra.inviter || null,
   })),
 });
 
@@ -206,14 +208,19 @@ section('THE PAGE RENDERS IN THE ADMIN SHELL');
   check('the sidebar links to Attendance', !!qsa('#nav a').find((a) => a.getAttribute('href') === '#/attendance'));
   check('the nav entry is marked current', doc.querySelector('#nav a[data-nav="attendance"]')?.classList.contains('active'));
   check('the page is titled Service Attendance', text('#main h1') === 'Service Attendance');
-  check('the Sunday is shown', text('#saDateLabel').includes('November 22, 2026'), text('#saDateLabel'));
+  check('the Sunday is shown like the door sheet', text('#saDateLabel') === 'Sun, Nov 22, 2026', text('#saDateLabel'));
   check('the date input carries the Sunday', $('saDateInput').value === '2026-11-22');
   check('the headcount is loaded and saved', $('saHcInput').value === '12');
   check('the roll call lists everyone', rows().length === 5, `got ${rows().length}`);
   check('the totals ring is drawn', !!doc.querySelector('.sa-ring__ring'));
   check('the totals add up: 3 present + 12 headcount', text('#saHero .sa-ring__center b') === '15', text('#saHero .sa-ring__center b'));
   check('the legend splits members and both VIP groups', text('#saHero .sa-legend').includes('VIPs · first timers') && text('#saHero .sa-legend').includes('VIPs · returning'));
-  check('the "not marked in" count is honest', text('#saHero').includes('2 of 5 people on the roll call are not marked in yet'), text('#saHero'));
+  check('the "not marked in" count is honest', text('.sa-listbar').includes('2 not marked in yet'), text('.sa-listbar'));
+  check('the tabs sit directly under the chips', !!doc.querySelector('#saChips + #saTabs'));
+  check('the follow-up queue is titled like the door sheet', text('#saFollowup .sa-h2').includes('Follow-up queue · 48 hrs'), text('#saFollowup .sa-h2'));
+  check('the follow-up bars name the four Sundays', text('#saFollowup .sa-steps').includes('1st Sunday') && text('#saFollowup .sa-steps').includes('4th Sunday'), text('#saFollowup .sa-steps'));
+  check('a token already given is counted', text('#saChips').includes('Tokens given') && text('#saChips').includes('1'), text('#saChips'));
+  check('a person shows who invited them', /Invited by (Zxai|Maria|Joy)/.test(text('#saList')), text('#saList'));
 }
 
 section('MARKING PEOPLE PRESENT');
@@ -277,10 +284,30 @@ section('VIP FOLLOW-UP AND HISTORY');
   check('the history sheet opens for that person', text('#modalRoot .modal__header').includes('Mark Dela Cruz'));
   check('it lists the Sundays of the month', qsa('#modalRoot .sa-hist').length === SUNDAYS.length, `got ${qsa('#modalRoot .sa-hist').length}`);
   check('attended Sundays read Present', qsa('#modalRoot .sa-hist.is-on').length === 4);
+  check('the sheet can count the Sunday either way', !!doc.querySelector('#modalRoot [data-sa-cat]'));
   const close = doc.querySelector('#modalRoot [data-sa-close]');
   click(close);
   await until(() => !doc.querySelector('#modalRoot .sa-hist'));
   check('the sheet closes again', !doc.querySelector('#modalRoot .sa-hist'));
+}
+
+section('COUNTING A VIP AS A MEMBER FOR ONE SUNDAY');
+{
+  click(rows().find((r) => r.textContent.includes('Ana Reyes')).querySelector('[data-sa-history]'));
+  await until(() => doc.querySelector('#modalRoot [data-sa-cat]'));
+  const sel = doc.querySelector('#modalRoot [data-sa-cat]');
+  sel.value = 'member';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await until(() => calls.some((c) => c.path === '/api/tracker/setServiceAttendanceCategory'));
+  const sent = calls.filter((c) => c.path === '/api/tracker/setServiceAttendanceCategory').at(-1);
+  check('the sheet sends the Sunday, the person and the category', JSON.stringify(sent?.body?.args) === '["2026-11-22",3,"member"]', JSON.stringify(sent?.body?.args));
+  await until(() => text('#saHero .sa-legend').startsWith('2') || rows().some((r) => r.textContent.includes('Member')));
+  check('the totals move with the category', text('#saHero .sa-legend').includes('2'), text('#saHero .sa-legend'));
+  // put her back, so the rest of the run sees the fixture it expects
+  await (await import('../public/admin/js/api.js')).api.setServiceAttendanceCategory('2026-11-22', 3, null);
+  delete categoryOverrides[3];
+  click($('saRefresh'));
+  await until(() => text('#saHero .sa-legend').includes('1'), 1500);
 }
 
 section('MONTH REPORT');

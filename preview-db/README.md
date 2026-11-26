@@ -40,6 +40,12 @@ node preview-db/seed-pastoral-hierarchy.mjs      # 2 pastors, 6 Networks, 48 Cel
 node preview-db/seed-pastoral-hierarchy.mjs --new-leader-names   # give every Cell Leader their own surname
 ```
 
+**Admin → Attendance** opens on the current Sunday. `node preview-db/seed-attendance-demo.mjs`
+(pg client, gateway running) marks a few Members in, sets the inviters and one
+Cell on the VIPs, and records one token, so the page shows the same mix of rows
+as the door sheet: Members, VIPs · returning, a first timer and the headcount.
+It is idempotent and only touches the disposable local demo database.
+
 Two pastors sit at the top (Bishop Arsie Borromeo, Pastora Jane Borromeo) and
 **every Network is under one of them** — the seed no longer creates the old
 QA Networks/Cells, which used to sit outside any pastor. Every Cell Leader has
